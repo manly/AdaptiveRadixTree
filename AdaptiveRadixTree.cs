@@ -35,7 +35,7 @@ namespace System.Collections.Specialized
     ///     This implementation is inspired from the paper noted in the remarks, but due to safe context and lack of CPU intrinsics access, 
     ///     uses a more dynamic approach which takes advantage of whats possible in .NET.
     ///     For technical reasons, this can only store immutable keys/values. If you require live/non-immutable values, use instead int/long/identifier to your data.
-    ///     With all this said, C# just isn't the right language to implement this efficiently, even with unsafe context enabled. C/C++ would run this 10x faster due to direct read/write the data structures and CPU intrinsics.
+    ///     With all this said, C# just isn't the right language to implement this efficiently, even with unsafe context enabled. C/C++ would run this 2-3x faster due to direct read/write data structures, CPU intrinsics, and malloc() speed.
     /// </summary>
     /// <example>
     ///   banana                 [b]
@@ -114,7 +114,7 @@ namespace System.Collections.Specialized
         ///     Make sure that the implementation used supports efficient appends.
         ///     
         ///     Potential alternatives: use virtual alloc wrappers (https://github.com/71/ExpandableAllocator) to go beyond memory limit
-        ///     Potential alternatives: wrap this for permanent storage. The MemoryManager will also need to have it's data stored.
+        ///     Potential alternatives: wrap this for permanent storage.
         /// </summary>
         public readonly Stream Stream;
         protected readonly byte[] m_buffer = new byte[BUFFER_SIZE];
@@ -123,6 +123,8 @@ namespace System.Collections.Specialized
 
         protected readonly Buffer m_keyBuffer;
         protected readonly Buffer m_valueBuffer;
+
+        // todo: change leaf format to include the 2 lengths at the start
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
@@ -182,18 +184,39 @@ namespace System.Collections.Specialized
         /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
         /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public AdaptiveRadixTree(Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+        public AdaptiveRadixTree(Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) 
+            : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
 #else
-        public AdaptiveRadixTree(Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+        public AdaptiveRadixTree(Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder)
+            : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
+#endif
+            if(storageStream != null && storageStream.Length != 0)
+                throw new ArgumentException("Stream must be empty.", nameof(storageStream));
+
+            this.Clear();
+        }
+        /// <summary>
+        ///     Create an Adaptive Radix Tree with custom encoders/recoders.
+        /// </summary>
+        /// <param name="storageStream">
+        /// The stream used to store the data.
+        /// The stream must be empty.
+        /// If using memory backing of any kind, consider using a minimum capacity at or above 85000 bytes to avoid GC.Collect() calls on data that is likely to be long-lived.
+        /// Also, make sure the stream is efficient at appending.
+        /// </param>
+        /// <param name="keyEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
+        /// <param name="valueEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
+        /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+        /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+#if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+#else
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
 #endif
             if(m_buffer.Length != BUFFER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), $"{nameof(m_buffer)}.Length must equal {nameof(BUFFER_SIZE)}");
 
-            if(storageStream != null && storageStream.Length != 0)
-                throw new ArgumentException("Stream must be empty.", nameof(storageStream));
-
-            
-            m_memoryManager = new MemoryManager();
+            m_memoryManager = memoryManager;
             
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
             this.Stream = storageStream ?? new TimeSeriesDB.IO.DynamicMemoryStream(131072);
@@ -205,8 +228,126 @@ namespace System.Collections.Specialized
             
             m_keyBuffer   = new Buffer();
             m_valueBuffer = new Buffer();
+        }
+        #endregion
 
-            this.Clear();
+        #region static Load()
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream) {
+            return Load(storageStream, null, null, null, null);
+        }
+        /// <param name="keyEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
+        /// <param name="valueEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
+        /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+        /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+#if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+#else
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+#endif
+            if(storageStream == null)
+                throw new ArgumentNullException(nameof(storageStream));
+
+            var memoryManager   = new MemoryManager();
+            var allocatedMemory = InferMemoryUsage(storageStream, out long itemCount);
+
+            memoryManager.Load(allocatedMemory);
+
+            var res = new AdaptiveRadixTree<TKey, TValue>(memoryManager, storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder);
+
+            res.LongCount = itemCount;
+            
+            var raw = new byte[NODE_POINTER_BYTE_SIZE];
+            storageStream.Position = 0;
+            storageStream.Read(raw, 0, NODE_POINTER_BYTE_SIZE);
+            res.m_rootPointer = ReadNodePointer(raw, 0);
+
+            return res;
+        }
+        /// <summary>
+        ///     Calculates the used memory by reading the entire tree.
+        ///     Returns the memory usage in order, with pre-combined ranges.
+        /// </summary>
+        protected static List<(long start, long len)> InferMemoryUsage(Stream stream, out long itemCount) {
+            var buffer = new byte[NODE_POINTER_BYTE_SIZE];
+            stream.Position = 0;
+            stream.Read(buffer, 0, NODE_POINTER_BYTE_SIZE);
+            var rootPointer = ReadNodePointer(buffer, 0);
+
+            itemCount = 0;
+
+            var reservedMemory = new Dictionary<long, InternalReservedMemory> {
+                { 0, new InternalReservedMemory(NODE_POINTER_BYTE_SIZE, true) },
+                { NODE_POINTER_BYTE_SIZE, new InternalReservedMemory(NODE_POINTER_BYTE_SIZE, false) }
+            };
+
+            // while this code may look inefficient, 
+            // keep in mind dictionary.add()/remove()/lookup() are on average O(1)
+
+            foreach(var path in new PathEnumerator().Run(new NodePointer(0, rootPointer), stream, true, true)) {
+                var last = path.Trail[path.Trail.Count - 1];
+                var size = last.CalculateNodeSize();
+                long pos = last.Pointer.Target;
+
+                if(last.Type == NodeType.Leaf)
+                    itemCount++;
+ 
+                var is_pre  = reservedMemory.TryGetValue(pos, out var pre);
+                var is_post = reservedMemory.TryGetValue(pos + size, out var post);
+
+                if(!is_pre && !is_post) {
+                    reservedMemory.Add(pos, new InternalReservedMemory(size, true));
+                    reservedMemory.Add(pos + size, new InternalReservedMemory(size, false));
+                } else if(is_pre && !is_post) {
+                    System.Diagnostics.Debug.Assert(!pre.IsPre && reservedMemory[pos - pre.Length].IsPre);
+                    reservedMemory.Remove(pos);
+                    reservedMemory[pos - pre.Length].Length = pre.Length + size;
+                    reservedMemory.Add(pos + size, new InternalReservedMemory(pre.Length + size, false));
+                } else if(!is_pre && is_post) {
+                    System.Diagnostics.Debug.Assert(post.IsPre);
+                    reservedMemory.Remove(pos + size);
+                    post.Length += size;
+                    reservedMemory.Add(pos, new InternalReservedMemory(post.Length, true));
+                    reservedMemory[pos + post.Length].Length += size;
+                } else { // is_pre && is_post
+                    // merge 2
+                    System.Diagnostics.Debug.Assert(!pre.IsPre && post.IsPre);
+                    reservedMemory[pos - pre.Length].Length = pre.Length + size + post.Length;
+                    reservedMemory[pos + post.Length + size].Length = pre.Length + size + post.Length;
+                    reservedMemory.Remove(pos);
+                    reservedMemory.Remove(pos + size);
+                }
+            }
+
+            var res = new List<(long start, long len)>(reservedMemory.Count);
+            foreach(var kv in reservedMemory) {
+                if(!kv.Value.IsPre)
+                    continue;
+                res.Add((kv.Key, kv.Value.Length));
+            }
+            reservedMemory.Clear();
+            reservedMemory = null; // intentionally allow garbage collection since this may grow large
+
+            res.Sort();
+
+            // verify no alloc overlap
+            int max = res.Count;
+            long prev = -1;
+            for(int i = 0; i < max; i++) {
+                var (start, len) = res[i];
+                if(prev >= start) // if(prev==item.start) it means you messed up the algorithm as it shouldnt be possible
+                    throw new FormatException("The stream contains duplicate allocations.");
+                prev = start + len;
+            }
+
+            return res;
+        }
+        private class InternalReservedMemory {
+            public long Length;
+            public bool IsPre;
+            public InternalReservedMemory(long length, bool is_pre) {
+                this.Length = length;
+                this.IsPre  = is_pre;
+            }
         }
         #endregion
 
@@ -1386,7 +1527,7 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-        #region Optimize()
+#region Optimize()
         /// <summary>
         ///     Rebuilds the tree in a way that localizes branches to be stored nearby.
         ///     This will also compact the memory and leave no fragmented memory.
@@ -4044,7 +4185,7 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-        
+
         // enumerators
         #region public class ChildrenKeyEnumerator
         /// <summary>
