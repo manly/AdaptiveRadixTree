@@ -1527,7 +1527,7 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-#region Optimize()
+        #region Optimize()
         /// <summary>
         ///     Rebuilds the tree in a way that localizes branches to be stored nearby.
         ///     This will also compact the memory and leave no fragmented memory.
@@ -1549,11 +1549,14 @@ namespace System.Collections.Specialized
                 -1, 
                 PathEnumerator.TraversalAlgorithm.BreadthFirst);
 
+            // this could be massively sped up by using a redblacktree instead of sortedlist
+
             // sorted by _old
             var oldAddressesOrdered      = new (long _old, long _oldStart, long _new)[this.Count];
             int oldAddressesOrderedCount = 0;
             bool first                   = true;
             var rawValueBuffer           = new Buffer();
+            long alloc_position          = NODE_POINTER_BYTE_SIZE;
 
             foreach(var path in items) {
                 var last               = path.Trail[path.Trail.Count - 1];
@@ -1575,7 +1578,8 @@ namespace System.Collections.Specialized
                         current_size = CalculateNodeSize(last.Type - 1);
                     }
 
-                    newAddress          = res.Alloc(current_size);
+                    newAddress          = alloc_position; // res.Alloc(current_size);
+                    alloc_position     += current_size;
                     res.Stream.Position = newAddress;
                     res.Stream.Write(rawNode, 0, current_size);
                 } else {
@@ -1595,7 +1599,7 @@ namespace System.Collections.Specialized
                     } else
                         bufferValue = new Buffer(last.ValueBuffer) { Length = last.ValueLength };
 
-                    newAddress = res.CreateLeafNode(last.GetKeyRaw(path), bufferValue);
+                    newAddress = res.CreateLeafNode(last.GetKeyRaw(path), bufferValue, alloc_size => { var temp = alloc_position; alloc_position += alloc_size; return temp; });
                 }
 
                 // fix root pointer
@@ -1616,6 +1620,8 @@ namespace System.Collections.Specialized
 
                 res.LongCount++;
             }
+
+            res.m_memoryManager.Load(new[] { ((long)0, alloc_position) });
 
             return res;
 
@@ -3062,7 +3068,7 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="remainingEncodedKey">Excludes LEAF_NODE_KEY_TERMINATOR</param>
         [MethodImpl(AggressiveInlining)]
-        private long CreateLeafNode(in ReadOnlySpan<byte> remainingEncodedKey, Buffer encodedValue) {
+        private long CreateLeafNode(in ReadOnlySpan<byte> remainingEncodedKey, Buffer encodedValue, Func<long, long> custom_alloc = null) {
             // leaf
             // **************************************
             // byte                  node_type
@@ -3076,7 +3082,7 @@ namespace System.Collections.Specialized
             var varlen_key_size   = CalculateVarUInt64Length(unchecked((ulong)remainingEncodedKey.Length + 1));
             var varlen_value_size = CalculateVarUInt64Length(unchecked((ulong)encodedValue.Length));
             var alloc_size        = 1 + varlen_key_size + remainingEncodedKey.Length + 1 + varlen_value_size + encodedValue.Length;
-            var address           = this.Alloc(alloc_size);
+            var address           = custom_alloc == null ? this.Alloc(alloc_size) : custom_alloc(alloc_size);
 
             this.Stream.Position  = address;
 
