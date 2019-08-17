@@ -125,6 +125,7 @@ namespace System.Collections.Specialized
         protected readonly Buffer m_valueBuffer;
 
         // todo: change leaf format to include the 2 lengths at the start
+        // todo: code redblacktree and remake the memorymanager, as it is killing performance
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
@@ -1630,7 +1631,7 @@ namespace System.Collections.Specialized
                 int max = min + length - 1;
                 
                 while(min <= max) {
-                    int median = (max + min) >> 1;
+                    int median = (min + max) >> 1;
                     var diff   = oldAddressesOrdered[median]._old - value;
                     
                     if(diff == 0)
@@ -3499,7 +3500,7 @@ namespace System.Collections.Specialized
             int max = min + length - 1;
                 
             while(min <= max) {
-                int median = (max + min) >> 1;
+                int median = (min + max) >> 1;
                 var diff   = array[median] - value;
                     
                 if(diff == 0)
@@ -6661,7 +6662,7 @@ namespace System.Collections.Specialized
                 var availableMemory = m_availableMemoryByAddress; // for slight speedup
                 
                 while(min <= max) {
-                    int median = (max + min) >> 1;
+                    int median = (min + max) >> 1;
                     var diff   = availableMemory[median].Address - address;
                     
                     if(diff == 0)
@@ -6683,7 +6684,7 @@ namespace System.Collections.Specialized
                 var availableMemory = m_availableMemoryByLength; // for slight speedup
                 
                 while(min <= max) {
-                    int median = (max + min) >> 1;
+                    int median = (min + max) >> 1;
                     var diff   = availableMemory[median].Length - length;
                     
                     if(diff == 0)
@@ -6706,7 +6707,7 @@ namespace System.Collections.Specialized
                 var availableMemory = m_availableMemoryByLength; // for slight speedup
                 
                 while(min <= max) {
-                    int median = (max + min) >> 1;
+                    int median = (min + max) >> 1;
                     var diff   = availableMemory[median].Length - length;
                     
                     if(diff == 0)
