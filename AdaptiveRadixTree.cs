@@ -1,6 +1,8 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
 
+#define TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE // remove this once MemoryManager is recoded to be fast
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -108,6 +110,17 @@ namespace System.Collections.Specialized
 
         protected long m_rootPointer = 0; // root pointer address is always zero
         protected readonly MemoryManager m_memoryManager;
+
+#if !TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+        private readonly FixedSizeMemoryManager m_memoryManagerNode4;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode8;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode16;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode32;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode64;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode128;
+        private readonly FixedSizeMemoryManager m_memoryManagerNode256;
+#endif
+
         /// <summary>
         ///     The storage medium used.
         ///     By default will use a MemoryStream designed for efficient resizes.
@@ -125,6 +138,9 @@ namespace System.Collections.Specialized
         protected readonly Buffer m_valueBuffer;
 
         // todo: code redblacktree and remake the memorymanager, as it is killing performance
+        // todo: remove TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+        //       right now the O(1) allocators are massively slowing down execution (!) due to increased memory fragmentation
+        //       this shouldnt be a problem with redblacktree
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
@@ -213,7 +229,18 @@ namespace System.Collections.Specialized
                 throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), $"{nameof(m_buffer)}.Length must equal {nameof(BUFFER_SIZE)}");
 
             m_memoryManager = memoryManager;
-            
+
+#if !TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+            // allows O(1) alloc speed
+            m_memoryManagerNode4   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node4),   size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode8   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node8),   size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode16  = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node16),  size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode32  = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node32),  size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode64  = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node64),  size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode128 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node128), size => this.Alloc(size), (address, len) => this.Free(address, len));
+            m_memoryManagerNode256 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node256), size => this.Alloc(size), (address, len) => this.Free(address, len));
+#endif
+
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
             this.Stream = storageStream ?? new TimeSeriesDB.IO.DynamicMemoryStream(131072);
 
@@ -1943,8 +1970,9 @@ namespace System.Collections.Specialized
                         UpgradeNode(m_buffer, nodeType);
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
 
-                        var new_size         = CalculateNodeSize((NodeType)m_buffer[0]);
-                        var new_address      = this.Alloc(new_size);
+                        var new_node_type    = (NodeType)m_buffer[0];
+                        var new_size         = CalculateNodeSize(new_node_type);
+                        var new_address      = this.Alloc(new_node_type);
                         this.Stream.Position = new_address;
                         this.Stream.Write(m_buffer, 0, new_size);
 
@@ -1955,7 +1983,7 @@ namespace System.Collections.Specialized
                         if(ptr.Address == 0)
                             m_rootPointer = new_address;
 
-                        this.Free(ptr.Target, CalculateNodeSize(nodeType));
+                        this.Free(ptr.Target, nodeType);
                     }
                 } else {
                     // if partially matching the current node
@@ -1995,7 +2023,7 @@ namespace System.Collections.Specialized
                                 m_buffer[childWriteIndex + 2] = unchecked((byte)(child_partial_length + old_branch_prefixes.Length));
                                 BlockCopy(m_buffer, childWriteIndex + 3, m_buffer, childWriteIndex + 3 + old_branch_prefixes.Length, child_partial_length);
                                 BlockCopy(old_branch_prefixes, 0, m_buffer, childWriteIndex + 3, old_branch_prefixes.Length);
-                                var old_branch_address = this.Alloc(child_size);
+                                var old_branch_address = this.Alloc(child_nodetype);
                                 var old_branch_c       = old_branch_prefixes[0];
                                 this.Stream.Position   = old_branch_address;
                                 this.Stream.Write(m_buffer, childWriteIndex, child_size);
@@ -2004,7 +2032,7 @@ namespace System.Collections.Specialized
                                 AddItemToNonFullNode(m_buffer, 0, old_branch_c, old_branch_address);
                                 AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
                                 var size2              = CalculateNodeSize(NodeType.Node4);
-                                var new_branch_address = this.Alloc(size2);
+                                var new_branch_address = this.Alloc(NodeType.Node4);
                                 this.Stream.Position   = new_branch_address;
                                 this.Stream.Write(m_buffer, 0, size2);
 
@@ -2015,8 +2043,8 @@ namespace System.Collections.Specialized
                                 if(ptr.Address == 0)
                                     m_rootPointer = new_branch_address;
 
-                                this.Free(ptr.Target, CalculateNodeSize(nodeType));
-                                this.Free(child.Target, child_size);
+                                this.Free(ptr.Target, nodeType);
+                                this.Free(child.Target, child_nodetype);
                             }
                         }
                     }
@@ -2025,7 +2053,7 @@ namespace System.Collections.Specialized
                         m_buffer[2] = unchecked((byte)old_branch_prefixes.Length);
                         BlockCopy(old_branch_prefixes, 0, m_buffer, 3, old_branch_prefixes.Length);
                         var size               = CalculateNodeSize(nodeType);
-                        var old_branch_address = this.Alloc(size);
+                        var old_branch_address = this.Alloc(nodeType);
                         var old_branch_c       = old_branch_prefixes[0];
                         this.Stream.Position   = old_branch_address;
                         this.Stream.Write(m_buffer, 0, size);
@@ -2034,7 +2062,7 @@ namespace System.Collections.Specialized
                         AddItemToNonFullNode(m_buffer, 0, old_branch_c, old_branch_address);
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
                         var size2              = CalculateNodeSize(NodeType.Node4);
-                        var new_branch_address = this.Alloc(size2);
+                        var new_branch_address = this.Alloc(NodeType.Node4);
                         this.Stream.Position   = new_branch_address;
                         this.Stream.Write(m_buffer, 0, size2);
 
@@ -2045,7 +2073,7 @@ namespace System.Collections.Specialized
                         if(ptr.Address == 0)
                             m_rootPointer = new_branch_address;
 
-                        this.Free(ptr.Target, size);
+                        this.Free(ptr.Target, nodeType);
                     }
                 }
             } else { // leaf
@@ -2100,7 +2128,7 @@ namespace System.Collections.Specialized
                         CreateEmptyNode4(m_buffer, 0, in current_node_partial_key);
                         foreach(var (c, address) in children)
                             AddItemToNonFullNode(m_buffer, 0, c, address);
-                        var current_node_address = this.Alloc(CalculateNodeSize(NodeType.Node4));
+                        var current_node_address = this.Alloc(NodeType.Node4);
                         this.Stream.Position = current_node_address;
                         this.Stream.Write(m_buffer, 0, CalculateNodeSize(NodeType.Node4));
 
@@ -2144,7 +2172,7 @@ namespace System.Collections.Specialized
                     AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
 
                     size                 = CalculateNodeSize(NodeType.Node4);
-                    var new_leaf_address = this.Alloc(size);
+                    var new_leaf_address = this.Alloc(NodeType.Node4);
                     this.Stream.Position = new_leaf_address;
                     this.Stream.Write(m_buffer, 0, size);
 
@@ -2176,7 +2204,7 @@ namespace System.Collections.Specialized
                     AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
 
                     var size             = CalculateNodeSize(NodeType.Node4);
-                    var new_leaf_address = this.Alloc(size);
+                    var new_leaf_address = this.Alloc(NodeType.Node4);
                     this.Stream.Position = new_leaf_address;
                     this.Stream.Write(m_buffer, 0, size);
 
@@ -2431,7 +2459,7 @@ namespace System.Collections.Specialized
                             BlockCopy(m_buffer, old_size + 3, m_buffer, old_size + 3 + partial_length, off_partial_length);
                             BlockCopy(m_buffer, 3, m_buffer, old_size + 3, partial_length);
                 
-                            var new_address      = this.Alloc(new_size);
+                            var new_address      = this.Alloc(offBranchType);
                             this.Stream.Position = new_address;
                             this.Stream.Write(m_buffer, old_size, new_size);
                 
@@ -2442,21 +2470,23 @@ namespace System.Collections.Specialized
                             if(nodeToModify.ParentPointerAddress == 0)
                                 m_rootPointer = new_address;
                 
-                            this.Free(nodeToModify.Address, old_size);
-                            this.Free(ptr.Target, new_size);
+                            this.Free(nodeToModify.Address, nodeToModify.Type);
+                            this.Free(ptr.Target, offBranchType);
                         }
                     }
                 }
 
                 if(!use_node_merge){
-                    var new_size = old_size;
+                    var new_size   = old_size;
+                    var alloc_type = nodeToModify.Type;
 
                     if(nodeToModify.ChildrenCount - 1 < MinChildCount(nodeToModify.Type)) {
                         DowngradeNode(m_buffer, nodeToModify.Type);
-                        new_size = CalculateNodeSize(nodeToModify.Type - 1);
+                        alloc_type = nodeToModify.Type - 1;
+                        new_size   = CalculateNodeSize(alloc_type);
                     }
 
-                    var new_address      = this.Alloc(new_size);
+                    var new_address      = this.Alloc(alloc_type);
                     this.Stream.Position = new_address;
                     this.Stream.Write(m_buffer, 0, new_size);
 
@@ -2467,16 +2497,17 @@ namespace System.Collections.Specialized
                     if(nodeToModify.ParentPointerAddress == 0)
                         m_rootPointer = new_address;
 
-                    this.Free(nodeToModify.Address, old_size);
+                    this.Free(nodeToModify.Address, nodeToModify.Type);
                 }
 
                 // free memory
                 for(int i = Math.Max(uniqueTrailStart, 1); i < path.Trail.Count; i++) {
                     var node  = path.Trail[i];
-                    long size = node.Type != NodeType.Leaf ?
-                        CalculateNodeSize(node.Type) :
-                        CalculateLeafNodeSize(node.PartialKeyLength, node.ValueLength);
-                    this.Free(node.Address, size);
+
+                    if(node.Type != NodeType.Leaf)
+                        this.Free(node.Address, node.Type);
+                    else
+                        this.Free(node.Address, CalculateLeafNodeSize(node.PartialKeyLength, node.ValueLength));
                 }
 
                 this.LongCount--;
@@ -5280,14 +5311,49 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-
         #region protected Alloc()
+        [MethodImpl(AggressiveInlining)]
+        protected long Alloc(NodeType nodeType) {
+#if TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+            return this.Alloc(CalculateNodeSize(nodeType));
+#else
+            switch(nodeType) {
+                case NodeType.Node4:   return m_memoryManagerNode4.Alloc();
+                case NodeType.Node8:   return m_memoryManagerNode8.Alloc();
+                case NodeType.Node16:  return m_memoryManagerNode16.Alloc();
+                case NodeType.Node32:  return m_memoryManagerNode32.Alloc();
+                case NodeType.Node64:  return m_memoryManagerNode64.Alloc();
+                case NodeType.Node128: return m_memoryManagerNode128.Alloc();
+                case NodeType.Node256: return m_memoryManagerNode256.Alloc();
+                default:
+                    return -1;
+                    //throw new ArgumentException(nameof(nodeType));
+            }
+#endif
+        }
         [MethodImpl(AggressiveInlining)]
         protected long Alloc(long length) {
             return m_memoryManager.Alloc(length);
         }
         #endregion
         #region protected Free()
+        [MethodImpl(AggressiveInlining)]
+        protected void Free(long address, NodeType nodeType) {
+#if TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+            this.Free(address, CalculateNodeSize(nodeType));
+#else
+            switch(nodeType) {
+                case NodeType.Node4:   m_memoryManagerNode4.Free(address);   break;
+                case NodeType.Node8:   m_memoryManagerNode8.Free(address);   break;
+                case NodeType.Node16:  m_memoryManagerNode16.Free(address);  break;
+                case NodeType.Node32:  m_memoryManagerNode32.Free(address);  break;
+                case NodeType.Node64:  m_memoryManagerNode64.Free(address);  break;
+                case NodeType.Node128: m_memoryManagerNode128.Free(address); break;
+                case NodeType.Node256: m_memoryManagerNode256.Free(address); break;
+                //default: throw new ArgumentException(nameof(nodeType));
+            }
+#endif
+        }
         [MethodImpl(AggressiveInlining)]
         protected void Free(long address, long length) {
             var prevCapacity = m_memoryManager.Capacity;
@@ -6760,7 +6826,84 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
+        #region private class FixedSizeMemoryManager
+        /// <summary>
+        ///     A very basic MemoryManager that runs in O(1).
+        ///     Only allocates objects of a fixed size.
+        ///     Automatic upsize and downsize memory usage.
+        /// </summary>
+        private sealed class FixedSizeMemoryManager {
+            private const int SIZE = 8192 / sizeof(long);
 
+            public readonly int AllocSize;
+            public readonly int PreAllocChunk;
+
+            private readonly long[] m_available = new long[SIZE];
+            private int m_availableCount;
+
+            private readonly Func<long, long> m_alloc;
+            private readonly Action<long, long> m_free;
+
+            public FixedSizeMemoryManager(int allocSize, Func<long, long> alloc, Action<long, long> free) {
+                this.AllocSize     = allocSize;
+                this.PreAllocChunk = Math.Min(Math.Max(4096 / allocSize, 8), SIZE);
+                m_alloc            = alloc;
+                m_free             = free;
+            }
+
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public long Alloc() {
+                if(m_availableCount > 0)
+                    return m_available[--m_availableCount];
+
+                // pre-alloc if we ran out
+                var size = this.PreAllocChunk * this.AllocSize;
+                var pos  = m_alloc(size);
+                pos += size;
+                for(int i = 0; i < this.PreAllocChunk; i++) {
+                    pos -= this.AllocSize;
+                    m_available[m_availableCount++] = pos;
+                }
+                return m_available[--m_availableCount];
+            }
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public void Free(long position) {
+                // if we freed too many, then clear half
+                if(m_availableCount == SIZE) {
+                    // since we do want to downsize the stream, we favor releasing the furthest positions first
+                    // this also helps cache locality
+                    Array.Sort(m_available);
+
+                    // group by adjacent
+                    long start     = -1;
+                    long end       = 0;
+                    int startIndex = SIZE / 2;
+
+                    for(int i = startIndex; i < SIZE; i++) {
+                        var item = m_available[i];
+                        if(start < 0) {
+                            start = item;
+                            end   = item;
+                        } else if(item != end) {
+                            m_free(start, end - start);
+                            start = item;
+                            end   = item;
+                        }
+                        end += this.AllocSize;
+                    }
+                    if(start >= 0)
+                        m_free(start, end - start);
+                    m_availableCount = startIndex;
+                }
+
+                m_available[m_availableCount++] = position;
+            }
+        }
+        #endregion
 
         #region explicit interface(s) implementations
         void ICollection.CopyTo(Array array, int index) {
