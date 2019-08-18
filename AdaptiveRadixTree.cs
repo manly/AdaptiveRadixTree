@@ -71,8 +71,8 @@ namespace System.Collections.Specialized
         // **************************************
         // byte                  node_type
         // var long              partial_length (1-9 bytes)
-        // char[partial_length]  partial
         // var long              value_length (1-9 bytes)
+        // char[partial_length]  partial
         // byte[value_length]    value
         //
         //
@@ -100,8 +100,8 @@ namespace System.Collections.Specialized
         protected const byte LEAF_NODE_KEY_TERMINATOR      = 0;  // terminate keys of leafs with this value
         protected const byte LEAF_NODE_KEY_ESCAPE_CHAR     = LEAF_NODE_KEY_TERMINATOR == 0 ? 255 : 0;
         protected const byte LEAF_NODE_KEY_ESCAPE_CHAR2    = LEAF_NODE_KEY_TERMINATOR != 0 && LEAF_NODE_KEY_ESCAPE_CHAR != 0 ? 0 : (LEAF_NODE_KEY_TERMINATOR != 1 && LEAF_NODE_KEY_ESCAPE_CHAR != 1 ? 1 : 2); // terminator
-        protected const int  LEAF_NODE_PREFETCH_SIZE       = 64; // guesstimated, must be <= m_buffer.Length and >= MAX_VARINT64_ENCODED_SIZE + 2 (to read first key character)
-        protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32; // guesstimated, must be <= m_buffer.Length, includes varlen+data
+        protected const int  LEAF_NODE_PREFETCH_SIZE       = 64; // guesstimated, must be <= m_buffer.Length and >= MAX_VARINT64_ENCODED_SIZE * 2 + 1
+        protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32; // guesstimated, must be <= m_buffer.Length, includes only data
         protected const int  MAX_VARINT64_ENCODED_SIZE     = 9;
         protected const int  BUFFER_SIZE                   = 4096;
 
@@ -146,13 +146,9 @@ namespace System.Collections.Specialized
                 throw new ArgumentOutOfRangeException(nameof(MAX_PREFIX_LEN));
             if(NODE_POINTER_BYTE_SIZE < 1 || NODE_POINTER_BYTE_SIZE > 8)
                 throw new ArgumentOutOfRangeException(nameof(NODE_POINTER_BYTE_SIZE));
-            if(LEAF_NODE_PREFETCH_SIZE > BUFFER_SIZE || LEAF_NODE_PREFETCH_SIZE < MAX_VARINT64_ENCODED_SIZE + 2)
+            if(LEAF_NODE_PREFETCH_SIZE < 0 || LEAF_NODE_PREFETCH_SIZE > BUFFER_SIZE || LEAF_NODE_PREFETCH_SIZE < MAX_VARINT64_ENCODED_SIZE * 2 + 1)
                 throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_PREFETCH_SIZE));
-            // recommended LEAF_NODE_VALUE_PREFETCH_SIZE=MAX_VARINT64_ENCODED_SIZE if you dont intend to read the value but still want to know the value_length
-            // since it is very possible that the value_length is known ahead of time (ie: TValue is a primitive type), then we force a preload made for sizes 2^63
-            //if(LEAF_NODE_VALUE_PREFETCH_SIZE < MAX_VARINT64_ENCODED_SIZE)
-            //    throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_VALUE_PREFETCH_SIZE));
-            if(LEAF_NODE_VALUE_PREFETCH_SIZE > BUFFER_SIZE)
+            if(LEAF_NODE_VALUE_PREFETCH_SIZE < 0 || LEAF_NODE_VALUE_PREFETCH_SIZE > BUFFER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_VALUE_PREFETCH_SIZE));
             if(LEAF_NODE_KEY_ESCAPE_CHAR == LEAF_NODE_KEY_TERMINATOR)
                 throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_KEY_ESCAPE_CHAR));
@@ -284,11 +280,11 @@ namespace System.Collections.Specialized
             // while this code may look inefficient, 
             // keep in mind dictionary.add()/remove()/lookup() are on average O(1)
 
-            foreach(var path in new PathEnumerator().Run(new NodePointer(0, rootPointer), stream, true, true)) {
+            foreach(var path in new PathEnumerator().Run(new NodePointer(0, rootPointer), stream, true, false)) {
                 var last = path.Trail[path.Trail.Count - 1];
                 var size = last.CalculateNodeSize();
                 long pos = last.Pointer.Target;
-
+                
                 if(last.Type == NodeType.Leaf)
                     itemCount++;
  
@@ -566,6 +562,7 @@ namespace System.Collections.Specialized
         #region Contains()
         /// <summary>
         ///    O(k)    (k = # of characters)
+        ///    Returns true if the combination of {key, value} is found.
         ///     
         ///    Throws ArgumentException on empty key.
         /// </summary>
@@ -1222,6 +1219,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     Considers the range to be alphabetical in nature.
             ///     This means the range [AAA - ZZZ] will consider 'BB' to be within it.
+            ///     Depth-First pre-order tree traversal.
             /// </summary>
             Alphabetical,
             /// <summary>
@@ -1775,7 +1773,7 @@ namespace System.Collections.Specialized
             var sb    = new StringBuilder();
             var nodes = new Dictionary<long, InternalMetrics>();
 
-            foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, false, true)) {
+            foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, false, false)) {
                 foreach(var trail in path.Trail) {
                     var key = trail.Pointer.Target;
                     if(!nodes.TryGetValue(key, out var metrics)) {
@@ -2063,8 +2061,9 @@ namespace System.Collections.Specialized
 
                     int index = 1;
                     WriteVarUInt64(m_buffer, ref index, unchecked((ulong)(partial_key_length - partial_key_match.Length)));
+                    WriteVarUInt64(m_buffer, ref index, unchecked((ulong)value_length));
                     var remaining           = resizedLeafSize - index;
-                    long readPosition       = ptr.Target + 1 + CalculateVarUInt64Length(unchecked((ulong)partial_key_length)) + bytes_removed;
+                    long readPosition       = ptr.Target + 1 + CalculateVarUInt64Length(unchecked((ulong)partial_key_length)) + CalculateVarUInt64Length(unchecked((ulong)value_length)) + bytes_removed;
                     var resizedLeafAddress  = this.Alloc(resizedLeafSize);
                     long writePosition      = resizedLeafAddress;
                     bool firstCharacterRead = false;
@@ -2129,7 +2128,7 @@ namespace System.Collections.Specialized
 
                     valueBuffer.EnsureCapacity(value_length);
                     valueBuffer.Length               = value_length;
-                    var current_leaf_raw_value_start = 1 + CalculateVarUInt64Length(unchecked((ulong)partial_key_length)) + partial_key_length + CalculateVarUInt64Length(unchecked((ulong)value_length));
+                    var current_leaf_raw_value_start = 1 + CalculateVarUInt64Length(unchecked((ulong)partial_key_length)) + CalculateVarUInt64Length(unchecked((ulong)value_length)) + partial_key_length;
                     var size                         = Math.Min(bufferRead - current_leaf_raw_value_start, value_length);
                     var remaining                    = value_length - size;
                     BlockCopy(m_buffer, current_leaf_raw_value_start, valueBuffer.Content, 0, size);
@@ -2714,7 +2713,7 @@ namespace System.Collections.Specialized
                         this.Stream, 
                         res.EncodedSearchKey, 
                         compareIndex, 
-                        fetchValue ? LEAF_NODE_VALUE_PREFETCH_SIZE : MAX_VARINT64_ENCODED_SIZE,
+                        LEAF_NODE_VALUE_PREFETCH_SIZE,
                         out leafData.PartialKeyLength, 
                         out leafData.ValueLength,
                         out bufferChanged);
@@ -2722,7 +2721,8 @@ namespace System.Collections.Specialized
 
                     if(fetchValue && res.IsKeyExactMatch()) {
                         byte[] big_buffer = null;
-                        var temp          = ReadLeafValue(m_buffer, readIndex, readBytes, leafData.ValueLength, this.Stream, ref big_buffer, out bufferChanged);
+                        // this works because we know readIndex starts at value directly
+                        var temp          = ReadLeafValue(m_buffer, readIndex, readBytes, this.Stream, leafData.ValueLength, ref big_buffer, out bufferChanged);
                         res.Value         = (TValue)m_valueDecoder(temp.buffer, temp.index, temp.len);
                         //big_buffer      = null;
                     }
@@ -2914,9 +2914,10 @@ namespace System.Collections.Specialized
                         read   = 1;
                         start  = 1;
                     }
-
+                    
                     owner.Stream.Position = last.Address + read;
-                    ReadLeafKey(buffer, ref start, ref read, owner.Stream, ref pathKey.Content, ref keyMatchLength, 0);
+                    start                += CalculateVarUInt64Length(unchecked((ulong)last.PartialKeyLength)) + CalculateVarUInt64Length(unchecked((ulong)last.ValueLength));
+                    ReadLeafKey(buffer, ref start, ref read, owner.Stream, last.PartialKeyLength, ref pathKey.Content, ref keyMatchLength, 0);
 
                     //System.Diagnostics.Debug.Assert(keyMatchLength - 1 == totalLength);
                 }
@@ -3010,10 +3011,10 @@ namespace System.Collections.Specialized
 
                 if(nodeType == NodeType.Leaf) {
                     int readIndex = 1;
-                    var success = CompareLeafKey(m_buffer, ref readIndex, ref readBytes, this.Stream, keyBuffer, compareIndex, fetchValue ? LEAF_NODE_VALUE_PREFETCH_SIZE : 0);
+                    var success = CompareLeafKey(m_buffer, ref readIndex, ref readBytes, this.Stream, keyBuffer, compareIndex, fetchValue ? LEAF_NODE_VALUE_PREFETCH_SIZE : 0, out long value_length);
                     if(success && fetchValue) {
                         byte[] big_buffer = null;
-                        var temp          = ReadLeafValue(m_buffer, readIndex, readBytes, this.Stream, ref big_buffer, out _);
+                        var temp          = ReadLeafValue(m_buffer, readIndex, readBytes, this.Stream, value_length, ref big_buffer, out _);
                         value             = (TValue)m_valueDecoder(temp.buffer, temp.index, temp.len);
                         //big_buffer        = null;
                     }
@@ -3074,15 +3075,15 @@ namespace System.Collections.Specialized
             // **************************************
             // byte                  node_type
             // var long              partial_length (1-9 bytes)
-            // char[partial_length]  partial
             // var long              value_length (1-9 bytes)
+            // char[partial_length]  partial
             // byte[value_length]    value
 
 
             // +1 for LEAF_NODE_KEY_TERMINATOR
             var varlen_key_size   = CalculateVarUInt64Length(unchecked((ulong)remainingEncodedKey.Length + 1));
             var varlen_value_size = CalculateVarUInt64Length(unchecked((ulong)encodedValue.Length));
-            var alloc_size        = 1 + varlen_key_size + remainingEncodedKey.Length + 1 + varlen_value_size + encodedValue.Length;
+            var alloc_size        = 1 + varlen_key_size + varlen_value_size + remainingEncodedKey.Length + 1 + encodedValue.Length;
             var address           = custom_alloc == null ? this.Alloc(alloc_size) : custom_alloc(alloc_size);
 
             this.Stream.Position  = address;
@@ -3091,6 +3092,7 @@ namespace System.Collections.Specialized
 
             int writeIndex = 1;
             WriteVarUInt64(m_buffer, ref writeIndex, unchecked((ulong)remainingEncodedKey.Length + 1));
+            WriteVarUInt64(m_buffer, ref writeIndex, unchecked((ulong)encodedValue.Length));
 
             WriteSpan(m_buffer, ref writeIndex, this.Stream, in remainingEncodedKey);
 
@@ -3100,7 +3102,6 @@ namespace System.Collections.Specialized
                 writeIndex = 0;
             }
 
-            WriteVarUInt64(m_buffer, ref writeIndex, this.Stream, unchecked((ulong)encodedValue.Length));
             var span = new ReadOnlySpan<byte>(encodedValue.Content, 0, encodedValue.Length);
             WriteSpan(m_buffer, ref writeIndex, this.Stream, in span);
 
@@ -3174,8 +3175,9 @@ namespace System.Collections.Specialized
         #endregion
         #region private static CompareLeafKey()
         [MethodImpl(AggressiveInlining)]
-        private static bool CompareLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch) {
+        private static bool CompareLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
             var partial_length = ReadVarInt64(buffer, ref bufferIndex);
+            value_length       = ReadVarInt64(buffer, ref bufferIndex);
             if(partial_length != encodedKey.Length + 1 - compareIndex)
                 return false;
 
@@ -3216,6 +3218,7 @@ namespace System.Collections.Specialized
         private static int CompareLeafKey_LongestCommonPrefix(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out int partial_length, out int value_length, out bool bufferChanged) {
             bufferChanged  = false;
             partial_length = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
+            value_length   = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
 
             // note: 
             // buffer + partial_length     LEAF_NODE_KEY_TERMINATOR included
@@ -3251,7 +3254,7 @@ namespace System.Collections.Specialized
                 if(buffer[bufferIndex] == LEAF_NODE_KEY_TERMINATOR)
                     terminator_match = true;
             } else {
-                // partial match; must re-adjust buffer/stream to skip directly to value_length
+                // partial match; must re-adjust buffer/stream to skip directly to value
                 var move = Math.Min(remaining, bufferRead - bufferIndex);
 
                 remaining   -= move;
@@ -3262,23 +3265,19 @@ namespace System.Collections.Specialized
                     bufferIndex = 0;
                     bufferRead  = 0;
                     stream.Seek(remaining, SeekOrigin.Current);
+                    //bufferChanged = true; // unsure if relevant
                 }
             }
 
-            var prevBufferIndex = bufferIndex;
-            value_length        = unchecked((int)ReadVarInt64(buffer, ref bufferIndex, ref bufferRead, stream));
-            if(bufferIndex < prevBufferIndex)
-                bufferChanged = true;
-            
             return compareIndex - compareIndexStart + (terminator_match ? 1 : 0);
         }
         #endregion
         #region private static ReadLeafKey()
         [MethodImpl(AggressiveInlining)]
-        private static void ReadLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, ref byte[] key, ref int keySize, int value_prefetch) {
+        private static void ReadLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, int partial_length, ref byte[] key, ref int keySize, int value_prefetch) {
             // dont read terminal byte
 
-            var partial_length = ReadVarInt64(buffer, ref bufferIndex) - 1; // remove LEAF_NODE_KEY_TERMINATOR
+            partial_length--; // remove LEAF_NODE_KEY_TERMINATOR
 
             if(key.Length - keySize < partial_length)
                 Array.Resize(ref key, unchecked((int)(keySize + partial_length)));
@@ -3310,19 +3309,7 @@ namespace System.Collections.Specialized
         #endregion
         #region private static ReadLeafValue()
         [MethodImpl(AggressiveInlining)]
-        private static (byte[] buffer, int index, int len) ReadLeafValue(byte[] buffer, int bufferIndex, int bufferRead, Stream stream, ref byte[] alternativeBuffer, out bool bufferChanged) {
-            var value_length = ReadVarInt64(buffer, ref bufferIndex, ref bufferRead, stream);
-            return ReadLeafValue(
-                buffer,
-                bufferIndex,
-                bufferRead, 
-                value_length,
-                stream,
-                ref alternativeBuffer,
-                out bufferChanged);
-        }
-        [MethodImpl(AggressiveInlining)]
-        private static (byte[] buffer, int index, int len) ReadLeafValue(byte[] buffer, int bufferIndex, int bufferRead, long value_length, Stream stream, ref byte[] alternativeBuffer, out bool bufferChanged) {
+        private static (byte[] buffer, int index, int len) ReadLeafValue(byte[] buffer, int bufferIndex, int bufferRead, Stream stream, long value_length, ref byte[] alternativeBuffer, out bool bufferChanged) {
             bufferChanged = false;
 
             if(value_length <= 0)
@@ -3449,8 +3436,10 @@ namespace System.Collections.Specialized
         private static int CalculateLeafNodeSize(int partialKeyLength, int valueLength) {
             return 
                 1 +
-                CalculateVarUInt64Length(unchecked((ulong)partialKeyLength)) + partialKeyLength + 
-                CalculateVarUInt64Length(unchecked((ulong)valueLength)) + valueLength;
+                CalculateVarUInt64Length(unchecked((ulong)partialKeyLength)) + 
+                CalculateVarUInt64Length(unchecked((ulong)valueLength)) + 
+                partialKeyLength + 
+                valueLength;
         }
         #endregion
         #region private static CalculateNodePrefetchSize()
@@ -3498,7 +3487,7 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static int BinarySearch(byte[] array, int min, int length, byte value) {
             int max = min + length - 1;
-                
+            
             while(min <= max) {
                 int median = (min + max) >> 1;
                 var diff   = array[median] - value;
@@ -4125,8 +4114,10 @@ namespace System.Collections.Specialized
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
 
                 if(nodeType == NodeType.Leaf) {
-                    int start = 1;
-                    ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, ref keyBuffer, ref keySize, 0);
+                    int start           = 1;
+                    int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                    start              += CalculateVarUInt64LengthEncoded(m_buffer[start]); // long value_length = ReadVarInt64(m_buffer, ref start);
+                    ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, partial_length2, ref keyBuffer, ref keySize, 0);
 
                     UnescapeLeafKeyTerminator(keyBuffer, 0, ref keySize);
 
@@ -4167,8 +4158,10 @@ namespace System.Collections.Specialized
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
 
                 if(nodeType == NodeType.Leaf) {
-                    int start = 1;
-                    ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, ref keyBuffer, ref keySize, 0);
+                    int start           = 1;
+                    int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                    start              += CalculateVarUInt64LengthEncoded(m_buffer[start]); // long value_length = ReadVarInt64(m_buffer, ref start);
+                    ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, partial_length2, ref keyBuffer, ref keySize, 0);
 
                     UnescapeLeafKeyTerminator(keyBuffer, 0, ref keySize);
 
@@ -4264,10 +4257,13 @@ namespace System.Collections.Specialized
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
 
                     if(nodeType == NodeType.Leaf) {
-                        int start = 1;
-                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, ref m_key, ref keySize, 0);
-                        res.KeyLength = keySize;
-                        res.Key       = m_key;
+                        int start           = 1;
+                        int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length    = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, 0);
+                        res.KeyLength   = keySize;
+                        res.Key         = m_key;
+                        res.ValueLength = value_length;
                         yield return res;
                         continue;
                     }
@@ -4367,7 +4363,8 @@ namespace System.Collections.Specialized
                     if(nodeType == NodeType.Leaf) {
                         int start           = 1;
                         var partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
-                        var x               = ReadLeafValue(m_buffer, start + partial_length2, readBytes, stream, ref m_bigBuffer, out _);
+                        var value_length    = ReadVarInt64(m_buffer, ref start);
+                        var x               = ReadLeafValue(m_buffer, start + partial_length2, readBytes, stream, value_length, ref m_bigBuffer, out _);
                         res.ValueBuffer     = x.buffer;
                         res.ValueIndex      = x.index;
                         res.ValueLength     = x.len;
@@ -4484,14 +4481,16 @@ namespace System.Collections.Specialized
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
 
                     if(nodeType == NodeType.Leaf) {
-                        int start       = 1;
-                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
-                        var value       = ReadLeafValue(m_buffer, start, readBytes, stream, ref m_bigBuffer, out _);
+                        int start           = 1;
+                        int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length    = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
+                        var value       = ReadLeafValue(m_buffer, start, readBytes, stream, value_length, ref m_bigBuffer, out _);
                         res.Key         = m_key;
                         res.KeyLength   = keySize;
                         res.ValueBuffer = value.buffer;
                         res.ValueIndex  = value.index;
-                        res.ValueLength = value.len;
+                        res.ValueLength = value.len; // value_length
                         yield return res;
                         continue;
                     }
@@ -4662,15 +4661,18 @@ namespace System.Collections.Specialized
                     if(nodeType == NodeType.Leaf) {
                         int start             = 1;
                         int keySizeStart      = keySize;
-                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
+                        int partial_length2   = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length      = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
                         path.Key              = m_key;
                         current.KeyLength     = keySize - keySizeStart;
                         current.ChildrenCount = 0;
+                        current.ValueLength   = value_length;
                         if(extractValue) {
-                            var value = ReadLeafValue(m_buffer, start, readBytes, stream, ref m_bigBuffer, out _);
+                            var value = ReadLeafValue(m_buffer, start, readBytes, stream, value_length, ref m_bigBuffer, out _);
                             current.ValueBuffer = value.buffer;
                             current.ValueIndex  = value.index;
-                            current.ValueLength = value.len;
+                            //current.ValueLength = value.len; // redundant
                         }
                         yield return path;
                         continue;
@@ -4797,15 +4799,18 @@ namespace System.Collections.Specialized
                     if(nodeType == NodeType.Leaf) {
                         int start             = 1;
                         int keySizeStart      = keySize;
-                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
+                        int partial_length2   = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length      = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
                         path.Key              = m_key;
                         current.KeyLength     = keySize - keySizeStart;
                         current.ChildrenCount = 0;
+                        current.ValueLength   = value_length;
                         if(extractValue) {
-                            var value = ReadLeafValue(m_buffer, start, readBytes, stream, ref m_bigBuffer, out _);
+                            var value = ReadLeafValue(m_buffer, start, readBytes, stream, value_length, ref m_bigBuffer, out _);
                             current.ValueBuffer = value.buffer;
                             current.ValueIndex  = value.index;
-                            current.ValueLength = value.len;
+                            //current.ValueLength = value.len; // redundant
                         }
                         yield return path;
                         continue;
@@ -5083,23 +5088,26 @@ namespace System.Collections.Specialized
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
 
                     if(nodeType == NodeType.Leaf) {
-                        int start         = 1;
-                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
-                        res.Key           = m_key;
-                        filter.EncodedKey = m_key;
-                        filter.IsLeaf     = true;
-                        filter.KeyLength  = keySize;
+                        int start           = 1;
+                        int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length    = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
+                        res.Key             = m_key;
+                        filter.EncodedKey   = m_key;
+                        filter.IsLeaf       = true;
+                        filter.KeyLength    = keySize;
 
                         if(filter.LastAcceptedLength >= keySize || (hamming -= calculateHammingDistance(filter)) >= 0) {
                             res.KeyLength       = keySize;
                             res.ChildrenCount   = 0;
                             res.HammingDistance = unchecked((int)hamming);
+                            res.ValueLength     = value_length;
 
                             if(extractValue) {
-                                var value       = ReadLeafValue(m_buffer, start, readBytes, stream, ref m_bigBuffer, out _);
+                                var value       = ReadLeafValue(m_buffer, start, readBytes, stream, value_length, ref m_bigBuffer, out _);
                                 res.ValueBuffer = value.buffer;
                                 res.ValueIndex  = value.index;
-                                res.ValueLength = value.len;
+                                //res.ValueLength = value.len; // redundant
                             }
                             yield return res;
                         }
