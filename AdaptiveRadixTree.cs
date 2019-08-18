@@ -124,7 +124,6 @@ namespace System.Collections.Specialized
         protected readonly Buffer m_keyBuffer;
         protected readonly Buffer m_valueBuffer;
 
-        // todo: change leaf format to include the 2 lengths at the start
         // todo: code redblacktree and remake the memorymanager, as it is killing performance
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
