@@ -75,6 +75,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AvlTree.cs" />
     <Compile Include="DynamicMemoryStream.cs" />
     <Compile Include="AdaptiveRadixTree.cs" />
     <Compile Include="SpellingSuggestor.cs" />

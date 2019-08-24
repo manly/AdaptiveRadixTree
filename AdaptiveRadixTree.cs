@@ -141,6 +141,7 @@ namespace System.Collections.Specialized
         // todo: remove TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
         //       right now the O(1) allocators are massively slowing down execution (!) due to increased memory fragmentation
         //       this shouldnt be a problem with redblacktree
+        // todo: add byte adjustment to leaves that says how many bytes to skip for partial key, thus avoiding regenerating leaves constantly
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
