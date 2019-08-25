@@ -1,4 +1,5 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
+//#define MAINTAIN_MINIMUM_AND_MAXIMUM   // if enabled, will maintain a pointer to .Minimum and .Maximum allowing O(1)
 
 using System;
 using System.Collections.Generic;
@@ -10,10 +11,22 @@ namespace System.Collections.Specialized
     ///    Implements an AVL tree (Adelson-Velsky and Landis).
     ///    This is a self-balanced binary search tree that takes 2 extra bits per node over a binary search tree.
     ///    Search/Insert/Delete() run in O(log n).
+    ///    This tree is optimized for lookup times. For heavy updates a RBTree is favored.
     /// </summary>
     /// <remarks>
     ///    More strictly balanced than Red-Black Trees, leading to better lookup times.
-    ///    They are generally better in every way to Red-Black trees.
+    ///    
+    ///    worst case       |   AVL tree      |   RB tree
+    ///    =======================================
+    ///    height           | 1.44 log n      | 2 log(n + 1)
+    ///    update           | log n           | log n
+    ///    lookup           | log n  (faster) | log n
+    ///    insert rotations | 2               | 2
+    ///    delete rotations | log n           | 3
+    ///    
+    ///    Inserting in AVL tree may imply a rebalance. After inserting, updating the ancestors has to be done up to the root, 
+    ///    or up to a point where the 2 subtrees are of equal depth. The probability of having to update n nodes is 1/3^k. 
+    ///    Rebalancing is O(1). Removing an element may imply more than one rebalancing (up to half the tree depth).
     /// </remarks>
     public sealed class AvlTree<TKey, TValue> : ICollection
 #if IMPLEMENT_DICTIONARY_INTERFACES
@@ -104,6 +117,7 @@ namespace System.Collections.Specialized
         #endregion
 
         #region Minimum
+#if !MAINTAIN_MINIMUM_AND_MAXIMUM
         /// <summary>
         ///    O(log n)
         ///    Throws KeyNotFoundException if Count==0.
@@ -120,8 +134,22 @@ namespace System.Collections.Specialized
                 return current;
             }
         }
+#else
+        /// <summary>
+        ///    O(1)
+        ///    Throws KeyNotFoundException if Count==0.
+        /// </summary>
+        public Node Minimum {
+            get {
+                if(this.Count == 0)
+                    throw new KeyNotFoundException();
+                return m_header.Left;
+            }
+        }
+#endif
         #endregion
         #region Maximum
+#if !MAINTAIN_MINIMUM_AND_MAXIMUM
         /// <summary>
         ///    O(log n)
         ///    Throws KeyNotFoundException if Count==0.
@@ -138,6 +166,19 @@ namespace System.Collections.Specialized
                 return current;
             }
         }
+#else
+        /// <summary>
+        ///    O(1)
+        ///    Throws KeyNotFoundException if Count==0.
+        /// </summary>
+        public Node Maximum {
+            get {
+                if(this.Count == 0)
+                    throw new KeyNotFoundException();
+                return m_header.Right;
+            }
+        }
+#endif
         #endregion
 
         public int Count { get; private set; }
@@ -154,8 +195,6 @@ namespace System.Collections.Specialized
             if(node != null) {
                 while(true) {
                     var diff = m_comparer(key, node.Key);
-                    if(diff == 0)
-                        throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
 
                     if(diff < 0) {
                         if(node.Left != null)
@@ -167,10 +206,14 @@ namespace System.Collections.Specialized
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+                            if(m_header.Left == node)
+                                m_header.Left = node.Left;
+#endif
                             BalanceSet(node, Direction.Left);
                             break;
                         }
-                    } else {
+                    } else if(diff > 0) {
                         if(node.Right != null)
                             node = node.Right;
                         else {
@@ -180,18 +223,30 @@ namespace System.Collections.Specialized
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+                            if(m_header.Right == node)
+                                m_header.Right = node.Right;
+#endif
                             BalanceSet(node, Direction.Right);
                             break;
                         }
-                    }
+                    } else
+                        throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
-            } else
-                m_header.Parent = new Node() {
+            } else {
+                var root = new Node() {
                     Key     = key,
                     Value   = value,
                     Parent  = m_header,
                     Balance = State.Balanced,
                 };
+                m_header.Parent = root;
+
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+                m_header.Left   = root;
+                m_header.Right  = root;
+#endif
+            }
 
             this.Count++;
         }
@@ -225,44 +280,73 @@ namespace System.Collections.Specialized
                     root = root.Left;
                 else if(diff > 0)
                     root = root.Right;
-                else {
-                    if(root.Left != null && root.Right != null) {
-                        var replacement = root.Left;
-                        while(replacement.Right != null)
-                            replacement = replacement.Right;
-                        SwapNodes(root, replacement);
-                    }
-            
-                    var parent = root.Parent;
-                    var from   = parent.Left == root ? Direction.Left : Direction.Right;
-            
-                    if(root.Left == null) {
-                        if(parent == m_header)
-                            m_header.Parent = root.Right;
-                        else if(parent.Left == root)
-                            parent.Left = root.Right;
-                        else
-                            parent.Right = root.Right;
-            
-                        if(root.Right != null)
-                            root.Right.Parent = parent;
-                    } else {
-                        if(parent == m_header)
-                            m_header.Parent = root.Left;
-                        else if(parent.Left == root)
-                            parent.Left = root.Left;
-                        else
-                            parent.Right = root.Left;
-            
-                        if(root.Left != null)
-                            root.Left.Parent = parent;
-                    }
-            
-                    BalanceSetRemove(parent, from);
-                    this.Count--;
-                    return true;
-                }
+                else
+                    return this.Remove(root);
             }
+        }
+        /// <summary>
+        ///     Average:  O(1)
+        ///     Worst:    O(log n)
+        /// </summary>
+        public bool Remove(Node node) {
+            if(node == null)
+                return false;
+            
+            if(node.Left != null && node.Right != null) {
+                var replacement = node.Left;
+                while(replacement.Right != null)
+                    replacement = replacement.Right;
+                SwapNodes(node, replacement);
+            }
+            
+            var parent    = node.Parent;
+            var direction = parent.Left == node ? Direction.Left : Direction.Right;
+
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            if(m_header.Left == node) {
+                var next = node.Next();
+
+                if(next.Balance == State.Header) { 
+                    m_header.Left  = m_header;
+                    m_header.Right = m_header;
+                } else
+                    m_header.Left  = next;
+            } else if(m_header.Right == node) {
+                var prev = node.Previous();
+
+                if(prev.Balance == State.Header) {
+                    m_header.Left  = m_header;
+                    m_header.Right = m_header;
+                } else
+                    m_header.Right = prev;
+            }
+#endif
+
+            if(node.Left == null) {
+                if(parent == m_header)
+                    m_header.Parent = node.Right;
+                else if(parent.Left == node)
+                    parent.Left = node.Right;
+                else
+                    parent.Right = node.Right;
+            
+                if(node.Right != null)
+                    node.Right.Parent = parent;
+            } else {
+                if(parent == m_header)
+                    m_header.Parent = node.Left;
+                else if(parent.Left == node)
+                    parent.Left = node.Left;
+                else
+                    parent.Right = node.Left;
+            
+                if(node.Left != null)
+                    node.Left.Parent = parent;
+            }
+            
+            BalanceSetRemove(parent, direction);
+            this.Count--;
+            return true;
         }
         #endregion
         #region RemoveRange()
@@ -312,6 +396,14 @@ namespace System.Collections.Specialized
     
             value = default;
             return false;
+
+            // dont want to force an extra branching
+            //if(!this.TryGetNode(key, out Node node)) {
+            //    value = default;
+            //    return false;
+            //}
+            //value = node.Value;
+            //return true;
         }
         #endregion
         #region TryGetNode()
@@ -392,59 +484,6 @@ namespace System.Collections.Specialized
             /// </summary>
             public int Diff;
             public Node Node;
-        }
-        #endregion
-
-        #region GetChildrenNodes()
-        /// <summary>
-        ///     O(n)
-        ///     Returns the current node and all children in order.
-        ///     Use ChildrenNodesEnumerator instead for efficient re-use.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public IEnumerable<Node> GetChildrenNodes(Node node) {
-            return new ChildrenNodesEnumerator().Run(node);
-        }
-        /// <summary>
-        ///     O(n)
-        ///     Returns the current node and all children in order.
-        ///     This enumerator is made for re-use, to avoid array reallocations.
-        /// </summary>
-        public sealed class ChildrenNodesEnumerator {
-            // manually handled stack for better performance
-            private Node[] m_stack = new Node[16];
-            private int m_stackIndex = 0;
-
-            public IEnumerable<Node> Run(Node node) {
-                if(m_stackIndex > 0) {
-                    Array.Clear(m_stack, 0, m_stackIndex);
-                    m_stackIndex = 0;
-                }
-
-                while(node != null) {
-                    if(node.Left != null) {
-                        this.Push(node);
-                        node = node.Left;
-                    } else {
-                        do {
-                            yield return node;
-                            node = node.Right;
-                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
-                    }
-                }
-            }
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void Push(Node value) {
-                if(m_stackIndex == m_stack.Length)
-                    Array.Resize(ref m_stack, m_stackIndex * 2);
-                m_stack[m_stackIndex++] = value;
-            }
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node Pop() {
-                var node = m_stack[--m_stackIndex];
-                m_stack[m_stackIndex] = default;
-                return node;
-            }
         }
         #endregion
 
@@ -571,6 +610,60 @@ namespace System.Collections.Specialized
             return 0;
         }
         #endregion
+
+        #region private GetChildrenNodes()
+        /// <summary>
+        ///     O(n)
+        ///     Returns the current node and all children in order.
+        ///     Use ChildrenNodesEnumerator instead for efficient re-use.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private IEnumerable<Node> GetChildrenNodes(Node node) {
+            return new ChildrenNodesEnumerator().Run(node);
+        }
+        /// <summary>
+        ///     O(n)
+        ///     Returns the current node and all children in order.
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        private sealed class ChildrenNodesEnumerator {
+            // manually handled stack for better performance
+            private Node[] m_stack = new Node[16];
+            private int m_stackIndex = 0;
+
+            public IEnumerable<Node> Run(Node node) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+
+                while(node != null) {
+                    if(node.Left != null) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            yield return node;
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+        }
+        #endregion
+
         #region private static RotateLeft()
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void RotateLeft(ref Node node) {
@@ -690,14 +783,17 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static BalanceSet()
-        private static void BalanceSet(Node root, Direction from) {
+        /// <summary>
+        ///     Balance the tree by walking the tree upwards.
+        /// </summary>
+        private static void BalanceSet(Node root, Direction direction) {
             var is_taller = true;
 
             while(is_taller) {
                 var parent = root.Parent;
                 var next   = parent.Left == root ? Direction.Left : Direction.Right;
 
-                if(from == Direction.Left) {
+                if(direction == Direction.Left) {
                     switch(root.Balance) {
                         case State.LeftHigh:
                             if(parent.Balance == State.Header)
@@ -741,14 +837,17 @@ namespace System.Collections.Specialized
                     if(parent.Balance == State.Header)
                         return;
 
-                    root = parent;
-                    from = next;
+                    root      = parent;
+                    direction = next;
                 }
             }
         }
         #endregion
         #region private static BalanceSetRemove()
-        private static void BalanceSetRemove(Node root, Direction from) {
+        /// <summary>
+        ///     Balance the tree by walking the tree upwards.
+        /// </summary>
+        private static void BalanceSetRemove(Node root, Direction direction) {
             if(root.Balance == State.Header)
                 return;
 
@@ -758,7 +857,7 @@ namespace System.Collections.Specialized
                 var parent = root.Parent;
                 var next   = parent.Left == root ? Direction.Left : Direction.Right;
 
-                if(from == Direction.Left) {
+                if(direction == Direction.Left) {
                     switch(root.Balance) {
                         case State.LeftHigh:
                             root.Balance = State.Balanced;
@@ -808,8 +907,8 @@ namespace System.Collections.Specialized
                     if(parent.Balance == State.Header)
                         return;
                     
-                    from = next;
-                    root = parent;
+                    direction = next;
+                    root      = parent;
                 }
             }
         }
@@ -817,7 +916,7 @@ namespace System.Collections.Specialized
         #region private static SwapNodes()
         private static void SwapNodes(Node x, Node y) {
             if(x.Left == y) {
-                if(y.Left != null)  y.Left.Parent = x;
+                if(y.Left != null)  y.Left.Parent  = x;
                 if(y.Right != null) y.Right.Parent = x;
                 if(x.Right != null) x.Right.Parent = y;
 
@@ -837,8 +936,8 @@ namespace System.Collections.Specialized
                 Swap(ref x.Right, ref y.Right);
             } else if(x.Right == y) {
                 if(y.Right != null) y.Right.Parent = x;
-                if(y.Left != null)  y.Left.Parent = x;
-                if(x.Left != null)  x.Left.Parent = y;
+                if(y.Left != null)  y.Left.Parent  = x;
+                if(x.Left != null)  x.Left.Parent  = y;
 
                 if(x.Parent.Balance != State.Header) {
                     if(x.Parent.Left == x)
@@ -855,7 +954,7 @@ namespace System.Collections.Specialized
 
                 Swap(ref x.Left, ref y.Left);
             } else if(x == y.Left) {
-                if(x.Left != null)  x.Left.Parent = y;
+                if(x.Left != null)  x.Left.Parent  = y;
                 if(x.Right != null) x.Right.Parent = y;
                 if(y.Right != null) y.Right.Parent = x;
 
@@ -875,8 +974,8 @@ namespace System.Collections.Specialized
                 Swap(ref x.Right, ref y.Right);
             } else if(x == y.Right) {
                 if(x.Right != null) x.Right.Parent = y;
-                if(x.Left != null)  x.Left.Parent = y;
-                if(y.Left != null)  y.Left.Parent = x;
+                if(x.Left != null)  x.Left.Parent  = y;
+                if(y.Left != null)  y.Left.Parent  = x;
 
                 if(y.Parent.Balance != State.Header) {
                     if(y.Parent.Left == y)
@@ -913,9 +1012,9 @@ namespace System.Collections.Specialized
                         y.Parent.Parent = x;
                 }
 
-                if(y.Left != null)  y.Left.Parent = x;
+                if(y.Left != null)  y.Left.Parent  = x;
                 if(y.Right != null) y.Right.Parent = x;
-                if(x.Left != null)  x.Left.Parent = y;
+                if(x.Left != null)  x.Left.Parent  = y;
                 if(x.Right != null) x.Right.Parent = y;
 
                 Swap(ref x.Left, ref y.Left);
