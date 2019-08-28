@@ -386,11 +386,14 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(n)
         /// </summary>
-        public int Depth(Node node) {
+        public int Depth() {
+            return DepthRecursive(m_root);
+        }
+        private static int DepthRecursive(Node node) {
             if(node != null)
                 return Math.Max(
-                    (node.Left != null ? this.Depth(node.Left) : 0) + 1,
-                    (node.Right != null ? this.Depth(node.Right) : 0) + 1);
+                    (node.Left != null ? DepthRecursive(node.Left) : 0) + 1,
+                    (node.Right != null ? DepthRecursive(node.Right) : 0) + 1);
             return 0;
         }
         #endregion
