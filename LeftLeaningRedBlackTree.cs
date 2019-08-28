@@ -77,7 +77,10 @@ namespace System.Collections.Specialized
         #region this[]
         /// <summary>
         ///    O(log n)
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public TValue this[TKey key] {
             get{
                 var current = m_root;
@@ -117,36 +120,46 @@ namespace System.Collections.Specialized
         #region Minimum
         /// <summary>
         ///    O(log n)
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Minimum {
             get {
                 var current = m_root;
-                
                 if(current == null)
-                    return default;
+                    throw new KeyNotFoundException();
 
-                while(current != null)
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
                     current = current.Left;
-                
-                return current;
+                }
+                 
+                return parent;
             }
         }
         #endregion
         #region Maximum
         /// <summary>
         ///    O(log n)
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Maximum {
             get {
                 var current = m_root;
-
                 if(current == null)
-                    return default;
+                    throw new KeyNotFoundException();
 
-                while(current != null)
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
                     current = current.Right;
-                
-                return current;
+                }
+                 
+                return parent;
             }
         }
         #endregion
@@ -157,18 +170,22 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         ///     
+        ///     Returns the newly added node.
+        ///     
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public void Add(TKey key, TValue value) {
-            var new_root     = this.AddRecursive(m_root, key, value);
+        public Node Add(TKey key, TValue value) {
+            var new_node     = new Node(key, value);
+            var new_root     = this.AddRecursive(m_root, key, new_node);
             new_root.IsBlack = true;
             m_root           = new_root;
             this.Count++;
+            return new_node;
         }
-        private Node AddRecursive(Node node, TKey key, TValue value) {
+        private Node AddRecursive(Node node, TKey key, Node new_node) {
             if(node == null)
-                return new Node(key, value);
+                return new_node;
     
             if(IsRed(node.Left) && IsRed(node.Right))
                 // split node with two red children
@@ -176,9 +193,9 @@ namespace System.Collections.Specialized
     
             int diff = m_comparer(key, node.Key);
             if(diff < 0)
-                node.Left = this.AddRecursive(node.Left, key, value);
+                node.Left = this.AddRecursive(node.Left, key, new_node);
             else if(diff > 0)
-                node.Right = this.AddRecursive(node.Right, key, value);
+                node.Right = this.AddRecursive(node.Right, key, new_node);
             else
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
     
@@ -510,7 +527,7 @@ namespace System.Collections.Specialized
         /// </summary>
         private sealed class ChildrenNodesEnumerator {
             // manually handled stack for better performance
-            private Node[] m_stack = new Node[8];
+            private Node[] m_stack = new Node[16];
             private int m_stackIndex = 0;
 
             public IEnumerable<Node> Run(Node node) {

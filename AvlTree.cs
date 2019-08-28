@@ -119,30 +119,35 @@ namespace System.Collections.Specialized
 #if !MAINTAIN_MINIMUM_AND_MAXIMUM
         /// <summary>
         ///    O(log n)
-        ///    Throws KeyNotFoundException if Count==0.
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Minimum {
             get {
                 var current = m_header.Parent;
                 if(current == null)
                     throw new KeyNotFoundException();
 
-                while(current != null)
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
                     current = current.Left;
-                
-                return current;
+                }
+                 
+                return parent;
             }
         }
 #else
         /// <summary>
         ///    O(1)
-        ///    Throws KeyNotFoundException if Count==0.
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Minimum {
             get {
-                if(this.Count == 0)
-                    throw new KeyNotFoundException();
-                return m_header.Left;
+                return m_header.Left ?? throw new KeyNotFoundException();
             }
         }
 #endif
@@ -151,30 +156,35 @@ namespace System.Collections.Specialized
 #if !MAINTAIN_MINIMUM_AND_MAXIMUM
         /// <summary>
         ///    O(log n)
-        ///    Throws KeyNotFoundException if Count==0.
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Maximum {
             get {
                 var current = m_header.Parent;
                 if(current == null)
                     throw new KeyNotFoundException();
 
-                while(current != null)
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
                     current = current.Right;
-                
-                return current;
+                }
+                 
+                return parent;
             }
         }
 #else
         /// <summary>
         ///    O(1)
-        ///    Throws KeyNotFoundException if Count==0.
+        ///    
+        ///    Throws KeyNotFoundException.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
         public Node Maximum {
             get {
-                if(this.Count == 0)
-                    throw new KeyNotFoundException();
-                return m_header.Right;
+                return m_header.Right ?? throw new KeyNotFoundException();
             }
         }
 #endif
@@ -186,10 +196,12 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         ///     
+        ///     Returns the added node.
+        ///     
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public void Add(TKey key, TValue value) {
+        public Node Add(TKey key, TValue value) {
             var node = m_header.Parent;
             if(node != null) {
                 while(true) {
@@ -240,6 +252,7 @@ namespace System.Collections.Specialized
                     Balance = State.Balanced,
                 };
                 m_header.Parent = root;
+                node            = root;
 
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
                 m_header.Left   = root;
@@ -248,6 +261,66 @@ namespace System.Collections.Specialized
             }
 
             this.Count++;
+            return node;
+        }
+        /// <summary>
+        ///     Balance the tree by walking the tree upwards.
+        /// </summary>
+        private static void BalanceSet(Node node, Direction direction) {
+            var is_taller = true;
+
+            while(is_taller) {
+                var parent = node.Parent;
+                var next   = parent.Left == node ? Direction.Left : Direction.Right;
+
+                if(direction == Direction.Left) {
+                    switch(node.Balance) {
+                        case State.LeftHigh:
+                            if(parent.Balance == State.Header)
+                                BalanceLeft(ref parent.Parent);
+                            else if(parent.Left == node)
+                                BalanceLeft(ref parent.Left);
+                            else
+                                BalanceLeft(ref parent.Right);
+                            return;
+
+                        case State.Balanced:
+                            node.Balance = State.LeftHigh;
+                            break;
+
+                        case State.RightHigh:
+                            node.Balance = State.Balanced;
+                            return;
+                    }
+                } else {
+                    switch(node.Balance) {
+                        case State.LeftHigh:
+                            node.Balance = State.Balanced;
+                            return;
+
+                        case State.Balanced:
+                            node.Balance = State.RightHigh;
+                            break;
+
+                        case State.RightHigh:
+                            if(parent.Balance == State.Header)
+                                BalanceRight(ref parent.Parent);
+                            else if(parent.Left == node)
+                                BalanceRight(ref parent.Left);
+                            else
+                                BalanceRight(ref parent.Right);
+                            return;
+                    }
+                }
+
+                if(is_taller) {
+                    if(parent.Balance == State.Header)
+                        return;
+
+                    node      = parent;
+                    direction = next;
+                }
+            }
         }
         #endregion
         #region AddRange()
@@ -346,6 +419,192 @@ namespace System.Collections.Specialized
             BalanceSetRemove(parent, direction);
             this.Count--;
             return true;
+        }
+        private static void SwapNodes(Node x, Node y) {
+            if(x.Left == y) {
+                if(y.Left != null)  y.Left.Parent  = x;
+                if(y.Right != null) y.Right.Parent = x;
+                if(x.Right != null) x.Right.Parent = y;
+
+                if(x.Parent.Balance != State.Header) {
+                    if(x.Parent.Left == x)
+                        x.Parent.Left = y;
+                    else
+                        x.Parent.Right = y;
+                } else
+                    x.Parent.Parent = y;
+
+                y.Parent = x.Parent;
+                x.Parent = y;
+                x.Left   = y.Left;
+                y.Left   = x;
+
+                Swap(ref x.Right, ref y.Right);
+            } else if(x.Right == y) {
+                if(y.Right != null) y.Right.Parent = x;
+                if(y.Left != null)  y.Left.Parent  = x;
+                if(x.Left != null)  x.Left.Parent  = y;
+
+                if(x.Parent.Balance != State.Header) {
+                    if(x.Parent.Left == x)
+                        x.Parent.Left = y;
+                    else
+                        x.Parent.Right = y;
+                } else
+                    x.Parent.Parent = y;
+
+                y.Parent = x.Parent;
+                x.Parent = y;
+                x.Right  = y.Right;
+                y.Right  = x;
+
+                Swap(ref x.Left, ref y.Left);
+            } else if(x == y.Left) {
+                if(x.Left != null)  x.Left.Parent  = y;
+                if(x.Right != null) x.Right.Parent = y;
+                if(y.Right != null) y.Right.Parent = x;
+
+                if(y.Parent.Balance != State.Header) {
+                    if(y.Parent.Left == y)
+                        y.Parent.Left = x;
+                    else
+                        y.Parent.Right = x;
+                } else
+                    y.Parent.Parent = x;
+
+                x.Parent = y.Parent;
+                y.Parent = x;
+                y.Left   = x.Left;
+                x.Left   = y;
+
+                Swap(ref x.Right, ref y.Right);
+            } else if(x == y.Right) {
+                if(x.Right != null) x.Right.Parent = y;
+                if(x.Left != null)  x.Left.Parent  = y;
+                if(y.Left != null)  y.Left.Parent  = x;
+
+                if(y.Parent.Balance != State.Header) {
+                    if(y.Parent.Left == y)
+                        y.Parent.Left = x;
+                    else
+                        y.Parent.Right = x;
+                } else
+                    y.Parent.Parent = x;
+
+                x.Parent = y.Parent;
+                y.Parent = x;
+                y.Right  = x.Right;
+                x.Right  = y;
+
+                Swap(ref x.Left, ref y.Left);
+            } else {
+                if(x.Parent == y.Parent)
+                    Swap(ref x.Parent.Left, ref x.Parent.Right);
+                else {
+                    if(x.Parent.Balance != State.Header) {
+                        if(x.Parent.Left == x)
+                            x.Parent.Left = y;
+                        else
+                            x.Parent.Right = y;
+                    } else 
+                        x.Parent.Parent = y;
+
+                    if(y.Parent.Balance != State.Header) {
+                        if(y.Parent.Left == y)
+                            y.Parent.Left = x;
+                        else
+                            y.Parent.Right = x;
+                    } else
+                        y.Parent.Parent = x;
+                }
+
+                if(y.Left != null)  y.Left.Parent  = x;
+                if(y.Right != null) y.Right.Parent = x;
+                if(x.Left != null)  x.Left.Parent  = y;
+                if(x.Right != null) x.Right.Parent = y;
+
+                Swap(ref x.Left, ref y.Left);
+                Swap(ref x.Right, ref y.Right);
+                Swap(ref x.Parent, ref y.Parent);
+            }
+
+            var balance = x.Balance;
+            x.Balance   = y.Balance;
+            y.Balance   = balance;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void Swap(ref Node node1, ref Node node2) {
+            var temp = node1;
+            node1    = node2;
+            node2    = temp;
+        }
+        /// <summary>
+        ///     Balance the tree by walking the tree upwards.
+        /// </summary>
+        private static void BalanceSetRemove(Node node, Direction direction) {
+            if(node.Balance == State.Header)
+                return;
+
+            var is_shorter = true;
+
+            while(is_shorter) {
+                var parent = node.Parent;
+                var next   = parent.Left == node ? Direction.Left : Direction.Right;
+
+                if(direction == Direction.Left) {
+                    switch(node.Balance) {
+                        case State.LeftHigh:
+                            node.Balance = State.Balanced;
+                            break;
+
+                        case State.Balanced:
+                            node.Balance = State.RightHigh;
+                            return;
+
+                        case State.RightHigh:
+                            if(node.Right.Balance == State.Balanced)
+                                is_shorter = false;
+
+                            if(parent.Balance == State.Header)
+                                BalanceRight(ref parent.Parent);
+                            else if(parent.Left == node)
+                                BalanceRight(ref parent.Left);
+                            else
+                                BalanceRight(ref parent.Right);
+                            break;
+                    }
+                } else {
+                    switch(node.Balance) {
+                        case State.RightHigh:
+                            node.Balance = State.Balanced;
+                            break;
+
+                        case State.Balanced:
+                            node.Balance = State.LeftHigh;
+                            return;
+
+                        case State.LeftHigh:
+                            if(node.Left.Balance == State.Balanced)
+                                is_shorter = false;
+
+                            if(parent.Balance == State.Header)
+                                BalanceLeft(ref parent.Parent);
+                            else if(parent.Left == node)
+                                BalanceLeft(ref parent.Left);
+                            else
+                                BalanceLeft(ref parent.Right);
+                            break;
+                    }
+                }
+
+                if(is_shorter) {
+                    if(parent.Balance == State.Header)
+                        return;
+                    
+                    direction = next;
+                    node      = parent;
+                }
+            }
         }
         #endregion
         #region RemoveRange()
@@ -609,59 +868,6 @@ namespace System.Collections.Specialized
         //}
         #endregion
 
-        #region private GetChildrenNodes()
-        /// <summary>
-        ///     O(n)
-        ///     Returns the current node and all children in order.
-        ///     Use ChildrenNodesEnumerator instead for efficient re-use.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IEnumerable<Node> GetChildrenNodes(Node node) {
-            return new ChildrenNodesEnumerator().Run(node);
-        }
-        /// <summary>
-        ///     O(n)
-        ///     Returns the current node and all children in order.
-        ///     This enumerator is made for re-use, to avoid array reallocations.
-        /// </summary>
-        private sealed class ChildrenNodesEnumerator {
-            // manually handled stack for better performance
-            private Node[] m_stack = new Node[16];
-            private int m_stackIndex = 0;
-
-            public IEnumerable<Node> Run(Node node) {
-                if(m_stackIndex > 0) {
-                    Array.Clear(m_stack, 0, m_stackIndex);
-                    m_stackIndex = 0;
-                }
-
-                while(node != null) {
-                    if(node.Left != null) {
-                        this.Push(node);
-                        node = node.Left;
-                    } else {
-                        do {
-                            yield return node;
-                            node = node.Right;
-                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
-                    }
-                }
-            }
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private void Push(Node value) {
-                if(m_stackIndex == m_stack.Length)
-                    Array.Resize(ref m_stack, m_stackIndex * 2);
-                m_stack[m_stackIndex++] = value;
-            }
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node Pop() {
-                var node = m_stack[--m_stackIndex];
-                m_stack[m_stackIndex] = default;
-                return node;
-            }
-        }
-        #endregion
-
         #region private static RotateLeft()
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void RotateLeft(ref Node node) {
@@ -780,255 +986,57 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region private static BalanceSet()
+
+        #region private GetChildrenNodes()
         /// <summary>
-        ///     Balance the tree by walking the tree upwards.
+        ///     O(n)
+        ///     Returns the current node and all children in order.
+        ///     Use ChildrenNodesEnumerator instead for efficient re-use.
         /// </summary>
-        private static void BalanceSet(Node root, Direction direction) {
-            var is_taller = true;
-
-            while(is_taller) {
-                var parent = root.Parent;
-                var next   = parent.Left == root ? Direction.Left : Direction.Right;
-
-                if(direction == Direction.Left) {
-                    switch(root.Balance) {
-                        case State.LeftHigh:
-                            if(parent.Balance == State.Header)
-                                BalanceLeft(ref parent.Parent);
-                            else if(parent.Left == root)
-                                BalanceLeft(ref parent.Left);
-                            else
-                                BalanceLeft(ref parent.Right);
-                            return;
-
-                        case State.Balanced:
-                            root.Balance = State.LeftHigh;
-                            break;
-
-                        case State.RightHigh:
-                            root.Balance = State.Balanced;
-                            return;
-                    }
-                } else {
-                    switch(root.Balance) {
-                        case State.LeftHigh:
-                            root.Balance = State.Balanced;
-                            return;
-
-                        case State.Balanced:
-                            root.Balance = State.RightHigh;
-                            break;
-
-                        case State.RightHigh:
-                            if(parent.Balance == State.Header)
-                                BalanceRight(ref parent.Parent);
-                            else if(parent.Left == root)
-                                BalanceRight(ref parent.Left);
-                            else
-                                BalanceRight(ref parent.Right);
-                            return;
-                    }
-                }
-
-                if(is_taller) {
-                    if(parent.Balance == State.Header)
-                        return;
-
-                    root      = parent;
-                    direction = next;
-                }
-            }
-        }
-        #endregion
-        #region private static BalanceSetRemove()
-        /// <summary>
-        ///     Balance the tree by walking the tree upwards.
-        /// </summary>
-        private static void BalanceSetRemove(Node root, Direction direction) {
-            if(root.Balance == State.Header)
-                return;
-
-            var is_shorter = true;
-
-            while(is_shorter) {
-                var parent = root.Parent;
-                var next   = parent.Left == root ? Direction.Left : Direction.Right;
-
-                if(direction == Direction.Left) {
-                    switch(root.Balance) {
-                        case State.LeftHigh:
-                            root.Balance = State.Balanced;
-                            break;
-
-                        case State.Balanced:
-                            root.Balance = State.RightHigh;
-                            return;
-
-                        case State.RightHigh:
-                            if(root.Right.Balance == State.Balanced)
-                                is_shorter = false;
-
-                            if(parent.Balance == State.Header)
-                                BalanceRight(ref parent.Parent);
-                            else if(parent.Left == root)
-                                BalanceRight(ref parent.Left);
-                            else
-                                BalanceRight(ref parent.Right);
-                            break;
-                    }
-                } else {
-                    switch(root.Balance) {
-                        case State.RightHigh:
-                            root.Balance = State.Balanced;
-                            break;
-
-                        case State.Balanced:
-                            root.Balance = State.LeftHigh;
-                            return;
-
-                        case State.LeftHigh:
-                            if(root.Left.Balance == State.Balanced)
-                                is_shorter = false;
-
-                            if(parent.Balance == State.Header)
-                                BalanceLeft(ref parent.Parent);
-                            else if(parent.Left == root)
-                                BalanceLeft(ref parent.Left);
-                            else
-                                BalanceLeft(ref parent.Right);
-                            break;
-                    }
-                }
-
-                if(is_shorter) {
-                    if(parent.Balance == State.Header)
-                        return;
-                    
-                    direction = next;
-                    root      = parent;
-                }
-            }
-        }
-        #endregion
-        #region private static SwapNodes()
-        private static void SwapNodes(Node x, Node y) {
-            if(x.Left == y) {
-                if(y.Left != null)  y.Left.Parent  = x;
-                if(y.Right != null) y.Right.Parent = x;
-                if(x.Right != null) x.Right.Parent = y;
-
-                if(x.Parent.Balance != State.Header) {
-                    if(x.Parent.Left == x)
-                        x.Parent.Left = y;
-                    else
-                        x.Parent.Right = y;
-                } else
-                    x.Parent.Parent = y;
-
-                y.Parent = x.Parent;
-                x.Parent = y;
-                x.Left   = y.Left;
-                y.Left   = x;
-
-                Swap(ref x.Right, ref y.Right);
-            } else if(x.Right == y) {
-                if(y.Right != null) y.Right.Parent = x;
-                if(y.Left != null)  y.Left.Parent  = x;
-                if(x.Left != null)  x.Left.Parent  = y;
-
-                if(x.Parent.Balance != State.Header) {
-                    if(x.Parent.Left == x)
-                        x.Parent.Left = y;
-                    else
-                        x.Parent.Right = y;
-                } else
-                    x.Parent.Parent = y;
-
-                y.Parent = x.Parent;
-                x.Parent = y;
-                x.Right  = y.Right;
-                y.Right  = x;
-
-                Swap(ref x.Left, ref y.Left);
-            } else if(x == y.Left) {
-                if(x.Left != null)  x.Left.Parent  = y;
-                if(x.Right != null) x.Right.Parent = y;
-                if(y.Right != null) y.Right.Parent = x;
-
-                if(y.Parent.Balance != State.Header) {
-                    if(y.Parent.Left == y)
-                        y.Parent.Left = x;
-                    else
-                        y.Parent.Right = x;
-                } else
-                    y.Parent.Parent = x;
-
-                x.Parent = y.Parent;
-                y.Parent = x;
-                y.Left   = x.Left;
-                x.Left   = y;
-
-                Swap(ref x.Right, ref y.Right);
-            } else if(x == y.Right) {
-                if(x.Right != null) x.Right.Parent = y;
-                if(x.Left != null)  x.Left.Parent  = y;
-                if(y.Left != null)  y.Left.Parent  = x;
-
-                if(y.Parent.Balance != State.Header) {
-                    if(y.Parent.Left == y)
-                        y.Parent.Left = x;
-                    else
-                        y.Parent.Right = x;
-                } else
-                    y.Parent.Parent = x;
-
-                x.Parent = y.Parent;
-                y.Parent = x;
-                y.Right  = x.Right;
-                x.Right  = y;
-
-                Swap(ref x.Left, ref y.Left);
-            } else {
-                if(x.Parent == y.Parent)
-                    Swap(ref x.Parent.Left, ref x.Parent.Right);
-                else {
-                    if(x.Parent.Balance != State.Header) {
-                        if(x.Parent.Left == x)
-                            x.Parent.Left = y;
-                        else
-                            x.Parent.Right = y;
-                    } else 
-                        x.Parent.Parent = y;
-
-                    if(y.Parent.Balance != State.Header) {
-                        if(y.Parent.Left == y)
-                            y.Parent.Left = x;
-                        else
-                            y.Parent.Right = x;
-                    } else
-                        y.Parent.Parent = x;
-                }
-
-                if(y.Left != null)  y.Left.Parent  = x;
-                if(y.Right != null) y.Right.Parent = x;
-                if(x.Left != null)  x.Left.Parent  = y;
-                if(x.Right != null) x.Right.Parent = y;
-
-                Swap(ref x.Left, ref y.Left);
-                Swap(ref x.Right, ref y.Right);
-                Swap(ref x.Parent, ref y.Parent);
-            }
-
-            var balance = x.Balance;
-            x.Balance   = y.Balance;
-            y.Balance   = balance;
-        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void Swap(ref Node node1, ref Node node2) {
-            var temp = node1;
-            node1    = node2;
-            node2    = temp;
+        private IEnumerable<Node> GetChildrenNodes(Node node) {
+            return new ChildrenNodesEnumerator().Run(node);
+        }
+        /// <summary>
+        ///     O(n)
+        ///     Returns the current node and all children in order.
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        private sealed class ChildrenNodesEnumerator {
+            // manually handled stack for better performance
+            private Node[] m_stack = new Node[16];
+            private int m_stackIndex = 0;
+
+            public IEnumerable<Node> Run(Node node) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+
+                while(node != null) {
+                    if(node.Left != null) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            yield return node;
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
         }
         #endregion
 
