@@ -1,7 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 //#define MAINTAIN_MINIMUM_AND_MAXIMUM   // if enabled, will maintain a pointer to .Minimum and .Maximum allowing O(1)
 
-using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -9,7 +8,7 @@ namespace System.Collections.Specialized
 {
     /// <summary>
     ///    Implements an AVL tree (Adelson-Velsky and Landis).
-    ///    This is a self-balanced binary search tree that takes 2 extra bits per node over a binary search tree.
+    ///    This is a self-balancing binary search tree that takes 2 extra bits per node over a binary search tree.
     ///    Search/Insert/Delete() run in O(log n).
     ///    This tree is optimized for lookup times. For heavy updates a RBTree is favored.
     /// </summary>
@@ -486,6 +485,18 @@ namespace System.Collections.Specialized
             public Node Node;
         }
         #endregion
+        #region Depth()
+        /// <summary>
+        ///     O(n)
+        /// </summary>
+        public int Depth(Node node) {
+            if(node != null)
+                return Math.Max(
+                    (node.Left != null ? this.Depth(node.Left) : 0) + 1,
+                    (node.Right != null ? this.Depth(node.Right) : 0) + 1);
+            return 0;
+        }
+        #endregion
 
         #region Range() *non-functional*
         ///// <summary>
@@ -596,19 +607,6 @@ namespace System.Collections.Specialized
         //        }
         //    }
         //}
-        #endregion
-
-        #region Depth()
-        /// <summary>
-        ///     O(n)
-        /// </summary>
-        public int Depth(Node node) {
-            if(node != null)
-                return Math.Max(
-                    (node.Left != null ? this.Depth(node.Left) : 0) + 1,
-                    (node.Right != null ? this.Depth(node.Right) : 0) + 1);
-            return 0;
-        }
         #endregion
 
         #region private GetChildrenNodes()

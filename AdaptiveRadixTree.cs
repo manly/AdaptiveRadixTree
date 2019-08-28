@@ -6323,6 +6323,12 @@ namespace System.Collections.Specialized
             // in order to reclaim contiguous avail memory
             // this would work by in-line re-sorting by (length,address), see contiguous entries and merge, then re-sort back to (address)
             // downside: not suited for realtime programming since we need a rebuild every nth modification
+            // try: AvlTree<size, queue<doublelinkedlistnode<pos>>>
+            // or rbtree<pos, x> in addition, to avltree<size, queue<pos>>
+            //
+            // prob best is avltree<size, list<chunk>>, chunk = {prevchunk,nextchunk,pos,len,isalloc}
+            // the only catch is you need quick list<item>.delete()
+            // this can be fixed with rbtree<(size, pos), chunk> for fast delete
             
             
             private MemorySegment[] m_availableMemoryByAddress = new MemorySegment[MIN_SIZE]; // ordered by Address for quick Free() / merge segments
