@@ -638,6 +638,30 @@ namespace System.Collections.Specialized
             internal Node Right;
             internal bool IsBlack;
 
+            // todo: code Next()/Previous() to be able to use BinarySearch()
+            //#region Next()
+            ///// <summary>
+            /////     O(1)
+            /////     Returns the next node.
+            /////     This behaves like an iterator, but will keep working even as the tree is being changed.
+            /////     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            ///// </summary>
+            //public Node Next() {
+            //    
+            //}
+            //#endregion
+            //#region Previous()
+            ///// <summary>
+            /////     O(1)
+            /////     Returns the previous node.
+            /////     This behaves like an iterator, but will keep working even as the tree is being changed.
+            /////     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            ///// </summary>
+            //public Node Previous() {
+            //    
+            //}
+            //#endregion
+
             #region constructors
             public Node(TKey key, TValue value) {
                 this.Key   = key;

@@ -1280,6 +1280,10 @@ namespace System.Collections.Specialized
             ///     The index within the priority queue.
             /// </summary>
             public int Index { get; internal set; }
+            /// <summary>
+            ///     The unique sequence ID.
+            ///     Used for TPriority ties.
+            /// </summary>
             public long InsertIndex { get; internal set; }
 
             #region constructors
