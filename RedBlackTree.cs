@@ -519,7 +519,7 @@ namespace System.Collections.Specialized
             var prev_diff = 0;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
- 
+
                 if(diff < 0) {
                     prev      = current;
                     prev_diff = -1;
@@ -529,9 +529,9 @@ namespace System.Collections.Specialized
                     prev_diff = 1;
                     current   = current.Right;
                 } else
-                    return new BinarySearchResult() { Node = current, Diff = 0 };
+                    return new BinarySearchResult(current, 0);
             }
-            return new BinarySearchResult() { Node = prev, Diff = prev_diff };
+            return new BinarySearchResult(prev, prev_diff);
         }
         /// <summary>
         ///    O(log n)
@@ -557,18 +557,22 @@ namespace System.Collections.Specialized
                     prev_diff = 1;
                     current   = current.Right;
                 } else
-                    return new BinarySearchResult() { Node = current, Diff = 0 };
+                    return new BinarySearchResult(current, 0);
             }
-            return new BinarySearchResult() { Node = prev, Diff = prev_diff };
+            return new BinarySearchResult(prev, prev_diff);
         }
-        public ref struct BinarySearchResult {
+        public readonly ref struct BinarySearchResult {
             /// <summary>
             ///    -1: key &lt; lookup_key
             ///     0: key == lookup_key
             ///     1: key &gt; lookup_key
             /// </summary>
-            public int Diff;
-            public Node Node;
+            public readonly int Diff;
+            public readonly Node Node;
+            public BinarySearchResult(Node node, int diff) : this() {
+                this.Node = node;
+                this.Diff = diff;
+            }
         }
         #endregion
         #region Depth()
