@@ -511,12 +511,43 @@ namespace System.Collections.Specialized
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         /// </summary>
         public BinarySearchResult BinarySearch(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return BinarySearch(key, m_comparer);
+
             var current   = m_root;
             var prev      = current;
             var prev_diff = 0;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
  
+                if(diff < 0) {
+                    prev      = current;
+                    prev_diff = -1;
+                    current   = current.Left;
+                } else if(diff > 0) {
+                    prev      = current;
+                    prev_diff = 1;
+                    current   = current.Right;
+                } else
+                    return new BinarySearchResult() { Node = current, Diff = 0 };
+            }
+            return new BinarySearchResult() { Node = prev, Diff = prev_diff };
+        }
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+            var current   = m_root;
+            var prev      = current;
+            var prev_diff = 0;
+            while(current != null) {
+                int diff = comparer(key, current.Key);
+
                 if(diff < 0) {
                     prev      = current;
                     prev_diff = -1;
