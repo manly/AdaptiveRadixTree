@@ -34,6 +34,8 @@ namespace System.Collections.Specialized
         private Node[] m_nodes; // first entry is ignored
         private readonly Comparison<TPriority> m_comparer;
 
+        public int Count { get; private set; }
+
         #region constructors
         public FastPriorityQueue() : this(INIT_CAPACITY) { }
         public FastPriorityQueue(IComparer<TPriority> comparer) : this(comparer, INIT_CAPACITY) { }
@@ -76,8 +78,6 @@ namespace System.Collections.Specialized
             this.EnqueueRange(nodes, priorities);
         }
         #endregion
-
-        public int Count { get; private set; }
 
         #region First
         /// <summary>
@@ -627,7 +627,7 @@ namespace System.Collections.Specialized
         #endregion
 
         public sealed class Node {
-            public TValue Value { get; set; }
+            public TValue Value;
             public TPriority Priority { get; internal set; }
             /// <summary>
             ///     The index within the priority queue.
@@ -677,6 +677,8 @@ namespace System.Collections.Specialized
         private readonly Comparison<TPriority> m_comparer;
         private long m_insertSequence = 0; // unique ID to handle TPriority ties
 
+        public int Count { get; private set; }
+
         #region constructors
         public StablePriorityQueue() : this(INIT_CAPACITY) { }
         public StablePriorityQueue(IComparer<TPriority> comparer) : this(comparer, INIT_CAPACITY) { }
@@ -719,8 +721,6 @@ namespace System.Collections.Specialized
             this.EnqueueRange(nodes, priorities);
         }
         #endregion
-
-        public int Count { get; private set; }
 
         #region First
         /// <summary>
@@ -1274,7 +1274,7 @@ namespace System.Collections.Specialized
         #endregion
 
         public sealed class Node {
-            public TValue Value { get; set; }
+            public TValue Value;
             public TPriority Priority { get; internal set; }
             /// <summary>
             ///     The index within the priority queue.

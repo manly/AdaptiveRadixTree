@@ -35,6 +35,8 @@ namespace System.Collections.Specialized
         private Node m_header; // note: root = m_header.Parent
         private readonly Comparison<TKey> m_comparer;
 
+        public int Count { get; private set; }
+
         #region constructors
         public AvlTree() : this(Comparer<TKey>.Default.Compare) { }
         public AvlTree(IComparer<TKey> comparer) : this(comparer.Compare) { }
@@ -189,8 +191,6 @@ namespace System.Collections.Specialized
         }
 #endif
         #endregion
-
-        public int Count { get; private set; }
     
         #region Add()
         /// <summary>
@@ -211,9 +211,7 @@ namespace System.Collections.Specialized
                         if(node.Left != null)
                             node = node.Left;
                         else {
-                            node.Left = new Node(){
-                                Key     = key,
-                                Value   = value,
+                            node.Left = new Node(key, value){
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
@@ -228,9 +226,7 @@ namespace System.Collections.Specialized
                         if(node.Right != null)
                             node = node.Right;
                         else {
-                            node.Right = new Node(){
-                                Key     = key,
-                                Value   = value,
+                            node.Right = new Node(key, value){
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
@@ -245,9 +241,7 @@ namespace System.Collections.Specialized
                         throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
             } else {
-                var root = new Node() {
-                    Key     = key,
-                    Value   = value,
+                var root = new Node(key, value) {
                     Parent  = m_header,
                     Balance = State.Balanced,
                 };
@@ -621,7 +615,7 @@ namespace System.Collections.Specialized
         ///     O(1)
         /// </summary>
         public void Clear() {
-            var header = new Node() {
+            var header = new Node(default, default) {
                 Balance = State.Header,
                 Parent  = null,
             };
@@ -1184,8 +1178,8 @@ namespace System.Collections.Specialized
             internal Node  Parent;
             internal State Balance = State.Balanced;
 
-            public TKey Key { get; internal set; }
-            public TValue Value { get; set; }
+            public TKey Key { get; private set; }
+            public TValue Value;
 
             #region Next()
             /// <summary>
@@ -1245,7 +1239,23 @@ namespace System.Collections.Specialized
                 return node;
             }
             #endregion
+            #region UpdateKey()
+            /// <summary>
+            ///     Change the key without updating the tree.
+            ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
+            ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
+            /// </summary>
+            public void UpdateKey(TKey key) {
+                this.Key = key;
+            }
+            #endregion
 
+            #region constructors
+            public Node(TKey key, TValue value) {
+                this.Key   = key;
+                this.Value = value;
+            }
+            #endregion
             #region ToString()
             public override string ToString() {
                 return string.Format("[{0}] {1}", this.Key, this.Value);

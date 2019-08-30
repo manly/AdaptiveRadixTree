@@ -34,6 +34,8 @@ namespace System.Collections.Specialized
     {
         private Node m_root;
         private readonly Comparison<TKey> m_comparer;
+
+        public int Count { get; private set; }
     
         #region constructors
         public LeftLeaningRedBlackTree() : this(Comparer<TKey>.Default) { }
@@ -163,8 +165,6 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
-        public int Count { get; private set; }
     
         #region Add()
         /// <summary>
@@ -271,7 +271,7 @@ namespace System.Collections.Specialized
                         while(min != null)
                             min = min.Left;
                 
-                        node.Key   = min.Key;
+                        node.UpdateKey(min.Key);
                         node.Value = min.Value;
                         node.Right = DeleteMinimum(node.Right);
                     } else
@@ -686,8 +686,8 @@ namespace System.Collections.Specialized
 
 
         public sealed class Node {
-            public TKey Key { get; internal set; }
-            public TValue Value { get; internal set; }
+            public TKey Key { get; private set; }
+            public TValue Value;
     
             internal Node Left;
             internal Node Right;
@@ -716,6 +716,16 @@ namespace System.Collections.Specialized
             //    
             //}
             //#endregion
+            #region UpdateKey()
+            /// <summary>
+            ///     Change the key without updating the tree.
+            ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
+            ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
+            /// </summary>
+            public void UpdateKey(TKey key) {
+                this.Key = key;
+            }
+            #endregion
 
             #region constructors
             public Node(TKey key, TValue value) {
