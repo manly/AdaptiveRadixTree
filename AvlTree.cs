@@ -1095,8 +1095,6 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         ///     
-        ///     Returns the added node.
-        ///     
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
