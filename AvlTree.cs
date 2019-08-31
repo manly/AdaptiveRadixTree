@@ -1093,13 +1093,25 @@ namespace System.Collections.Specialized
 
 #if IMPLEMENT_DICTIONARY_INTERFACES
         /// <summary>
+        ///     O(log n)
+        ///     
+        ///     Returns the added node.
+        ///     
+        ///     Throws ArgumentException() on duplicate key.
+        /// </summary>
+        /// <exception cref="ArgumentException" />
+        void IDictionary<TKey, TValue>.Add(TKey key, TValue value) {
+            this.Add(key, value);
+        }
+
+        /// <summary>
         ///     O(n)
         ///     Returns keys in order.
         /// </summary>
         ICollection<TKey> IDictionary<TKey, TValue>.Keys {
             get {
                 var keys = new List<TKey>(this.Count);
-                foreach(var node in this.GetChildrenNodes(m_header.Parent))
+                foreach(var node in this.GetChildrenNodes())
                     keys.Add(node.Key);
 
                 return keys;
@@ -1113,7 +1125,7 @@ namespace System.Collections.Specialized
         ICollection<TValue> IDictionary<TKey, TValue>.Values {
             get {
                 var values = new List<TValue>(this.Count);
-                foreach(var node in this.GetChildrenNodes(m_header.Parent))
+                foreach(var node in this.GetChildrenNodes())
                     values.Add(node.Value);
 
                 return values;
@@ -1138,7 +1150,7 @@ namespace System.Collections.Specialized
         }
         
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() {
-            foreach(var node in this.GetChildrenNodes(m_header.Parent))
+            foreach(var node in this.GetChildrenNodes())
                 yield return new KeyValuePair<TKey, TValue>(node.Key, node.Value);
         }
 

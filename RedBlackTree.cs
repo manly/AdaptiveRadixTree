@@ -1,4 +1,6 @@
-﻿using System;
+﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -719,13 +721,25 @@ namespace System.Collections.Specialized
 
 #if IMPLEMENT_DICTIONARY_INTERFACES
         /// <summary>
+        ///     O(log n)
+        ///     
+        ///     Returns the newly added node.
+        ///     
+        ///     Throws ArgumentException() on duplicate key.
+        /// </summary>
+        /// <exception cref="ArgumentException" />
+        void IDictionary<TKey, TValue>.Add(TKey key, TValue value) {
+            this.Add(key, value);
+        }
+
+        /// <summary>
         ///     O(n)
         ///     Returns keys in order.
         /// </summary>
         ICollection<TKey> IDictionary<TKey, TValue>.Keys {
             get {
                 var keys = new List<TKey>(this.Count);
-                foreach(var node in this.GetChildrenNodes(m_root))
+                foreach(var node in this.GetChildrenNodes())
                     keys.Add(node.Key);
  
                 return keys;
@@ -738,7 +752,7 @@ namespace System.Collections.Specialized
         ICollection<TValue> IDictionary<TKey, TValue>.Values {
             get {
                 var values = new List<TValue>(this.Count);
-                foreach(var node in this.GetChildrenNodes(m_root))
+                foreach(var node in this.GetChildrenNodes())
                     values.Add(node.Value);
  
                 return values;
@@ -748,7 +762,7 @@ namespace System.Collections.Specialized
         bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => false;
          
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() {
-            foreach(var node in this.GetChildrenNodes(m_root))
+            foreach(var node in this.GetChildrenNodes())
                 yield return new KeyValuePair<TKey, TValue>(node.Key, node.Value);
         }
  
