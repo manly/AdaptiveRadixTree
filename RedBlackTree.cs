@@ -652,7 +652,7 @@ namespace System.Collections.Specialized
         #region private GetChildrenNodes()
         /// <summary>
         ///     O(n)
-        ///     Returns the current node and all children in order.
+        ///     Returns items in key order.
         ///     Use ChildrenNodesEnumerator instead for efficient re-use.
         /// </summary>
         private IEnumerable<Node> GetChildrenNodes() {
@@ -660,7 +660,7 @@ namespace System.Collections.Specialized
         }
         /// <summary>
         ///     O(n)
-        ///     Returns the current node and all children in order.
+        ///     Returns items in key order.
         ///     This enumerator is made for re-use, to avoid array reallocations.
         /// </summary>
         private sealed class ChildrenNodesEnumerator {

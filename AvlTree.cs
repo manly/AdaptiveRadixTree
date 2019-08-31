@@ -53,7 +53,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TKey> Keys {
             get {
-                foreach(var node in this.GetChildrenNodes(m_header.Parent))
+                foreach(var node in this.GetChildrenNodes())
                     yield return node.Key;
             }
         }
@@ -65,7 +65,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TValue> Values {
             get {
-                foreach(var node in this.GetChildrenNodes(m_header.Parent))
+                foreach(var node in this.GetChildrenNodes())
                     yield return node.Value;
             }
         }
@@ -75,7 +75,7 @@ namespace System.Collections.Specialized
         ///     O(n)
         ///     Returns items in key order.
         /// </summary>
-        public IEnumerable<Node> Items => this.GetChildrenNodes(m_header.Parent);
+        public IEnumerable<Node> Items => this.GetChildrenNodes();
         #endregion
         #region this[]
         /// <summary>
@@ -1022,16 +1022,16 @@ namespace System.Collections.Specialized
         #region private GetChildrenNodes()
         /// <summary>
         ///     O(n)
-        ///     Returns the current node and all children in order.
+        ///     Returns items in key order.
         ///     Use ChildrenNodesEnumerator instead for efficient re-use.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IEnumerable<Node> GetChildrenNodes(Node node) {
-            return new ChildrenNodesEnumerator().Run(node);
+        private IEnumerable<Node> GetChildrenNodes() {
+            return new ChildrenNodesEnumerator().Run(m_header.Parent);
         }
         /// <summary>
         ///     O(n)
-        ///     Returns the current node and all children in order.
+        ///     Returns items in key order.
         ///     This enumerator is made for re-use, to avoid array reallocations.
         /// </summary>
         private sealed class ChildrenNodesEnumerator {
@@ -1074,7 +1074,7 @@ namespace System.Collections.Specialized
 
         #region explicit interface(s) implementations
         IEnumerator IEnumerable.GetEnumerator() {
-            return this.GetChildrenNodes(m_header.Parent).GetEnumerator();
+            return this.GetChildrenNodes().GetEnumerator();
         }
 
         object ICollection.SyncRoot => this;
@@ -1086,7 +1086,7 @@ namespace System.Collections.Specialized
             if(arrayIndex < 0 || arrayIndex >= array.Length)
                 throw new ArgumentOutOfRangeException(nameof(arrayIndex));
 
-            foreach(var node in this.GetChildrenNodes(m_header.Parent))
+            foreach(var node in this.GetChildrenNodes())
                 array.SetValue(node, arrayIndex++);
         }
 
