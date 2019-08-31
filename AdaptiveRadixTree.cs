@@ -1659,13 +1659,12 @@ namespace System.Collections.Specialized
                     int median = (min + max) >> 1;
                     var diff   = oldAddressesOrdered[median]._old - value;
                     
-                    if(diff == 0)
-                        return median;
-                    
                     if(diff < 0)
                         min = median + 1;
-                    else
+                    else if(diff > 0)
                         max = median - 1;
+                    else
+                        return median;
                 }
                 
                 return ~min;
@@ -3523,13 +3522,12 @@ namespace System.Collections.Specialized
                 int median = (min + max) >> 1;
                 var diff   = array[median] - value;
                     
-                if(diff == 0)
-                    return median;
-                    
                 if(diff < 0)
                     min = median + 1;
-                else
+                else if(diff > 0)
                     max = median - 1;
+                else
+                    return median;
             }
                 
             return ~min;
@@ -6745,13 +6743,12 @@ namespace System.Collections.Specialized
                     int median = (min + max) >> 1;
                     var diff   = availableMemory[median].Address - address;
                     
-                    if(diff == 0)
-                        return median;
-                    
                     if(diff < 0)
                         min = median + 1;
-                    else
+                    else if(diff > 0)
                         max = median - 1;
+                    else
+                        return median;
                 }
                 
                 return ~min;
@@ -6770,13 +6767,12 @@ namespace System.Collections.Specialized
                     if(diff == 0)
                         diff   = availableMemory[median].Address - address;
 
-                    if(diff == 0)
-                        return median;
-                    
                     if(diff < 0)
                         min = median + 1;
-                    else
+                    else if(diff > 0)
                         max = median - 1;
+                    else
+                        return median;
                 }
                 
                 return ~min;
@@ -6790,13 +6786,12 @@ namespace System.Collections.Specialized
                     int median = (min + max) >> 1;
                     var diff   = availableMemory[median].Length - length;
                     
-                    if(diff == 0)
-                        return median;
-                    
                     if(diff < 0)
                         min = median + 1;
-                    else
+                    else if(diff > 0)
                         max = median - 1;
+                    else
+                        return median;
                 }
                 
                 return ~min;

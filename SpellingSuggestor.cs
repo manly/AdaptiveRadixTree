@@ -336,13 +336,12 @@ namespace System.Collections.Specialized
                     if(diff == 0)
                         diff = string.CompareOrdinal(this.Permutations[median], originalString);
 
-                    if(diff == 0)
-                        return median;
-
                     if(diff < 0)
                         min = median + 1;
-                    else
+                    else if(diff > 0)
                         max = median - 1;
+                    else
+                        return median;
                 }
 
                 return ~min;
