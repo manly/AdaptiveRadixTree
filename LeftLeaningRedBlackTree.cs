@@ -351,6 +351,8 @@ namespace System.Collections.Specialized
         ///    This lets you know the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         public BinarySearchResult BinarySearch(TKey key) {
             // inline this since this is usually called in hot paths
@@ -381,6 +383,8 @@ namespace System.Collections.Specialized
         ///    This lets you know the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
