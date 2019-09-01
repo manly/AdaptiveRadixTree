@@ -761,9 +761,9 @@ namespace System.Collections.Specialized
         }
         public readonly ref struct BinarySearchResult {
             /// <summary>
-            ///    -1: key &lt; lookup_key
-            ///     0: key == lookup_key
-            ///     1: key &gt; lookup_key
+            ///    -1: key &lt; node.key
+            ///     0: key ==   node.key
+            ///     1: key &gt; node.key
             /// </summary>
             public readonly int Diff;
             public readonly Node Node;
