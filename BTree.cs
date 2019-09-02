@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 namespace System.Collections.Specialized
 {
     /// <summary>
-    ///    Implements a B+Tree using an AvlTree&lt;TKey, KeyValuePair&lt;TKey,TValue&gt;[]&gt;.
+    ///    Implements a B+Tree using an AvlTree&lt;TKey, KeyValuePair[]&gt;.
     /// </summary>
     /// <remarks>
     ///    Using an optimal self-balanced tree (for query times) since most queries will be purely lookups.
@@ -77,7 +77,7 @@ namespace System.Collections.Specialized
         ///     O(n)
         ///     Returns items in key order.
         /// </summary>
-        public IEnumerable<KeyValuePair<TKey, TValue>> Items => this.GetChildrenNodes();
+        public IEnumerable<KeyValuePair> Items => this.GetChildrenNodes();
         #endregion
         #region this[]
         /// <summary>
@@ -92,7 +92,7 @@ namespace System.Collections.Specialized
             set {
                 if(!this.TryAdd(key, value, out var x))
                     // update
-                    x.Items[x.Index] = new KeyValuePair<TKey, TValue>(key, value);
+                    x.Items[x.Index] = new KeyValuePair(key, value);
             }
         }
         #endregion
@@ -104,7 +104,7 @@ namespace System.Collections.Specialized
         ///    Throws KeyNotFoundException.
         /// </summary>
         /// <exception cref="KeyNotFoundException" />
-        public KeyValuePair<TKey, TValue> Minimum => m_tree.Minimum.Value.Items[0];
+        public KeyValuePair Minimum => m_tree.Minimum.Value.Items[0];
         #endregion
         #region Maximum
         /// <summary>
@@ -113,7 +113,7 @@ namespace System.Collections.Specialized
         ///    Throws KeyNotFoundException.
         /// </summary>
         /// <exception cref="KeyNotFoundException" />
-        public KeyValuePair<TKey, TValue> Maximum {
+        public KeyValuePair Maximum {
             get {
                 var x = m_tree.Maximum.Value;
                 return x.Items[x.Count - 1];
@@ -142,7 +142,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public void AddRange(IEnumerable<KeyValuePair<TKey, TValue>> values) {
+        public void AddRange(IEnumerable<KeyValuePair> values) {
             foreach(var value in values)
                 this.Add(value.Key, value.Value);
         }
@@ -208,7 +208,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetItem(TKey key, out KeyValuePair<TKey, TValue> item) {
+        public bool TryGetItem(TKey key, out KeyValuePair item) {
             var x = this.BinarySearch(key);
             if(x.Index >= 0 && x.Node != null) {
                 item = x.Item;
@@ -266,8 +266,8 @@ namespace System.Collections.Specialized
             internal readonly AvlTree<TKey, Node>.Node Node;
             public readonly int Index;
 
-            public KeyValuePair<TKey, TValue> Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
-            public KeyValuePair<TKey, TValue>[] Items => this.Node?.Value.Items;
+            public KeyValuePair Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
+            public KeyValuePair[] Items => this.Node?.Value.Items;
 
             internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
                 this.Node  = node;
@@ -288,7 +288,7 @@ namespace System.Collections.Specialized
             if(x.Node != null && x.Index >= 0)
                 return false;
             
-            var _new = new KeyValuePair<TKey, TValue>(key, value);
+            var _new = new KeyValuePair(key, value);
 
             // add
             if(x.Node != null) {
@@ -333,18 +333,18 @@ namespace System.Collections.Specialized
             this.Count++;
             return true;
         }
-        private void TryAdd_HandleNoRoot(in KeyValuePair<TKey, TValue> item) {
+        private void TryAdd_HandleNoRoot(in KeyValuePair item) {
             var new_node      = new Node(m_itemsPerNode);
             new_node.Items[0] = item;
             new_node.Count    = 1;
             m_tree.Add(item.Key, new_node);
         }
-        private void TryAdd_HandlePreviousCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair<TKey, TValue> item) {
+        private void TryAdd_HandlePreviousCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair item) {
             // we could split the 3x nodes into 4x nodes at 75%, 
             // instead we split 2 nodes into 3x nodes at 66%
             this.TryAdd_HandlePreviousAndCurrentFull(bsr, in item);
         }
-        private void TryAdd_HandlePreviousAndCurrentFull(BinarySearchResult bsr, in KeyValuePair<TKey, TValue> item) {
+        private void TryAdd_HandlePreviousAndCurrentFull(BinarySearchResult bsr, in KeyValuePair item) {
             var index = ~bsr.Index;
             // note: we know current and prev() are full
             var nodes = this.Rebalance2FullNodesInto3(bsr.Node.Previous(), bsr.Node);
@@ -364,7 +364,7 @@ namespace System.Collections.Specialized
             if(index == 0)
                 insert_node.UpdateKey(item.Key);
         }
-        private void TryAdd_HandleCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair<TKey, TValue> item) {
+        private void TryAdd_HandleCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair item) {
             var index = ~bsr.Index;
             // note: we know current and next() are full
             var nodes = this.Rebalance2FullNodesInto3(bsr.Node, bsr.Node.Next());
@@ -455,7 +455,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private TryInsertOnPreviousNode()
-        private bool TryInsertOnPreviousNode(AvlTree<TKey, Node>.Node node, in KeyValuePair<TKey, TValue> item) {
+        private bool TryInsertOnPreviousNode(AvlTree<TKey, Node>.Node node, in KeyValuePair item) {
             var prev = node.Previous();
             
             if(prev != null) {
@@ -480,7 +480,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private TryInsertOnNextNode()
-        private bool TryInsertOnNextNode(AvlTree<TKey, Node>.Node node, in KeyValuePair<TKey, TValue> item) {
+        private bool TryInsertOnNextNode(AvlTree<TKey, Node>.Node node, in KeyValuePair item) {
             var next = node.Next();
 
             if(next != null) {
@@ -534,7 +534,7 @@ namespace System.Collections.Specialized
         ///     Returns the current node and all children in order.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private IEnumerable<KeyValuePair<TKey, TValue>> GetChildrenNodes() {
+        private IEnumerable<KeyValuePair> GetChildrenNodes() {
             foreach(var item in m_tree.Items) {
                 int max   = item.Value.Count;
                 var items = item.Value.Items;
@@ -599,47 +599,47 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item) {
+        void ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Add(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             this.Add(item.Key, item.Value);
         }
 
         /// <summary>
         ///     O(log n)
         /// </summary>
-        bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item) {
+        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Remove(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             return this.Remove(item.Key);
         }
         
-        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() {
+        IEnumerator<System.Collections.Generic.KeyValuePair<TKey, TValue>> IEnumerable<System.Collections.Generic.KeyValuePair<TKey, TValue>>.GetEnumerator() {
             foreach(var node in this.GetChildrenNodes())
-                yield return new KeyValuePair<TKey, TValue>(node.Key, node.Value);
+                yield return new System.Collections.Generic.KeyValuePair<TKey, TValue>(node.Key, node.Value);
         }
 
-        bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => false;
+        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.IsReadOnly => false;
 
-        bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item) {
+        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Contains(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             return this.TryGetValue(item.Key, out TValue value) && object.Equals(item.Value, value);
         }
 
-        void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
+        void ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.CopyTo(System.Collections.Generic.KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
             if(array == null)
                 throw new ArgumentNullException(nameof(array));
             if(arrayIndex < 0 || arrayIndex >= array.Length)
                 throw new ArgumentOutOfRangeException(nameof(arrayIndex));
 
-            foreach(var node in (IEnumerable<KeyValuePair<TKey, TValue>>)this)
-                array[arrayIndex++] = node;
+            foreach(var item in this.GetChildrenNodes())
+                array[arrayIndex++] = item;
         }
 #endif
         #endregion
 
         internal sealed class Node {
-            public readonly KeyValuePair<TKey, TValue>[] Items;
+            public readonly KeyValuePair[] Items;
             public int Count;
 
             #region constructors
             public Node(int count) {
-                this.Items = new KeyValuePair<TKey, TValue>[count];
+                this.Items = new KeyValuePair[count];
             }
             #endregion
 
@@ -665,7 +665,7 @@ namespace System.Collections.Specialized
             }
             #endregion
             #region InsertAt()
-            public void InsertAt(int index, in KeyValuePair<TKey, TValue> item) {
+            public void InsertAt(int index, in KeyValuePair item) {
                 var count  = this.Count;
                 this.Count = count + 1;
                 Array.Copy(this.Items, index, this.Items, index + 1, count - index);
@@ -680,6 +680,24 @@ namespace System.Collections.Specialized
                 this.Items[count] = default;
             }
             #endregion
+        }
+        /// <summary>
+        ///     Same as System.Collections.Generic.KeyValuePair&lt;&gt; but forced readonly
+        ///     (for better compiler optimisations).
+        /// </summary>
+        public readonly struct KeyValuePair {
+            public readonly TKey Key;
+            public readonly TValue Value;
+            public KeyValuePair(TKey key, TValue value) {
+                this.Key   = key;
+                this.Value = value;
+            }
+            public static implicit operator System.Collections.Generic.KeyValuePair<TKey, TValue>(KeyValuePair value) {
+                return new System.Collections.Generic.KeyValuePair<TKey, TValue>(value.Key, value.Value);
+            }
+            public static implicit operator KeyValuePair(System.Collections.Generic.KeyValuePair<TKey, TValue> value) {
+                return new KeyValuePair(value.Key, value.Value);
+            }
         }
     }
 }
