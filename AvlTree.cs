@@ -1204,21 +1204,24 @@ namespace System.Collections.Specialized
             /// </summary>
             public Node Next() {
                 var node = this;
-                if(node.Balance == State.Header)
-                    return node.Left;
+                System.Diagnostics.Debug.Assert(node.Balance != State.Header);
 
                 if(node.Right != null) {
-                    node = node.Right;
-                    while(node.Left != null)
-                        node = node.Left;
+                    node     = node.Right;
+                    // avoid reading redundant node.Left if possible
+                    var left = node.Left;
+                    while(left != null) {
+                        node = left;
+                        left = node.Left;
+                    }
                 } else {
                     var parent = node.Parent;
-                    if(parent.Balance == State.Header)
-                        return parent;
                     while(node == parent.Right) { 
                         node   = parent; 
                         parent = parent.Parent;
                     }
+                    if(parent.Balance == State.Header)
+                        return null;
                     node = parent;
                 }
                 return node;
@@ -1233,21 +1236,24 @@ namespace System.Collections.Specialized
             /// </summary>
             public Node Previous() {
                 var node = this;
-                if(node.Balance == State.Header) 
-                    return node.Right;
+                System.Diagnostics.Debug.Assert(node.Balance != State.Header);
 
                 if(node.Left != null) {
                     node = node.Left;
-                    while(node.Right != null)
-                        node = node.Right;
+                    // avoid reading redundant node.Left if possible
+                    var right = node.Right;
+                    while(right != null) {
+                        node  = right;
+                        right = node.Right;
+                    }
                 } else {
                     var parent = node.Parent;
-                    if(parent.Balance == State.Header)
-                        return parent;
                     while(node == parent.Left) {
                         node   = parent; 
                         parent = parent.Parent;
                     }
+                    if(parent.Balance == State.Header)
+                        return null;
                     node = parent;
                 }
                 return node;
@@ -1272,6 +1278,8 @@ namespace System.Collections.Specialized
             #endregion
             #region ToString()
             public override string ToString() {
+                if(this.Balance == State.Header)
+                    return "{header}";
                 return string.Format("[{0}] {1}", this.Key, this.Value);
             }
             #endregion
