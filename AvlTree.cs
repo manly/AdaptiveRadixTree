@@ -712,22 +712,20 @@ namespace System.Collections.Specialized
         /// </summary>
         public BinarySearchResult BinarySearch(TKey key) {
             // inline this since this is usually called in hot paths
-            //return BinarySearch(key, m_comparer);
+            //return this.BinarySearch(key, m_comparer);
 
             var current   = m_header.Parent;
             var prev      = current;
             var prev_diff = 0;
             while(current != null) {
-                int diff = m_comparer(key, current.Key);
+                prev_diff = m_comparer(key, current.Key);
 
-                if(diff < 0) {
-                    prev      = current;
-                    prev_diff = -1;
-                    current   = current.Left;
-                } else if(diff > 0) {
-                    prev      = current;
-                    prev_diff = 1;
-                    current   = current.Right;
+                if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
+                } else if(prev_diff > 0) {
+                    prev    = current;
+                    current = current.Right;
                 } else
                     return new BinarySearchResult(current, 0);
             }
@@ -748,16 +746,14 @@ namespace System.Collections.Specialized
             var prev      = current;
             var prev_diff = 0;
             while(current != null) {
-                int diff = comparer(key, current.Key);
+                prev_diff = comparer(key, current.Key);
 
-                if(diff < 0) {
-                    prev      = current;
-                    prev_diff = -1;
-                    current   = current.Left;
-                } else if(diff > 0) {
-                    prev      = current;
-                    prev_diff = 1;
-                    current   = current.Right;
+                if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
+                } else if(prev_diff > 0) {
+                    prev    = current;
+                    current = current.Right;
                 } else
                     return new BinarySearchResult(current, 0);
             }
