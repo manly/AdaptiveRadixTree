@@ -878,116 +878,104 @@ namespace System.Collections.Specialized
             return 0;
         }
         #endregion
+        #region Range()
+        /// <summary>
+        ///     O(2 log n + m)   m = number of items returned
+        ///     
+        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Use RangeEnumerator instead for efficient re-use.
+        /// </summary>
+        public IEnumerable<Node> Range(TKey start, TKey end) {
+            return new RangeEnumerator(this).Run(start, end);
+        }
+        /// <summary>
+        ///     O(2 log n + m)   m = number of items returned
+        ///     
+        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        public sealed class RangeEnumerator {
+            // manually handled stack for better performance
+            private Node[] m_stack = new Node[16];
+            private int m_stackIndex = 0;
+        
+            private readonly AvlTree<TKey, TValue> m_owner;
+        
+            public RangeEnumerator(AvlTree<TKey, TValue> owner) {
+                m_owner = owner;
+            }
+        
+            public IEnumerable<Node> Run(TKey start, TKey end) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+        
+                var start_path = new HashSet<Node>();
+                var node       = this.FindStartNode(start, start_path);
+                var end_node   = this.FindEndNode(end);
+        
+                while(node != null) {
+                    if(node.Left != null && !start_path.Contains(node)) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            yield return node;
+                            if(object.ReferenceEquals(node, end_node))
+                                yield break;
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node FindStartNode(TKey start, HashSet<Node> path) {
+                var node = this.TryGetPath(start, path);
+                if(m_owner.m_comparer(start, node.Key) > 0)
+                    node = node.Next();
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node FindEndNode(TKey end) {
+                var x    = m_owner.BinarySearch(end);
+                var node = x.Node;
+                if(x.Diff < 0)
+                    node = x.Node.Previous();
+                return node;
+            }
+            private Node TryGetPath(TKey key, HashSet<Node> path) {
+                var current = m_owner.m_header.Parent;
+                var prev    = current;
+                while(current != null) {
+                    path.Add(current);
+                    prev = current;
+        
+                    int diff = m_owner.m_comparer(key, current.Key);
 
-        #region Range() *non-functional*
-        ///// <summary>
-        /////     O(2 log n + m)   m = number of items returned
-        /////     
-        /////     Returns all nodes between the 2 keys, including from/to.
-        /////     Use RangeEnumerator instead for efficient re-use.
-        ///// </summary>
-        ///// <param name="start">Default: Minimum.Key.</param>
-        ///// <param name="end">Default: Maximum.Key.</param>
-        //public IEnumerable<Node> Range(TKey start, TKey end) {
-        //    return new RangeEnumerator(this).Run(start, end);
-        //}
-        ///// <summary>
-        /////     O(2 log n + m)   m = number of items returned
-        /////     
-        /////     Returns all nodes between the 2 keys, including from/to.
-        /////     This enumerator is made for re-use, to avoid array reallocations.
-        ///// </summary>
-        //public sealed class RangeEnumerator {
-        //    // manually handled stack for better performance
-        //    private Node[] m_stack = new Node[16];
-        //    private int m_stackIndex = 0;
-        //
-        //    private readonly AvlTree<TKey, TValue> m_owner;
-        //
-        //    public RangeEnumerator(AvlTree<TKey, TValue> owner) {
-        //        m_owner = owner;
-        //    }
-        //
-        //    /// <param name="start">Default: Minimum.Key.</param>
-        //    /// <param name="end">Default: Maximum.Key.</param>
-        //    public IEnumerable<Node> Run(TKey start, TKey end) {
-        //        if(m_stackIndex > 0) {
-        //            Array.Clear(m_stack, 0, m_stackIndex);
-        //            m_stackIndex = 0;
-        //        }
-        //
-        //        var comparer  = m_owner.m_comparer;
-        //        var has_start = comparer(start, default) != 0;
-        //        var has_end   = comparer(end, default) != 0;
-        //        var node      = m_owner.m_header.Parent;
-        //        Node end_node = null;
-        //
-        //        if(has_start)
-        //            node = this.FindStartNode(start);
-        //        if(has_end)
-        //            end_node = this.FindEndNode(end);
-        //
-        //        // todo: code doesnt work when start != default
-        //        //throw new NotImplementedException();
-        //
-        //        while(node != null) {
-        //            if(node.Left != null) {
-        //                this.Push(node);
-        //                node = node.Left;
-        //            } else {
-        //                do {
-        //                    yield return node;
-        //                    if(has_end && object.ReferenceEquals(node, end_node))
-        //                        yield break;
-        //                    node = node.Right;
-        //                } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
-        //            }
-        //        }
-        //    }
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    private void Push(Node value) {
-        //        if(m_stackIndex == m_stack.Length)
-        //            Array.Resize(ref m_stack, m_stackIndex * 2);
-        //        m_stack[m_stackIndex++] = value;
-        //    }
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    private Node Pop() {
-        //        var node = m_stack[--m_stackIndex];
-        //        m_stack[m_stackIndex] = default;
-        //        return node;
-        //    }
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    private Node FindStartNode(TKey start) {
-        //        this.TryGetPath(start);
-        //        var node = this.Pop();
-        //        if(m_owner.m_comparer(start, node.Key) > 0)
-        //            node = node.Next();
-        //        return node;
-        //    }
-        //    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //    private Node FindEndNode(TKey end) {
-        //        var x    = m_owner.BinarySearch(end);
-        //        var node = x.Node;
-        //        if(x.Diff < 0)
-        //            node = x.Node.Previous();
-        //        return node;
-        //    }
-        //    private void TryGetPath(TKey key) {
-        //        var current = m_owner.m_header.Parent;
-        //        while(current != null) {
-        //            this.Push(current);
-        //
-        //            int diff = m_owner.m_comparer(key, current.Key);
-        //
-        //            if(diff < 0)
-        //                current = current.Left;
-        //            else if(diff > 0)
-        //                current = current.Right;
-        //            else
-        //                return;
-        //        }
-        //    }
-        //}
+                    if(diff < 0) {
+                        this.Push(current);
+                        current = current.Left;
+                    } else if(diff > 0)
+                        current = current.Right;
+                    else
+                        return current;
+                }
+                return prev;
+            }
+        }
         #endregion
 
         #region private static RotateLeft()
