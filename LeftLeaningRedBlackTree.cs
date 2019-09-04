@@ -1,4 +1,5 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
+//#define USE_PARENT_POINTER
 
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -417,6 +418,98 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
+        #region BinarySearchNearby()
+#if USE_PARENT_POINTER
+        /// <summary>
+        ///    Worst: O(2 log n)
+        ///    
+        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
+        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        public BinarySearchResult BinarySearchNearby(Node start, TKey key) {
+            return this.BinarySearchNearby(start, key, m_comparer);
+        }
+        /// <summary>
+        ///    Worst: O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
+        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
+            // go up until we cross key, then go down
+            var node = start;
+            var prev = start;
+            var diff = comparer(key, start.Key);
+
+            if(diff < 0) {
+                while(node != null) {
+                    var parent = node.Parent;
+                    if(parent != null) {
+                        if(node == parent.Right) {
+                            diff = comparer(key, parent.Key);
+                            if(diff > 0) {
+                                // go down from here
+                                node = parent;
+                                break;
+                            } else if(diff == 0)
+                                return new BinarySearchResult(parent, 0);
+                        }
+                        node = parent;
+                    } else
+                        return this.BinarySearch(key);
+                }
+            } else if(diff > 0) {
+                while(node != null) {
+                    var parent = node.Parent;
+                    if(parent != null) {
+                        if(node == parent.Left) {
+                            diff = comparer(key, parent.Key);
+                            if(diff < 0) {
+                                // go down from here
+                                node = parent;
+                                break;
+                            } else if(diff == 0)
+                                return new BinarySearchResult(parent, 0);
+                        }
+                        node = parent;
+                    } else
+                        return this.BinarySearch(key);
+                }
+            } else
+                return new BinarySearchResult(node, 0);
+            
+            // then go down as normal
+            int prev_diff = 0;
+            while(node != null) {
+                prev_diff = comparer(key, node.Key);
+
+                if(prev_diff < 0) {
+                    prev    = node;
+                    node = node.Left;
+                } else if(prev_diff > 0) {
+                    prev    = node;
+                    node = node.Right;
+                } else
+                    return new BinarySearchResult(node, 0);
+            }
+
+            return new BinarySearchResult(prev, prev_diff);
+        }
+#endif
+        #endregion
         #region Depth()
         /// <summary>
         ///     O(n)
@@ -703,29 +796,38 @@ namespace System.Collections.Specialized
             internal Node Right;
             internal bool IsBlack;
 
-            // todo: code Next()/Previous() to be able to use BinarySearch()
-            //#region Next()
-            ///// <summary>
-            /////     O(1)
-            /////     Returns the next node.
-            /////     This behaves like an iterator, but will keep working even as the tree is being changed.
-            /////     This will run roughly half the speed as using the iterator if iterating through the entire tree.
-            ///// </summary>
-            //public Node Next() {
-            //    
-            //}
-            //#endregion
-            //#region Previous()
-            ///// <summary>
-            /////     O(1)
-            /////     Returns the previous node.
-            /////     This behaves like an iterator, but will keep working even as the tree is being changed.
-            /////     This will run roughly half the speed as using the iterator if iterating through the entire tree.
-            ///// </summary>
-            //public Node Previous() {
-            //    
-            //}
-            //#endregion
+            #region Next()
+            /// <summary>
+            ///     O(1)
+            ///     Returns the next node.
+            ///     This behaves like an iterator, but will keep working even as the tree is being changed.
+            ///     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            /// </summary>
+            public Node Next() {
+#if USE_PARENT_POINTER
+                // needless to say, implement it if need be
+                throw new NotImplementedException();
+#else
+                throw new NotSupportedException();
+#endif
+            }
+            #endregion
+            #region Previous()
+            /// <summary>
+            ///     O(1)
+            ///     Returns the previous node.
+            ///     This behaves like an iterator, but will keep working even as the tree is being changed.
+            ///     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            /// </summary>
+            public Node Previous() {
+#if USE_PARENT_POINTER
+                // needless to say, implement it if need be
+                throw new NotImplementedException();
+#else
+                throw new NotSupportedException();
+#endif
+            }
+            #endregion
             #region UpdateKey()
             /// <summary>
             ///     Change the key without updating the tree.
