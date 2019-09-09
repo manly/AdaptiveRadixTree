@@ -216,6 +216,9 @@ namespace System.Collections.Specialized
                         if(nextNode != null) {
                             var last = nextNode.Value.Items[0];
                             insert_on_current_node = m_comparer.Compare(current.Key, last.Key) <= 0;
+                        } else if((x.Index < 0 && ~x.Index >= node_count) || (x.Index >= 0 && x.Index >= node_count)) {
+                            ReachedPastMaximumDumpEverything(x.Node);
+                            return;
                         } else
                             insert_on_current_node = true;
                         if(insert_on_current_node) {
@@ -240,6 +243,23 @@ namespace System.Collections.Specialized
                 x        = this.BinarySearchNearby(x, current.Key);
                 x        = this.Add(x, current.Key, current.Value);
                 nextNode = x.Node?.Next();
+            }
+            /// <summary>
+            ///     On we're inserting past the Maximum, then we just dump all the data.
+            /// </summary>
+            void ReachedPastMaximumDumpEverything(AvlTree<TKey, Node>.Node node) {
+                var node_count = node.Value.Count;
+                while(true) {
+                    while(node_count < m_itemsPerNode) {
+                        node.Value.Items[node_count] = enumerator.Current;
+                        node.Value.Count = ++node_count;
+                        this.Count++;
+                        if(!enumerator.MoveNext())
+                            return;
+                    }
+                    node_count = 0;
+                    node       = m_tree.Add(enumerator.Current.Key, new Node(m_itemsPerNode));
+                }
             }
         }
         /// <summary>
@@ -278,6 +298,9 @@ namespace System.Collections.Specialized
                         if(nextNode != null) {
                             var last = nextNode.Value.Items[0];
                             insert_on_current_node = m_comparer.Compare(current.Key, last.Key) <= 0;
+                        } else if((x.Index < 0 && ~x.Index >= node_count) || (x.Index >= 0 && x.Index >= node_count)) {
+                            ReachedPastMaximumDumpEverything(x.Node);
+                            return;
                         } else
                             insert_on_current_node = true;
                         if(insert_on_current_node) {
@@ -300,6 +323,23 @@ namespace System.Collections.Specialized
                 x        = this.BinarySearchNearby(x, current.Key);
                 x        = this.Add(x, current.Key, current.Value);
                 nextNode = x.Node?.Next();
+            }
+            /// <summary>
+            ///     On we're inserting past the Maximum, then we just dump all the data.
+            /// </summary>
+            void ReachedPastMaximumDumpEverything(AvlTree<TKey, Node>.Node node) {
+                var node_count = node.Value.Count;
+                while(true) {
+                    while(node_count < m_itemsPerNode) {
+                        node.Value.Items[node_count] = enumerator.Current;
+                        node.Value.Count = ++node_count;
+                        this.Count++;
+                        if(!enumerator.MoveNext())
+                            return;
+                    }
+                    node_count = 0;
+                    node       = m_tree.Add(enumerator.Current.Key, new Node(m_itemsPerNode));
+                }
             }
         }
         #endregion
