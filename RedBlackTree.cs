@@ -594,7 +594,7 @@ namespace System.Collections.Specialized
             return this.BinarySearchNearby(start, key, m_comparer);
         }
         /// <summary>
-        ///    Worst: O(log n)
+        ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
@@ -607,47 +607,53 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
-            // go up until we cross key, then go down
             var node = start;
             var prev = start;
-            var diff = comparer(key, start.Key);
 
-            if(diff < 0) {
-                while(node != null) {
-                    var parent = node.Parent;
-                    if(parent != null) {
-                        if(node == parent.Right) {
-                            diff = comparer(key, parent.Key);
-                            if(diff > 0) {
-                                // go down from here
-                                node = parent;
-                                break;
-                            } else if(diff == 0)
-                                return new BinarySearchResult(parent, 0);
-                        }
-                        node = parent;
-                    } else
-                        return this.BinarySearch(key);
-                }
-            } else if(diff > 0) {
-                while(node != null) {
-                    var parent = node.Parent;
-                    if(parent != null) {
-                        if(node == parent.Left) {
-                            diff = comparer(key, parent.Key);
-                            if(diff < 0) {
-                                // go down from here
-                                node = parent;
-                                break;
-                            } else if(diff == 0)
-                                return new BinarySearchResult(parent, 0);
-                        }
-                        node = parent;
-                    } else
-                        return this.BinarySearch(key);
-                }
-            } else
-                return new BinarySearchResult(node, 0);
+            if(start != null) {
+                // go up until we cross key, then go down
+                var diff = comparer(key, start.Key);
+
+                if(diff < 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent != null) {
+                            if(node == parent.Right) {
+                                diff = comparer(key, parent.Key);
+                                if(diff > 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else if(diff > 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent != null) {
+                            if(node == parent.Left) {
+                                diff = comparer(key, parent.Key);
+                                if(diff < 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else
+                    return new BinarySearchResult(node, 0);
+            } else {
+                node = m_root;
+                prev = node;
+            }
             
             // then go down as normal
             int prev_diff = 0;
