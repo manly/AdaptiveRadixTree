@@ -211,30 +211,34 @@ namespace System.Collections.Specialized
                         if(node.Left != null)
                             node = node.Left;
                         else {
-                            node.Left = new Node(key, value){
+                            var _new = new Node(key, value){
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
+                            node.Left = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
                             if(m_header.Left == node)
-                                m_header.Left = node.Left;
+                                m_header.Left = _new;
 #endif
                             BalanceSet(node, Direction.Left);
+                            node = _new;
                             break;
                         }
                     } else if(diff > 0) {
                         if(node.Right != null)
                             node = node.Right;
                         else {
-                            node.Right = new Node(key, value){
+                            var _new = new Node(key, value){
                                 Parent  = node,
                                 Balance = State.Balanced,
                             };
+                            node.Right = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
                             if(m_header.Right == node)
-                                m_header.Right = node.Right;
+                                m_header.Right = _new;
 #endif
                             BalanceSet(node, Direction.Right);
+                            node = _new;
                             break;
                         }
                     } else
