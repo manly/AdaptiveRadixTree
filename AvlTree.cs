@@ -1,9 +1,9 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 //#define MAINTAIN_MINIMUM_AND_MAXIMUM   // if enabled, will maintain a pointer to .Minimum and .Maximum allowing O(1)
-
+ 
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-
+ 
 namespace System.Collections.Specialized
 {
     /// <summary>
@@ -34,9 +34,9 @@ namespace System.Collections.Specialized
     {
         private Node m_header; // note: root = m_header.Parent
         private readonly Comparison<TKey> m_comparer;
-
+ 
         public int Count { get; private set; }
-
+ 
         #region constructors
         public AvlTree() : this(Comparer<TKey>.Default.Compare) { }
         public AvlTree(IComparer<TKey> comparer) : this(comparer.Compare) { }
@@ -45,7 +45,7 @@ namespace System.Collections.Specialized
             this.Clear(); // sets m_header
         }
         #endregion
-
+ 
         #region Keys
         /// <summary>
         ///     O(n)
@@ -86,7 +86,7 @@ namespace System.Collections.Specialized
                 var current = m_header.Parent;
                 while(current != null) {
                     int diff = m_comparer(key, current.Key);
-    
+     
                     if(diff < 0)
                         current = current.Left;
                     else if(diff > 0)
@@ -94,14 +94,14 @@ namespace System.Collections.Specialized
                     else
                         return current.Value;
                 }
-    
+     
                 throw new KeyNotFoundException();
             }
             set {
                 var current = m_header.Parent;
                 while(current != null) {
                     int diff = m_comparer(key, current.Key);
-    
+     
                     if(diff < 0)
                         current = current.Left;
                     else if(diff > 0)
@@ -111,12 +111,12 @@ namespace System.Collections.Specialized
                         return;
                     }
                 }
-    
+     
                 this.Add(key, value);
             }
         }
         #endregion
-
+ 
         #region Minimum
 #if !MAINTAIN_MINIMUM_AND_MAXIMUM
         /// <summary>
@@ -130,13 +130,13 @@ namespace System.Collections.Specialized
                 var current = m_header.Parent;
                 if(current == null)
                     throw new KeyNotFoundException();
-
+ 
                 Node parent = null;
                 while(current != null) {
                     parent  = current;
                     current = current.Left;
                 }
-                 
+                  
                 return parent;
             }
         }
@@ -167,13 +167,13 @@ namespace System.Collections.Specialized
                 var current = m_header.Parent;
                 if(current == null)
                     throw new KeyNotFoundException();
-
+ 
                 Node parent = null;
                 while(current != null) {
                     parent  = current;
                     current = current.Right;
                 }
-                 
+                  
                 return parent;
             }
         }
@@ -191,7 +191,7 @@ namespace System.Collections.Specialized
         }
 #endif
         #endregion
-    
+     
         #region Add()
         /// <summary>
         ///     O(log n)
@@ -206,7 +206,7 @@ namespace System.Collections.Specialized
             if(node != null) {
                 while(true) {
                     var diff = m_comparer(key, node.Key);
-
+ 
                     if(diff < 0) {
                         if(node.Left != null)
                             node = node.Left;
@@ -247,13 +247,13 @@ namespace System.Collections.Specialized
                 };
                 m_header.Parent = root;
                 node            = root;
-
+ 
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
                 m_header.Left   = root;
                 m_header.Right  = root;
 #endif
             }
-
+ 
             this.Count++;
             return node;
         }
@@ -262,11 +262,11 @@ namespace System.Collections.Specialized
         /// </summary>
         private static void BalanceSet(Node node, Direction direction) {
             var is_taller = true;
-
+ 
             while(is_taller) {
                 var parent = node.Parent;
                 var next   = parent.Left == node ? Direction.Left : Direction.Right;
-
+ 
                 if(direction == Direction.Left) {
                     switch(node.Balance) {
                         case State.LeftHigh:
@@ -277,11 +277,11 @@ namespace System.Collections.Specialized
                             else
                                 BalanceLeft(ref parent.Right);
                             return;
-
+ 
                         case State.Balanced:
                             node.Balance = State.LeftHigh;
                             break;
-
+ 
                         case State.RightHigh:
                             node.Balance = State.Balanced;
                             return;
@@ -291,11 +291,11 @@ namespace System.Collections.Specialized
                         case State.LeftHigh:
                             node.Balance = State.Balanced;
                             return;
-
+ 
                         case State.Balanced:
                             node.Balance = State.RightHigh;
                             break;
-
+ 
                         case State.RightHigh:
                             if(parent.Balance == State.Header)
                                 BalanceRight(ref parent.Parent);
@@ -306,11 +306,11 @@ namespace System.Collections.Specialized
                             return;
                     }
                 }
-
+ 
                 if(is_taller) {
                     if(parent.Balance == State.Header)
                         return;
-
+ 
                     node      = parent;
                     direction = next;
                 }
@@ -335,13 +335,13 @@ namespace System.Collections.Specialized
         /// </summary>
         public bool Remove(TKey key) {
             var root = m_header.Parent;
-
+ 
             while(true) {
                 if(root == null)
                     return false;
-            
+             
                 int diff = m_comparer(key, root.Key);
-            
+             
                 if(diff < 0)
                     root = root.Left;
                 else if(diff > 0)
@@ -357,21 +357,21 @@ namespace System.Collections.Specialized
         public bool Remove(Node node) {
             if(node == null)
                 return false;
-            
+             
             if(node.Left != null && node.Right != null) {
                 var replacement = node.Left;
                 while(replacement.Right != null)
                     replacement = replacement.Right;
                 SwapNodes(node, replacement);
             }
-            
+             
             var parent    = node.Parent;
             var direction = parent.Left == node ? Direction.Left : Direction.Right;
-
+ 
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
             if(m_header.Left == node) {
                 var next = node.Next();
-
+ 
                 if(next.Balance == State.Header) { 
                     m_header.Left  = m_header;
                     m_header.Right = m_header;
@@ -379,7 +379,7 @@ namespace System.Collections.Specialized
                     m_header.Left  = next;
             } else if(m_header.Right == node) {
                 var prev = node.Previous();
-
+ 
                 if(prev.Balance == State.Header) {
                     m_header.Left  = m_header;
                     m_header.Right = m_header;
@@ -387,7 +387,7 @@ namespace System.Collections.Specialized
                     m_header.Right = prev;
             }
 #endif
-
+ 
             if(node.Left == null) {
                 if(parent == m_header)
                     m_header.Parent = node.Right;
@@ -395,7 +395,7 @@ namespace System.Collections.Specialized
                     parent.Left = node.Right;
                 else
                     parent.Right = node.Right;
-            
+             
                 if(node.Right != null)
                     node.Right.Parent = parent;
             } else {
@@ -405,11 +405,11 @@ namespace System.Collections.Specialized
                     parent.Left = node.Left;
                 else
                     parent.Right = node.Left;
-            
+             
                 if(node.Left != null)
                     node.Left.Parent = parent;
             }
-            
+             
             BalanceSetRemove(parent, direction);
             this.Count--;
             return true;
@@ -419,7 +419,7 @@ namespace System.Collections.Specialized
                 if(y.Left != null)  y.Left.Parent  = x;
                 if(y.Right != null) y.Right.Parent = x;
                 if(x.Right != null) x.Right.Parent = y;
-
+ 
                 if(x.Parent.Balance != State.Header) {
                     if(x.Parent.Left == x)
                         x.Parent.Left = y;
@@ -427,18 +427,18 @@ namespace System.Collections.Specialized
                         x.Parent.Right = y;
                 } else
                     x.Parent.Parent = y;
-
+ 
                 y.Parent = x.Parent;
                 x.Parent = y;
                 x.Left   = y.Left;
                 y.Left   = x;
-
+ 
                 Swap(ref x.Right, ref y.Right);
             } else if(x.Right == y) {
                 if(y.Right != null) y.Right.Parent = x;
                 if(y.Left != null)  y.Left.Parent  = x;
                 if(x.Left != null)  x.Left.Parent  = y;
-
+ 
                 if(x.Parent.Balance != State.Header) {
                     if(x.Parent.Left == x)
                         x.Parent.Left = y;
@@ -446,18 +446,18 @@ namespace System.Collections.Specialized
                         x.Parent.Right = y;
                 } else
                     x.Parent.Parent = y;
-
+ 
                 y.Parent = x.Parent;
                 x.Parent = y;
                 x.Right  = y.Right;
                 y.Right  = x;
-
+ 
                 Swap(ref x.Left, ref y.Left);
             } else if(x == y.Left) {
                 if(x.Left != null)  x.Left.Parent  = y;
                 if(x.Right != null) x.Right.Parent = y;
                 if(y.Right != null) y.Right.Parent = x;
-
+ 
                 if(y.Parent.Balance != State.Header) {
                     if(y.Parent.Left == y)
                         y.Parent.Left = x;
@@ -465,18 +465,18 @@ namespace System.Collections.Specialized
                         y.Parent.Right = x;
                 } else
                     y.Parent.Parent = x;
-
+ 
                 x.Parent = y.Parent;
                 y.Parent = x;
                 y.Left   = x.Left;
                 x.Left   = y;
-
+ 
                 Swap(ref x.Right, ref y.Right);
             } else if(x == y.Right) {
                 if(x.Right != null) x.Right.Parent = y;
                 if(x.Left != null)  x.Left.Parent  = y;
                 if(y.Left != null)  y.Left.Parent  = x;
-
+ 
                 if(y.Parent.Balance != State.Header) {
                     if(y.Parent.Left == y)
                         y.Parent.Left = x;
@@ -484,12 +484,12 @@ namespace System.Collections.Specialized
                         y.Parent.Right = x;
                 } else
                     y.Parent.Parent = x;
-
+ 
                 x.Parent = y.Parent;
                 y.Parent = x;
                 y.Right  = x.Right;
                 x.Right  = y;
-
+ 
                 Swap(ref x.Left, ref y.Left);
             } else {
                 if(x.Parent == y.Parent)
@@ -500,9 +500,9 @@ namespace System.Collections.Specialized
                             x.Parent.Left = y;
                         else
                             x.Parent.Right = y;
-                    } else 
+                    } else
                         x.Parent.Parent = y;
-
+ 
                     if(y.Parent.Balance != State.Header) {
                         if(y.Parent.Left == y)
                             y.Parent.Left = x;
@@ -511,17 +511,17 @@ namespace System.Collections.Specialized
                     } else
                         y.Parent.Parent = x;
                 }
-
+ 
                 if(y.Left != null)  y.Left.Parent  = x;
                 if(y.Right != null) y.Right.Parent = x;
                 if(x.Left != null)  x.Left.Parent  = y;
                 if(x.Right != null) x.Right.Parent = y;
-
+ 
                 Swap(ref x.Left, ref y.Left);
                 Swap(ref x.Right, ref y.Right);
                 Swap(ref x.Parent, ref y.Parent);
             }
-
+ 
             var balance = x.Balance;
             x.Balance   = y.Balance;
             y.Balance   = balance;
@@ -538,27 +538,27 @@ namespace System.Collections.Specialized
         private static void BalanceSetRemove(Node node, Direction direction) {
             if(node.Balance == State.Header)
                 return;
-
+ 
             var is_shorter = true;
-
+ 
             while(is_shorter) {
                 var parent = node.Parent;
                 var next   = parent.Left == node ? Direction.Left : Direction.Right;
-
+ 
                 if(direction == Direction.Left) {
                     switch(node.Balance) {
                         case State.LeftHigh:
                             node.Balance = State.Balanced;
                             break;
-
+ 
                         case State.Balanced:
                             node.Balance = State.RightHigh;
                             return;
-
+ 
                         case State.RightHigh:
                             if(node.Right.Balance == State.Balanced)
                                 is_shorter = false;
-
+ 
                             if(parent.Balance == State.Header)
                                 BalanceRight(ref parent.Parent);
                             else if(parent.Left == node)
@@ -572,15 +572,15 @@ namespace System.Collections.Specialized
                         case State.RightHigh:
                             node.Balance = State.Balanced;
                             break;
-
+ 
                         case State.Balanced:
                             node.Balance = State.LeftHigh;
                             return;
-
+ 
                         case State.LeftHigh:
                             if(node.Left.Balance == State.Balanced)
                                 is_shorter = false;
-
+ 
                             if(parent.Balance == State.Header)
                                 BalanceLeft(ref parent.Parent);
                             else if(parent.Left == node)
@@ -590,11 +590,11 @@ namespace System.Collections.Specialized
                             break;
                     }
                 }
-
+ 
                 if(is_shorter) {
                     if(parent.Balance == State.Header)
                         return;
-                    
+                     
                     direction = next;
                     node      = parent;
                 }
@@ -622,11 +622,11 @@ namespace System.Collections.Specialized
             header.Left  = header;
             header.Right = header;
             m_header     = header;
-
+ 
             this.Count = 0;
         }
         #endregion
-
+ 
         #region TryGetValue()
         /// <summary>
         ///    O(log n)
@@ -635,7 +635,7 @@ namespace System.Collections.Specialized
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
-    
+     
                 if(diff < 0)
                     current = current.Left;
                 else if(diff > 0)
@@ -645,10 +645,10 @@ namespace System.Collections.Specialized
                     return true;
                 }
             }
-    
+     
             value = default;
             return false;
-
+ 
             // dont want to force an extra branching
             //if(!this.TryGetNode(key, out Node node)) {
             //    value = default;
@@ -666,7 +666,7 @@ namespace System.Collections.Specialized
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
-    
+     
                 if(diff < 0)
                     current = current.Left;
                 else if(diff > 0)
@@ -676,7 +676,7 @@ namespace System.Collections.Specialized
                     return true;
                 }
             }
-    
+     
             node = default;
             return false;
         }
@@ -689,7 +689,7 @@ namespace System.Collections.Specialized
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
-    
+     
                 if(diff < 0)
                     current = current.Left;
                 else if(diff > 0)
@@ -713,13 +713,13 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch(TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch(key, m_comparer);
-
+ 
             var current   = m_header.Parent;
             var prev      = current;
             var prev_diff = 0;
             while(current != null) {
                 prev_diff = m_comparer(key, current.Key);
-
+ 
                 if(prev_diff < 0) {
                     prev    = current;
                     current = current.Left;
@@ -747,7 +747,7 @@ namespace System.Collections.Specialized
             var prev_diff = 0;
             while(current != null) {
                 prev_diff = comparer(key, current.Key);
-
+ 
                 if(prev_diff < 0) {
                     prev    = current;
                     current = current.Left;
@@ -790,7 +790,7 @@ namespace System.Collections.Specialized
             return this.BinarySearchNearby(start, key, m_comparer);
         }
         /// <summary>
-        ///    Worst: O(log n)
+        ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
@@ -803,53 +803,59 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
-            // go up until we cross key, then go down
             var node = start;
             var prev = start;
-            var diff = comparer(key, start.Key);
-
-            if(diff < 0) {
-                while(node != null) {
-                    var parent = node.Parent;
-                    if(parent.Balance != State.Header) {
-                        if(node == parent.Right) {
-                            diff = comparer(key, parent.Key);
-                            if(diff > 0) {
-                                // go down from here
-                                node = parent;
-                                break;
-                            } else if(diff == 0)
-                                return new BinarySearchResult(parent, 0);
-                        }
-                        node = parent;
-                    } else
-                        return this.BinarySearch(key);
-                }
-            } else if(diff > 0) {
-                while(node != null) {
-                    var parent = node.Parent;
-                    if(parent.Balance != State.Header) {
-                        if(node == parent.Left) {
-                            diff = comparer(key, parent.Key);
-                            if(diff < 0) {
-                                // go down from here
-                                node = parent;
-                                break;
-                            } else if(diff == 0)
-                                return new BinarySearchResult(parent, 0);
-                        }
-                        node = parent;
-                    } else
-                        return this.BinarySearch(key);
-                }
-            } else
-                return new BinarySearchResult(node, 0);
-            
+ 
+            if(start != null) {
+                // go up until we cross key, then go down
+                var diff = comparer(key, start.Key);
+ 
+                if(diff < 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent.Balance != State.Header) {
+                            if(node == parent.Right) {
+                                diff = comparer(key, parent.Key);
+                                if(diff > 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else if(diff > 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent.Balance != State.Header) {
+                            if(node == parent.Left) {
+                                diff = comparer(key, parent.Key);
+                                if(diff < 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else
+                    return new BinarySearchResult(node, 0);
+            } else {
+                node = m_header.Parent;
+                prev = node;
+            }
+             
             // then go down as normal
             int prev_diff = 0;
             while(node != null) {
                 prev_diff = comparer(key, node.Key);
-
+ 
                 if(prev_diff < 0) {
                     prev = node;
                     node = node.Left;
@@ -859,7 +865,7 @@ namespace System.Collections.Specialized
                 } else
                     return new BinarySearchResult(node, 0);
             }
-
+ 
             return new BinarySearchResult(prev, prev_diff);
         }
         #endregion
@@ -898,23 +904,23 @@ namespace System.Collections.Specialized
             // manually handled stack for better performance
             private Node[] m_stack = new Node[16];
             private int m_stackIndex = 0;
-        
+         
             private readonly AvlTree<TKey, TValue> m_owner;
-        
+         
             public RangeEnumerator(AvlTree<TKey, TValue> owner) {
                 m_owner = owner;
             }
-        
+         
             public IEnumerable<Node> Run(TKey start, TKey end) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
-        
+         
                 var start_path = new HashSet<Node>();
                 var node       = this.FindStartNode(start, start_path);
                 var end_node   = this.FindEndNode(end);
-        
+         
                 while(node != null) {
                     if(node.Left != null && !start_path.Contains(node)) {
                         this.Push(node);
@@ -962,9 +968,9 @@ namespace System.Collections.Specialized
                 while(current != null) {
                     path.Add(current);
                     prev = current;
-        
+         
                     int diff = m_owner.m_comparer(key, current.Key);
-
+ 
                     if(diff < 0) {
                         this.Push(current);
                         current = current.Left;
@@ -977,18 +983,18 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+ 
         #region private static RotateLeft()
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void RotateLeft(ref Node node) {
             var right    = node.Right;
             var parent   = node.Parent;
-
+ 
             right.Parent = parent;
             node.Parent  = right;
             if(right.Left != null)
                 right.Left.Parent = node;
-
+ 
             node.Right = right.Left;
             right.Left = node;
             node       = right;
@@ -999,12 +1005,12 @@ namespace System.Collections.Specialized
         private static void RotateRight(ref Node node) {
             var left    = node.Left;
             var parent  = node.Parent;
-
+ 
             left.Parent = parent;
             node.Parent = left;
             if(left.Right != null)
                 left.Right.Parent = node;
-
+ 
             node.Left  = left.Right;
             left.Right = node;
             node       = left;
@@ -1013,14 +1019,14 @@ namespace System.Collections.Specialized
         #region private static BalanceLeft()
         private static void BalanceLeft(ref Node node) {
             var left = node.Left;
-
+ 
             switch(left.Balance) {
                 case State.LeftHigh:
                     left.Balance = State.Balanced;
                     node.Balance = State.Balanced;
                     RotateRight(ref node);
                     break;
-
+ 
                 case State.RightHigh: 
                     var sub_right = left.Right;
                     switch(sub_right.Balance) {
@@ -1028,12 +1034,12 @@ namespace System.Collections.Specialized
                             left.Balance = State.Balanced;
                             node.Balance = State.Balanced;
                             break;
-
+ 
                         case State.RightHigh:
                             left.Balance = State.LeftHigh;
                             node.Balance = State.Balanced;
                             break;
-
+ 
                         case State.LeftHigh:
                             left.Balance = State.Balanced;
                             node.Balance = State.RightHigh;
@@ -1044,7 +1050,7 @@ namespace System.Collections.Specialized
                     node.Left = left;
                     RotateRight(ref node);
                     break;
-
+ 
                 case State.Balanced:
                     left.Balance = State.RightHigh;
                     node.Balance = State.LeftHigh;
@@ -1056,14 +1062,14 @@ namespace System.Collections.Specialized
         #region private static BalanceRight()
         private static void BalanceRight(ref Node node) {
             var right = node.Right;
-
+ 
             switch(right.Balance) {
                 case State.RightHigh:
                     right.Balance = State.Balanced;
                     node.Balance  = State.Balanced;
                     RotateLeft(ref node);
                     break;
-
+ 
                 case State.LeftHigh:
                     var sub_left = right.Left;
                     switch(sub_left.Balance) {
@@ -1071,12 +1077,12 @@ namespace System.Collections.Specialized
                             right.Balance = State.Balanced;
                             node.Balance  = State.Balanced;
                             break;
-
+ 
                         case State.LeftHigh:
                             right.Balance = State.RightHigh;
                             node.Balance  = State.Balanced;
                             break;
-
+ 
                         case State.RightHigh:
                             right.Balance = State.Balanced;
                             node.Balance  = State.LeftHigh;
@@ -1087,7 +1093,7 @@ namespace System.Collections.Specialized
                     node.Right = right;
                     RotateLeft(ref node);
                     break;
-
+ 
                 case State.Balanced:
                     right.Balance = State.LeftHigh;
                     node.Balance  = State.RightHigh;
@@ -1096,7 +1102,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+ 
         #region private GetChildrenNodes()
         /// <summary>
         ///     O(n)
@@ -1116,13 +1122,13 @@ namespace System.Collections.Specialized
             // manually handled stack for better performance
             private Node[] m_stack = new Node[16];
             private int m_stackIndex = 0;
-
+ 
             public IEnumerable<Node> Run(Node node) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
-
+ 
                 while(node != null) {
                     if(node.Left != null) {
                         this.Push(node);
@@ -1149,26 +1155,26 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+ 
         #region explicit interface(s) implementations
         IEnumerator IEnumerable.GetEnumerator() {
             return this.GetChildrenNodes().GetEnumerator();
         }
-
+ 
         object ICollection.SyncRoot => this;
         bool ICollection.IsSynchronized => false;
-
+ 
         void ICollection.CopyTo(Array array, int arrayIndex) {
             if(array == null)
                 throw new ArgumentNullException(nameof(array));
             if(arrayIndex < 0 || arrayIndex >= array.Length)
                 throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-
+ 
             foreach(var node in this.GetChildrenNodes())
                 array.SetValue(node, arrayIndex++);
         }
-
-
+ 
+ 
 #if IMPLEMENT_DICTIONARY_INTERFACES
         /// <summary>
         ///     O(log n)
@@ -1179,7 +1185,7 @@ namespace System.Collections.Specialized
         void IDictionary<TKey, TValue>.Add(TKey key, TValue value) {
             this.Add(key, value);
         }
-
+ 
         /// <summary>
         ///     O(n)
         ///     Returns keys in order.
@@ -1189,11 +1195,11 @@ namespace System.Collections.Specialized
                 var keys = new List<TKey>(this.Count);
                 foreach(var node in this.GetChildrenNodes())
                     keys.Add(node.Key);
-
+ 
                 return keys;
             }
         }
-
+ 
         /// <summary>
         ///     O(n)
         ///     Returns values in key order.
@@ -1203,11 +1209,11 @@ namespace System.Collections.Specialized
                 var values = new List<TValue>(this.Count);
                 foreach(var node in this.GetChildrenNodes())
                     values.Add(node.Value);
-
+ 
                 return values;
             }
         }
-
+ 
         /// <summary>
         ///     O(log n)
         ///     
@@ -1217,38 +1223,38 @@ namespace System.Collections.Specialized
         void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item) {
             this.Add(item.Key, item.Value);
         }
-
+ 
         /// <summary>
         ///     O(log n)
         /// </summary>
         bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item) {
             return this.Remove(item.Key);
         }
-        
+         
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() {
             foreach(var node in this.GetChildrenNodes())
                 yield return new KeyValuePair<TKey, TValue>(node.Key, node.Value);
         }
-
+ 
         bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => false;
-
+ 
         bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item) {
             return this.TryGetValue(item.Key, out TValue value) && object.Equals(item.Value, value);
         }
-
+ 
         void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
             if(array == null)
                 throw new ArgumentNullException(nameof(array));
             if(arrayIndex < 0 || arrayIndex >= array.Length)
                 throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-
+ 
             foreach(var node in (IEnumerable<KeyValuePair<TKey, TValue>>)this)
                 array[arrayIndex++] = node;
         }
 #endif
         #endregion
-
-
+ 
+ 
         private enum Direction {
             Left, 
             Right
@@ -1259,16 +1265,16 @@ namespace System.Collections.Specialized
             LeftHigh, 
             RightHigh 
         }
-
+ 
         public sealed class Node {
             internal Node  Left;
             internal Node  Right;
             internal Node  Parent;
             internal State Balance = State.Balanced;
-
+ 
             public TKey Key { get; private set; }
             public TValue Value;
-
+ 
             #region Next()
             /// <summary>
             ///     O(1)
@@ -1279,7 +1285,7 @@ namespace System.Collections.Specialized
             public Node Next() {
                 var node = this;
                 System.Diagnostics.Debug.Assert(node.Balance != State.Header);
-
+ 
                 if(node.Right != null) {
                     node     = node.Right;
                     // avoid reading redundant node.Left if possible
@@ -1311,7 +1317,7 @@ namespace System.Collections.Specialized
             public Node Previous() {
                 var node = this;
                 System.Diagnostics.Debug.Assert(node.Balance != State.Header);
-
+ 
                 if(node.Left != null) {
                     node = node.Left;
                     // avoid reading redundant node.Left if possible
@@ -1343,7 +1349,7 @@ namespace System.Collections.Specialized
                 this.Key = key;
             }
             #endregion
-
+ 
             #region constructors
             public Node(TKey key, TValue value) {
                 this.Key   = key;
