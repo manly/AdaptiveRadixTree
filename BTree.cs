@@ -565,6 +565,39 @@ namespace System.Collections.Specialized
  
             public KeyValuePair Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public KeyValuePair[] Items => this.Node?.Value.Items;
+
+            #region Next()
+            /// <summary>
+            ///     O(1)
+            ///     Returns the next item.
+            ///     Returns {null, 0} when done.
+            /// </summary>
+            public BinarySearchResult Next() {
+                if(this.Node != null) {
+                    if(this.Index < this.Node.Value.Count)
+                        return new BinarySearchResult(this.Node, this.Index + 1);
+                    return new BinarySearchResult(this.Node.Next(), 0);
+                }
+                return default;
+            }
+            #endregion
+            #region Previous()
+            /// <summary>
+            ///     O(1)
+            ///     Returns the previous item.
+            ///     Returns {null, 0} when done.
+            /// </summary>
+            public BinarySearchResult Previous() {
+                if(this.Node != null) {
+                    if(this.Index > 0)
+                        return new BinarySearchResult(this.Node, this.Index - 1);
+                    var node = this.Node.Previous();
+                    if(node != null)
+                        return new BinarySearchResult(node, node.Value.Count - 1);
+                }
+                return default;
+            }
+            #endregion
  
             internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
                 this.Node  = node;
