@@ -699,11 +699,7 @@ namespace System.Collections.Specialized
                         // if the space exist
                         node.InsertAt(index, in _new);
                         insertLocation = new BinarySearchResult(x.Node, index);
-                    } else if(this.TryAdd_TryMove1ItemToPreviousNode(x.Node)) {
-                        node.InsertAt(index - 1, in _new);
-                        insertLocation = new BinarySearchResult(x.Node, index - 1);
-                    } else if(this.TryAdd_TryMove1ItemToNextNode(x.Node)) {
-                        node.InsertAt(index, in _new);
+                    } else if(this.TryAdd_TryMove1ItemToPreviousOrNextNode(x.Node, index, in _new)) {
                         insertLocation = new BinarySearchResult(x.Node, index);
                     } else
                         insertLocation = this.TryAdd_HandlePreviousCurrentAndNextFull(x, in _new);
@@ -732,33 +728,54 @@ namespace System.Collections.Specialized
                 var insert_node = this.TryAdd_HandleNoRoot(in _new);
                 insertLocation = new BinarySearchResult(insert_node, 0);
             }
-                     
+
             this.Count++;
             return true;
         }
-        private bool TryAdd_TryMove1ItemToPreviousNode(AvlTree<TKey, Node>.Node node) {
-            var prev = node.Previous();
-             
-            if(prev == null || prev.Value.Count == m_itemsPerNode)
-                return false;
- 
-            prev.Value.InsertAt(prev.Value.Count, in node.Value.Items[0]);
-            node.Value.RemoveAt(0);
-            node.UpdateKey(node.Value.Items[0].Key);
-            return true;
-        }
-        private bool TryAdd_TryMove1ItemToNextNode(AvlTree<TKey, Node>.Node node) {
+        private bool TryAdd_TryMove1ItemToPreviousOrNextNode(AvlTree<TKey, Node>.Node node, int index, in KeyValuePair _new) {
             var next = node.Next();
-             
-            if(next == null || next.Value.Count == m_itemsPerNode)
-                return false;
- 
-            var count = node.Value.Count;
- 
-            next.Value.InsertAt(0, in node.Value.Items[count - 1]);
-            node.Value.RemoveAt(count - 1);
-            next.UpdateKey(next.Value.Items[0].Key);
-            return true;
+            if(next != null && next.Value.Count < m_itemsPerNode) {
+                Move1Next(in _new);
+                return true;
+            }
+
+            var prev = node.Previous();
+            if(prev != null && prev.Value.Count < m_itemsPerNode) {
+                Move1Prev(in _new);
+                return true;
+            }
+
+            if(next == null) {
+                next = m_tree.Add(node.Value.Items[node.Value.Count - 1].Key, new Node(m_itemsPerNode));
+                Move1Next(in _new);
+                return true;
+            }
+
+            if(prev == null) {
+                // need the key to differ from the one were about to add
+                node.UpdateKey(node.Value.Items[1].Key);
+                prev = m_tree.Add(node.Value.Items[0].Key, new Node(m_itemsPerNode));
+                Move1Prev(in _new);
+                return true;
+            }
+
+            // prev and next are full
+            return false;
+
+            void Move1Prev(in KeyValuePair new_item) {
+                prev.Value.InsertAt(prev.Value.Count, in node.Value.Items[0]);
+                Array.Copy(node.Value.Items, 1, node.Value.Items, 0, index - 1); //node.Value.RemoveAt(0);
+                node.Value.Items[index - 1] = new_item; //node.Value.InsertAt(index - 1, in _new);
+                node.UpdateKey(node.Value.Items[0].Key);
+            }
+            void Move1Next(in KeyValuePair new_item) {
+                var count = node.Value.Count;
+
+                next.Value.InsertAt(0, in node.Value.Items[count - 1]);
+                node.Value.RemoveAt(count - 1);
+                next.UpdateKey(next.Value.Items[0].Key);
+                node.Value.InsertAt(index, in new_item);
+            }
         }
         private bool TryAdd_TryInsertOnPreviousNode(AvlTree<TKey, Node>.Node node, in KeyValuePair item, out BinarySearchResult insertLocation) {
             var prev = node.Previous();
@@ -769,19 +786,15 @@ namespace System.Collections.Specialized
                     insertLocation = default;
                     return false;
                 }
-                prev.Value.InsertAt(prev.Value.Count, in node.Value.Items[0]);
-                node.Value.Items[0] = item;
-                node.UpdateKey(item.Key);
+                prev.Value.InsertAt(prev.Value.Count, in item);
             } else {
                 // note sure if should rebalance items across the 2 nodes
                 // if you do 50%/50%, then on any delete it will just re-merge
                 // keep in mind this case only applies on inserts <= to this.Minimum, so its preferable to make a new (empty-ish) node
-                var new_node        = new Node(m_itemsPerNode);
-                new_node.Items[0]   = node.Value.Items[0];
-                new_node.Count      = 1;
-                node.Value.Items[0] = item;
-                node.UpdateKey(item.Key);
-                m_tree.Add(new_node.Items[0].Key, new_node);
+                var new_node      = new Node(m_itemsPerNode);
+                new_node.Items[0] = item;
+                new_node.Count    = 1;
+                m_tree.Add(item.Key, new_node);
             }
             insertLocation = new BinarySearchResult(node, 0);
             return true;
@@ -851,10 +864,10 @@ namespace System.Collections.Specialized
             var insert_within_current     = index_within_current_node <= m_twoThirdsItemsPerNode;
             AvlTree<TKey, Node>.Node insert_node;
             if(insert_within_current) {
-                insert_node = nodes[0];
+                insert_node = nodes[1];
                 index       = index_within_current_node;
             } else {
-                insert_node = nodes[1];
+                insert_node = nodes[2];
                 index       = index_within_current_node - m_twoThirdsItemsPerNode;
             }
                                  
@@ -1120,6 +1133,9 @@ namespace System.Collections.Specialized
             }
             public static implicit operator KeyValuePair(System.Collections.Generic.KeyValuePair<TKey, TValue> value) {
                 return new KeyValuePair(value.Key, value.Value);
+            }
+            public override string ToString() {
+                return $"[{this.Key}] {this.Value}";
             }
         }
     }
