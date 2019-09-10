@@ -385,89 +385,93 @@ namespace System.Collections.Specialized
         ///     O(m log n)
         /// </summary>
         public void RemoveRange(IEnumerable<TKey> keys) {
-            var ordered = System.Linq.Enumerable.OrderBy(keys, o => o, m_comparer);
-            this.RemoveRangeOrdered(ordered);
-            //foreach(var key in keys)
-            //    this.Remove(key);
+            foreach(var key in keys)
+                this.Remove(key);
+
+            // this isnt worth doing as the orderby eats more performance than it gives
+            //var ordered = System.Linq.Enumerable.OrderBy(keys, o => o, m_comparer);
+            //this.RemoveRangeOrdered(ordered);
         }
         #endregion
         #region RemoveRangeOrdered()
-        /// <summary>
-        ///     O(m log log n)
-        /// </summary>
-        /// <param name="orderedKeys">Keys must be ordered by the same IComparer used in the constructor.</param>
-        public void RemoveRangeOrdered(IEnumerable<TKey> orderedKeys) {
-            var enumerator = orderedKeys.GetEnumerator();
-            if(!enumerator.MoveNext())
-                return;
- 
-            var x = this.BinarySearch(enumerator.Current);
-            if(x.Node == null) // if count==0
-                return;
- 
-            int index = x.Index;
-            int node_count;
-            if(index >= 0) {
-                x.Node.Value.RemoveAt(index);
-                if(index == 0)
-                    x.Node.UpdateKey(x.Node.Value.Items[0].Key);
-                this.Count--;
-            } else
-                index = ~index;
- 
-            while(enumerator.MoveNext()) {
-                index = x.Node.Value.BinarySearch(enumerator.Current, index, m_comparer.Compare);
-                if(index >= 0) {
-                    x.Node.Value.RemoveAt(index);
-                    if(index == 0)
-                        x.Node.UpdateKey(x.Node.Value.Items[0].Key);
-                    this.Count--;
-                } else {
-                    index = ~index;
-                    node_count = x.Node.Value.Count;
-                    if(index >= node_count) {
-                        // item isnt within the current node
-                        if(node_count <= m_halfItemsPerNode && node_count > 0) {
-                            var prev = this.TryMoveAllItemsToAdjacentNodes(x.Node);
-                            if(prev != null)
-                                x = new BinarySearchResult(prev, prev.Value.Count);
-                        } else if(node_count == 0) {
-                            x = new BinarySearchResult(x.Node.Next(), 0);
-                            m_tree.Remove(x.Node);
-                        }
- 
-                        // switch to next node, and remove
-                        x = this.BinarySearchNearby(x, enumerator.Current);
-                        if(x.Node == null) // if count==0
-                            return;
-                             
-                        index = x.Index;
-                        if(index >= 0) {
-                            x.Node.Value.RemoveAt(index);
-                            if(index == 0)
-                                x.Node.UpdateKey(x.Node.Value.Items[0].Key);
-                            this.Count--;
-                        } else
-                            index = ~index;
-                    }
-                }
-            }
- 
-            node_count = x.Node.Value.Count;
-            if(node_count <= m_halfItemsPerNode && node_count > 0)
-                this.TryMoveAllItemsToAdjacentNodes(x.Node);
-            else if(node_count == 0)
-                m_tree.Remove(x.Node);
- 
-            // basic version with no per-node optimisation
-            //var x = this.BinarySearch(enumerator.Current);
-            //this.Remove(x);
-            //
-            //while(enumerator.MoveNext()) {
-            //    x = this.BinarySearchNearby(x, enumerator.Current);
-            //    this.Remove(x);
-            //}
-        }
+        // note: commented out because it gave worse performance than just foreach(){delete} both on ordered items and un-ordered.
+
+        ///// <summary>
+        /////     O(m log log n)
+        ///// </summary>
+        ///// <param name="orderedKeys">Keys must be ordered by the same IComparer used in the constructor.</param>
+        //public void RemoveRangeOrdered(IEnumerable<TKey> orderedKeys) {
+        //    var enumerator = orderedKeys.GetEnumerator();
+        //    if(!enumerator.MoveNext())
+        //        return;
+        //
+        //    var x = this.BinarySearch(enumerator.Current);
+        //    if(x.Node == null) // if count==0
+        //        return;
+        //
+        //    int index = x.Index;
+        //    int node_count;
+        //    if(index >= 0) {
+        //        x.Node.Value.RemoveAt(index);
+        //        if(index == 0)
+        //            x.Node.UpdateKey(x.Node.Value.Items[0].Key);
+        //        this.Count--;
+        //    } else
+        //        index = ~index;
+        //
+        //    while(enumerator.MoveNext()) {
+        //        index = x.Node.Value.BinarySearch(enumerator.Current, index, m_comparer.Compare);
+        //        if(index >= 0) {
+        //            x.Node.Value.RemoveAt(index);
+        //            if(index == 0)
+        //                x.Node.UpdateKey(x.Node.Value.Items[0].Key);
+        //            this.Count--;
+        //        } else {
+        //            index = ~index;
+        //            node_count = x.Node.Value.Count;
+        //            if(index >= node_count) {
+        //                // item isnt within the current node
+        //                if(node_count <= m_halfItemsPerNode && node_count > 0) {
+        //                    var prev = this.TryMoveAllItemsToAdjacentNodes(x.Node);
+        //                    if(prev != null)
+        //                        x = new BinarySearchResult(prev, prev.Value.Count);
+        //                } else if(node_count == 0) {
+        //                    x = new BinarySearchResult(x.Node.Next(), 0);
+        //                    m_tree.Remove(x.Node);
+        //                }
+        //
+        //                // switch to next node, and remove
+        //                x = this.BinarySearchNearby(x, enumerator.Current);
+        //                if(x.Node == null) // if count==0
+        //                    return;
+        //                     
+        //                index = x.Index;
+        //                if(index >= 0) {
+        //                    x.Node.Value.RemoveAt(index);
+        //                    if(index == 0)
+        //                        x.Node.UpdateKey(x.Node.Value.Items[0].Key);
+        //                    this.Count--;
+        //                } else
+        //                    index = ~index;
+        //            }
+        //        }
+        //    }
+        //
+        //    node_count = x.Node.Value.Count;
+        //    if(node_count <= m_halfItemsPerNode && node_count > 0)
+        //        this.TryMoveAllItemsToAdjacentNodes(x.Node);
+        //    else if(node_count == 0)
+        //        m_tree.Remove(x.Node);
+        //
+        //    // basic version with no per-node optimisation
+        //    //var x = this.BinarySearch(enumerator.Current);
+        //    //this.Remove(x);
+        //    //
+        //    //while(enumerator.MoveNext()) {
+        //    //    x = this.BinarySearchNearby(x, enumerator.Current);
+        //    //    this.Remove(x);
+        //    //}
+        //}
         #endregion
         #region Clear()
         /// <summary>
