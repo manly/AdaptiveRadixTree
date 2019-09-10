@@ -157,12 +157,14 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <exception cref="ArgumentException" />
         public void AddRange(IEnumerable<KeyValuePair> values) {
-            foreach(var value in values)
-                this.Add(value.Key, value.Value);
- 
-            // note: dont do this; many benchmarks show this worsens the performance due to sort time
-            //var ordered = System.Linq.Enumerable.OrderBy(values, o => o.Key, m_comparer);
-            //this.AddRangeOrdered(ordered);
+            if(this.Count > 0) {
+                foreach(var value in values)
+                    this.Add(value.Key, value.Value);
+            } else {
+                // note: dont do this on all inserts
+                var ordered = System.Linq.Enumerable.OrderBy(values, o => o.Key, m_comparer);
+                this.AddRangeOrdered(ordered);
+            }
         }
         /// <summary>
         ///     O(m log n)
@@ -171,12 +173,14 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <exception cref="ArgumentException" />
         public void AddRange(IEnumerable<System.Collections.Generic.KeyValuePair<TKey, TValue>> values) {
-            foreach(var value in values)
-                this.Add(value.Key, value.Value);
- 
-            // note: dont do this; many benchmarks show this worsens the performance due to sort time
-            //var ordered = System.Linq.Enumerable.OrderBy(values, o => o.Key, m_comparer);
-            //this.AddRangeOrdered(ordered);
+            if(this.Count > 0) {
+                foreach(var value in values)
+                    this.Add(value.Key, value.Value);
+            } else {
+                // note: dont do this on all inserts
+                var ordered = System.Linq.Enumerable.OrderBy(values, o => o.Key, m_comparer);
+                this.AddRangeOrdered(ordered);
+            }
         }
         #endregion
         #region AddRangeOrdered()
