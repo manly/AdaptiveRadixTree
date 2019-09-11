@@ -604,6 +604,18 @@ namespace System.Collections.Specialized
                 return default;
             }
             #endregion
+            #region UpdateKey()
+            /// <summary>
+            ///     Change the key without updating the tree.
+            ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
+            ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
+            /// </summary>
+            public void UpdateKey(TKey key) {
+                var items = this.Node.Value.Items;
+                var x     = items[this.Index];
+                items[this.Index] = new KeyValuePair(key, x.Value);
+            }
+            #endregion
  
             internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
                 this.Node  = node;
@@ -1180,28 +1192,28 @@ namespace System.Collections.Specialized
 
 
     /// <summary>
-    ///    Implements a B+Tree using roughly AvlTree&lt;TKey, SortedArray&lt;KeyValuePair&gt;&gt;.
+    ///    Implements a B+Tree using roughly AvlTree&lt;TKey, SortedArray&lt;Key&gt;&gt;.
     /// </summary>
     /// <remarks>
     ///    Using an optimal self-balanced tree (for query times) since most queries will be purely lookups.
     ///    The nodes are sorted arrays.
     /// </remarks>
     public sealed class BTree<TKey> : ICollection{
-        private static readonly int DEFAULT_ITEMS_PER_NODE = Math.Max(4096 / (IntPtr.Size * 2), 16); // assume TKey/TValue are classes
+        private static readonly int DEFAULT_ITEMS_PER_NODE = Math.Max(4096 / IntPtr.Size, 16); // assume TKey is a class
         private const int MIN_VALID_COUNT = 5;        // 5 because Rebalance2FullNodesInto3() needs the last node containing overflows to still have 1 remaining space for the potential new item
  
         private readonly AvlTree<TKey, Node> m_tree;  // BST where key=node.Items.First()
         private readonly IComparer<TKey> m_comparer;
-        private readonly int m_itemsPerNode;          // recommended: Max(4096/(sizeof(TKey) + sizeof(TValue)), 16)
+        private readonly int m_itemsPerNode;          // recommended: Max(4096/sizeof(TKey), 16)
         private readonly int m_halfItemsPerNode;
         private readonly int m_twoThirdsItemsPerNode; // 66%
  
         public int Count { get; private set; }
  
         #region constructors
-        /// <param name="items_per_node">Default: -1 = 4096/(IntPtr.Size*2). Recommended: Math.Max(4096/(sizeof(TKey) + sizeof(TValue)), 16)</param>
+        /// <param name="items_per_node">Default: -1 = 4096/IntPtr.Size. Recommended: Math.Max(4096/sizeof(TKey), 16)</param>
         public BTree(int items_per_node = -1) : this(Comparer<TKey>.Default, items_per_node) { }
-        /// <param name="items_per_node">Default: -1 = 4096/(IntPtr.Size*2). Recommended: Math.Max(4096/(sizeof(TKey) + sizeof(TValue)), 16)</param>
+        /// <param name="items_per_node">Default: -1 = 4096/IntPtr.Size. Recommended: Math.Max(4096/sizeof(TKey), 16)</param>
         public BTree(IComparer<TKey> comparer, int items_per_node = -1) : base() { 
             m_comparer              = comparer ?? throw new ArgumentNullException(nameof(comparer));
             m_itemsPerNode          = items_per_node < 0 ? DEFAULT_ITEMS_PER_NODE : items_per_node;
@@ -1604,6 +1616,16 @@ namespace System.Collections.Specialized
                         return new BinarySearchResult(node, node.Value.Count - 1);
                 }
                 return default;
+            }
+            #endregion
+            #region UpdateKey()
+            /// <summary>
+            ///     Change the key without updating the tree.
+            ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
+            ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
+            /// </summary>
+            public void UpdateKey(TKey key) {
+                this.Node.Value.Items[this.Index] = key;
             }
             #endregion
  
