@@ -604,6 +604,14 @@ namespace System.Collections.Specialized
                 return default;
             }
             #endregion
+            #region Update()
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public void Update(TKey key, TValue value) {
+                this.Node.Value.Items[this.Index] = new KeyValuePair(key, value);
+            }
+            #endregion
             #region UpdateKey()
             /// <summary>
             ///     O(1)
@@ -615,6 +623,16 @@ namespace System.Collections.Specialized
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(key, x.Value);
+            }
+            #endregion
+            #region UpdateValue()
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public void UpdateValue(TValue value) {
+                var items = this.Node.Value.Items;
+                var x     = items[this.Index];
+                items[this.Index] = new KeyValuePair(x.Key, value);
             }
             #endregion
  
