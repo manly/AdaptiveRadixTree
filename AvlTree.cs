@@ -1343,6 +1343,7 @@ namespace System.Collections.Specialized
             #endregion
             #region UpdateKey()
             /// <summary>
+            ///     O(1)
             ///     Change the key without updating the tree.
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
@@ -2541,6 +2542,7 @@ namespace System.Collections.Specialized
             #endregion
             #region UpdateKey()
             /// <summary>
+            ///     O(1)
             ///     Change the key without updating the tree.
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
