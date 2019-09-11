@@ -30,7 +30,7 @@ namespace System.Collections.Specialized
     ///    
     ///    Basically use AvlTree if you care more about lookup speed and dont generally update the tree.
     /// </remarks>
-    public sealed class RedBlackTree<TKey, TValue>  : ICollection
+    public sealed class RedBlackTree<TKey, TValue> : ICollection
 #if IMPLEMENT_DICTIONARY_INTERFACES
         , IDictionary<TKey, TValue>, IReadOnlyDictionary<TKey, TValue>
 #endif
@@ -1073,6 +1073,915 @@ namespace System.Collections.Specialized
             #region ToString()
             public override string ToString() {
                 return string.Format("[{0}] {1}", this.Key, this.Value);
+            }
+            #endregion
+        }
+    }
+
+    /// <summary>
+    ///    Implements a red-black tree (dictionary).
+    ///    This is a self-balancing binary search tree that takes 1 extra bit per node over a binary search tree.
+    ///    Search/Insert/Delete() run in O(log n).
+    /// </summary>
+    /// <remarks>
+    ///    Based on "Introduction to Algorithms" by Cormen, Leiserson & Rivest.
+    ///    
+    ///    This is intentionally *not* a left-leaning red-black tree as they perform worse than the base red-black trees.
+    ///    
+    ///    worst case       |   RB tree     |   AVL tree
+    ///    =======================================
+    ///    height           | 2 log(n + 1)  | 1.44 log n
+    ///    update           | log n         | log n
+    ///    lookup           | log n         | log n  (faster)
+    ///    insert rotations | 2             | 2
+    ///    delete rotations | 3             | log n
+    ///    
+    ///    Basically use AvlTree if you care more about lookup speed and dont generally update the tree.
+    /// </remarks>
+    public sealed class RedBlackTree<TKey> : ICollection {
+        private Node m_root;
+        private readonly Comparison<TKey> m_comparer;
+
+        public int Count { get; private set; }
+     
+        #region constructors
+        public RedBlackTree() : this(Comparer<TKey>.Default) { }
+        public RedBlackTree(IComparer<TKey> comparer) : this(comparer.Compare) { }
+        public RedBlackTree(Comparison<TKey> comparer) {
+            m_comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        }
+        #endregion
+ 
+        #region Keys
+        /// <summary>
+        ///     O(n)
+        ///     Returns keys in order.
+        /// </summary>
+        public IEnumerable<TKey> Keys {
+            get {
+                foreach(var node in this.GetChildrenNodes())
+                    yield return node.Key;
+            }
+        }
+        #endregion
+        #region Items
+        /// <summary>
+        ///     O(n)
+        ///     Returns items in key order.
+        /// </summary>
+        public IEnumerable<Node> Items => this.GetChildrenNodes();
+        #endregion
+ 
+        #region Minimum
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    Throws KeyNotFoundException.
+        /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        public Node Minimum {
+            get {
+                var current = m_root;
+                if(current == null)
+                    throw new KeyNotFoundException();
+
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
+                    current = current.Left;
+                }
+                 
+                return parent;
+            }
+        }
+        #endregion
+        #region Maximum
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    Throws KeyNotFoundException.
+        /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        public Node Maximum {
+            get {
+                var current = m_root;
+                if(current == null)
+                    throw new KeyNotFoundException();
+
+                Node parent = null;
+                while(current != null) {
+                    parent  = current;
+                    current = current.Right;
+                }
+                 
+                return parent;
+            }
+        }
+        #endregion
+ 
+        #region Add()
+        /// <summary>
+        ///     O(log n)
+        ///     
+        ///     Returns the newly added node.
+        ///     
+        ///     Throws ArgumentException() on duplicate key.
+        /// </summary>
+        /// <exception cref="ArgumentException" />
+        public Node Add(TKey key) {
+            Node parent = null;
+            var current = m_root;
+            while(current != null) {
+                parent   = current;
+                var diff = m_comparer(key, current.Key);
+
+                if(diff < 0)
+                    current = current.Left;
+                else if(diff > 0)
+                    current = current.Right;
+                else
+                    throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
+            }
+
+            var newNode = new Node(key){
+                Parent  = parent,
+                IsBlack = false,
+            };
+
+            if(parent != null) {
+                if(m_comparer(key, parent.Key) < 0)
+                    parent.Left = newNode;
+                else
+                    parent.Right = newNode;
+            } else
+                m_root = newNode;
+
+            this.Balance(newNode);
+            this.Count++;
+
+            return newNode;
+        }
+        private void Balance(Node node) {
+            while(node != m_root && !node.Parent.IsBlack) {
+                if(node.Parent == node.Parent.Parent.Left) {
+                    var right = node.Parent.Parent.Right;
+                    if(right != null && !right.IsBlack) {
+                        node.Parent.IsBlack        = true;
+                        right.IsBlack              = true;
+                        node.Parent.Parent.IsBlack = false;
+                        node                       = node.Parent.Parent;
+                    } else {
+                        if(node == node.Parent.Right) {
+                            node = node.Parent;
+                            this.RotateLeft(node);
+                        }
+
+                        node.Parent.IsBlack        = true;
+                        node.Parent.Parent.IsBlack = false;
+                        this.RotateRight(node.Parent.Parent);
+                    }
+                } else {
+                    var left = node.Parent.Parent.Left;
+                    if(left != null && !left.IsBlack) {
+                        node.Parent.IsBlack        = true;
+                        left.IsBlack               = true;
+                        node.Parent.Parent.IsBlack = false;
+                        node                       = node.Parent.Parent;
+                    } else {
+                        if(node == node.Parent.Left) {
+                            node = node.Parent;
+                            this.RotateRight(node);
+                        }
+
+                        node.Parent.IsBlack        = true;
+                        node.Parent.Parent.IsBlack = false;
+                        this.RotateLeft(node.Parent.Parent);
+                    }
+                }
+            }
+            m_root.IsBlack = true;
+        }
+        #endregion
+        #region AddRange()
+        /// <summary>
+        ///     O(m log n)
+        ///     
+        ///     Throws ArgumentException() on duplicate key.
+        /// </summary>
+        /// <exception cref="ArgumentException" />
+        public void AddRange(IEnumerable<TKey> keys) {
+            foreach(var key in keys)
+                this.Add(key);
+        }
+        #endregion
+        #region Remove()
+        /// <summary>
+        ///     O(log n)
+        /// </summary>
+        public bool Remove(TKey key) {
+            var current = m_root;
+            while(current != null) {
+                int diff = m_comparer(key, current.Key);
+     
+                if(diff < 0)
+                    current = current.Left;
+                else if(diff > 0)
+                    current = current.Right;
+                else
+                    return this.Remove(current);
+            }
+            return false;
+        }
+        /// <summary>
+        ///     O(1)
+        /// </summary>
+        public bool Remove(Node node) {
+            var y = node.Left == null || node.Right == null ?
+                node : 
+                node.Next();
+
+            var x = y.Left ?? y.Right;
+
+            if(x != null)
+                x.Parent = y.Parent;
+
+            if(y.Parent != null) {
+                if(y == y.Parent.Left)
+                    y.Parent.Left = x;
+                else
+                    y.Parent.Right = x;
+            } else
+                m_root = x;
+
+            if(node != y) {
+                CopyFrom(y, node);
+
+                if(node == m_root)
+                    m_root = y;
+            }
+
+            if(y.IsBlack && x != null)
+                this.RemoveFix(x);
+
+            this.Count--;
+            return true;
+        }
+        private void RemoveFix(Node node) {
+            while(node != m_root && node.IsBlack) {
+                if(node == node.Parent.Left) {
+                    var w = node.Parent.Right;
+                    if(w == null) {
+                        node = node.Parent;
+                        continue;
+                    }
+
+                    if(!w.IsBlack) {
+                        w.IsBlack           = true;
+                        node.Parent.IsBlack = false;
+                        this.RotateLeft(node.Parent);
+                        w = node.Parent.Right;
+                    }
+
+                    if(w == null) {
+                        node = node.Parent;
+                        continue;
+                    }
+
+                    if((w.Left == null || w.Left.IsBlack) &&
+                        (w.Right == null || w.Right.IsBlack)) {
+                        w.IsBlack = false;
+                        node      = node.Parent;
+                    } else {
+                        if(w.Right == null || w.Right.IsBlack) {
+                            if(w.Left != null)
+                                w.Left.IsBlack = true;
+                            w.IsBlack = false;
+                            this.RotateRight(w);
+                            w = node.Parent.Right;
+                        }
+
+                        w.IsBlack           = node.Parent.IsBlack;
+                        node.Parent.IsBlack = true;
+                        if(w.Right != null)
+                            w.Right.IsBlack = true;
+                        this.RotateLeft(node.Parent);
+                        node = m_root;
+                    }
+                } else {
+                    var w = node.Parent.Left;
+                    if(w == null) {
+                        node = node.Parent;
+                        continue;
+                    }
+
+                    if(!w.IsBlack) {
+                        w.IsBlack           = true;
+                        node.Parent.IsBlack = false;
+                        this.RotateRight(node.Parent);
+                        w = node.Parent.Left;
+                    }
+
+                    if(w == null) {
+                        node = node.Parent;
+                        continue;
+                    }
+
+                    if((w.Right == null || w.Right.IsBlack) &&
+                        (w.Left == null || w.Left.IsBlack)) {
+                        w.IsBlack = false;
+                        node      = node.Parent;
+                    } else {
+                        if(w.Left == null || w.Left.IsBlack) {
+                            if(w.Right != null)
+                                w.Right.IsBlack = true;
+                            w.IsBlack = false;
+                            this.RotateLeft(w);
+                            w = node.Parent.Left;
+                        }
+
+                        w.IsBlack           = node.Parent.IsBlack;
+                        node.Parent.IsBlack = true;
+                        if(w.Left != null)
+                            w.Left.IsBlack = true;
+                        this.RotateRight(node.Parent);
+                        node = m_root;
+                    }
+                }
+            }
+            node.IsBlack = true;
+        }
+        private static void CopyFrom(Node current, Node node) {
+            if(node.Left != null)
+                node.Left.Parent = current;
+            current.Left = node.Left;
+
+            if(node.Right != null)
+                node.Right.Parent = current;
+            current.Right = node.Right;
+
+            if(node.Parent != null) {
+                if(node.Parent.Left == node)
+                    node.Parent.Left = current;
+                else
+                    node.Parent.Right = current;
+            }
+
+            current.IsBlack = node.IsBlack;
+            current.Parent  = node.Parent;
+        }
+        #endregion
+        #region RemoveRange()
+        /// <summary>
+        ///     O(m log n)
+        /// </summary>
+        public void RemoveRange(IEnumerable<TKey> keys) {
+            foreach(var key in keys)
+                this.Remove(key);
+        }
+        #endregion
+        #region Clear()
+        /// <summary>
+        ///     O(1)
+        /// </summary>
+        public void Clear() {
+            m_root = null;
+            this.Count = 0;
+        }
+        #endregion
+     
+        #region TryGetNode()
+        /// <summary>
+        ///    O(log n)
+        /// </summary>
+        public bool TryGetNode(TKey key, out Node value) {
+            var current = m_root;
+            while(current != null) {
+                int diff = m_comparer(key, current.Key);
+     
+                if(diff < 0)
+                    current = current.Left;
+                else if(diff > 0)
+                    current = current.Right;
+                else {
+                    value = current;
+                    return true;
+                }
+            }
+     
+            value = default;
+            return false;
+        }
+        #endregion
+        #region ContainsKey()
+        /// <summary>
+        ///    O(log n)
+        /// </summary>
+        public bool ContainsKey(TKey key) {
+            var current = m_root;
+            while(current != null) {
+                int diff = m_comparer(key, current.Key);
+     
+                if(diff < 0)
+                    current = current.Left;
+                else if(diff > 0)
+                    current = current.Right;
+                else
+                    return true;
+            }
+            return false;
+        }
+        #endregion
+        #region BinarySearch()
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        public BinarySearchResult BinarySearch(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return this.BinarySearch(key, m_comparer);
+
+            var current   = m_root;
+            var prev      = current;
+            var prev_diff = 0;
+            while(current != null) {
+                prev_diff = m_comparer(key, current.Key);
+
+                if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
+                } else if(prev_diff > 0) {
+                    prev    = current;
+                    current = current.Right;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+            return new BinarySearchResult(prev, prev_diff);
+        }
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+            var current   = m_root;
+            var prev      = current;
+            var prev_diff = 0;
+            while(current != null) {
+                prev_diff = comparer(key, current.Key);
+
+                if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
+                } else if(prev_diff > 0) {
+                    prev    = current;
+                    current = current.Right;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+            return new BinarySearchResult(prev, prev_diff);
+        }
+        public readonly ref struct BinarySearchResult {
+            /// <summary>
+            ///    -1: key &lt; node.key
+            ///     0: key ==   node.key
+            ///     1: key &gt; node.key
+            /// </summary>
+            public readonly int Diff;
+            public readonly Node Node;
+            public BinarySearchResult(Node node, int diff) : this() {
+                this.Node = node;
+                this.Diff = diff;
+            }
+        }
+        #endregion
+        #region BinarySearchNearby()
+        /// <summary>
+        ///    Worst: O(2 log n)
+        ///    
+        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
+        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        public BinarySearchResult BinarySearchNearby(Node start, TKey key) {
+            return this.BinarySearchNearby(start, key, m_comparer);
+        }
+        /// <summary>
+        ///    Worst: O(2 log n)
+        ///    
+        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    you have to manually check the diff and use result.Node.Next()/Previous().
+        ///    
+        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
+        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
+        ///    
+        ///    Returns {null, 0} if this.Count==0.
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
+            var node = start;
+            var prev = start;
+
+            if(start != null) {
+                // go up until we cross key, then go down
+                var diff = comparer(key, start.Key);
+
+                if(diff < 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent != null) {
+                            if(node == parent.Right) {
+                                diff = comparer(key, parent.Key);
+                                if(diff > 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else if(diff > 0) {
+                    while(node != null) {
+                        var parent = node.Parent;
+                        if(parent != null) {
+                            if(node == parent.Left) {
+                                diff = comparer(key, parent.Key);
+                                if(diff < 0) {
+                                    // go down from here
+                                    node = parent;
+                                    break;
+                                } else if(diff == 0)
+                                    return new BinarySearchResult(parent, 0);
+                            }
+                            node = parent;
+                        } else
+                            return this.BinarySearch(key);
+                    }
+                } else
+                    return new BinarySearchResult(node, 0);
+            } else {
+                node = m_root;
+                prev = node;
+            }
+            
+            // then go down as normal
+            int prev_diff = 0;
+            while(node != null) {
+                prev_diff = comparer(key, node.Key);
+
+                if(prev_diff < 0) {
+                    prev    = node;
+                    node = node.Left;
+                } else if(prev_diff > 0) {
+                    prev    = node;
+                    node = node.Right;
+                } else
+                    return new BinarySearchResult(node, 0);
+            }
+
+            return new BinarySearchResult(prev, prev_diff);
+        }
+        #endregion
+        #region Depth()
+        /// <summary>
+        ///     O(n)
+        /// </summary>
+        public int Depth() {
+            return DepthRecursive(m_root);
+        }
+        private static int DepthRecursive(Node node) {
+            if(node != null)
+                return Math.Max(
+                    (node.Left != null ? DepthRecursive(node.Left) : 0) + 1,
+                    (node.Right != null ? DepthRecursive(node.Right) : 0) + 1);
+            return 0;
+        }
+        #endregion
+        #region Range()
+        /// <summary>
+        ///     O(2 log n + m)   m = number of items returned
+        ///     
+        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Use RangeEnumerator instead for efficient re-use.
+        /// </summary>
+        public IEnumerable<Node> Range(TKey start, TKey end) {
+            return new RangeEnumerator(this).Run(start, end);
+        }
+        /// <summary>
+        ///     O(2 log n + m)   m = number of items returned
+        ///     
+        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        public sealed class RangeEnumerator {
+            // manually handled stack for better performance
+            private Node[] m_stack = new Node[16];
+            private int m_stackIndex = 0;
+        
+            private readonly RedBlackTree<TKey> m_owner;
+        
+            public RangeEnumerator(RedBlackTree<TKey> owner) {
+                m_owner = owner;
+            }
+        
+            public IEnumerable<Node> Run(TKey start, TKey end) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+        
+                var start_path = new HashSet<Node>();
+                var node       = this.FindStartNode(start, start_path);
+                var end_node   = this.FindEndNode(end);
+        
+                while(node != null) {
+                    if(node.Left != null && !start_path.Contains(node)) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            yield return node;
+                            if(object.ReferenceEquals(node, end_node))
+                                yield break;
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node FindStartNode(TKey start, HashSet<Node> path) {
+                var node = this.TryGetPath(start, path);
+                if(m_owner.m_comparer(start, node.Key) > 0)
+                    node = node.Next();
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private Node FindEndNode(TKey end) {
+                var x    = m_owner.BinarySearch(end);
+                var node = x.Node;
+                if(x.Diff < 0)
+                    node = x.Node.Previous();
+                return node;
+            }
+            private Node TryGetPath(TKey key, HashSet<Node> path) {
+                var current = m_owner.m_root;
+                var prev    = current;
+                while(current != null) {
+                    path.Add(current);
+                    prev = current;
+        
+                    int diff = m_owner.m_comparer(key, current.Key);
+
+                    if(diff < 0) {
+                        this.Push(current);
+                        current = current.Left;
+                    } else if(diff > 0)
+                        current = current.Right;
+                    else
+                        return current;
+                }
+                return prev;
+            }
+        }
+        #endregion
+        
+        #region private RotateLeft()
+        ///<summary>
+        ///       X           rotate            Y
+        ///     /   \                         /   \
+        ///    A     Y                       X     C
+        ///        /   \                   /   \
+        ///       B     C                 A     B
+        ///<summary>
+        private void RotateLeft(Node x) {
+            var y   = x.Right;
+            x.Right = y.Left;
+
+            if(y.Left != null)
+                y.Left.Parent = x;
+
+            y.Parent = x.Parent;
+
+            if(x.Parent != null) {
+                if(x == x.Parent.Left)
+                    x.Parent.Left  = y;
+                else
+                    x.Parent.Right = y;
+            } else 
+                m_root = y;
+
+            y.Left   = x;
+            x.Parent = y;
+        }
+        #endregion
+        #region private RotateRight()
+        ///<summary>
+        ///          Y        rotate        X      
+        ///        /   \                  /   \    
+        ///       X     C                A     Y   
+        ///     /   \                  /   \  
+        ///    A     B                B     C
+        ///<summary>
+        private void RotateRight(Node y) {
+            var x  = y.Left;
+            y.Left = x.Right;
+
+            if(x.Right != null)
+                x.Right.Parent = y;
+
+            x.Parent = y.Parent;
+
+            if(y.Parent != null) {
+                if(y == y.Parent.Left)
+                    y.Parent.Left  = x;
+                else
+                    y.Parent.Right = x;
+            } else 
+                m_root = x;
+
+            x.Right  = y;
+            y.Parent = x;
+        }
+        #endregion
+        #region private GetChildrenNodes()
+        /// <summary>
+        ///     O(n)
+        ///     Returns items in key order.
+        ///     Use ChildrenNodesEnumerator instead for efficient re-use.
+        /// </summary>
+        private IEnumerable<Node> GetChildrenNodes() {
+            return new ChildrenNodesEnumerator().Run(m_root);
+        }
+        /// <summary>
+        ///     O(n)
+        ///     Returns items in key order.
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        private sealed class ChildrenNodesEnumerator {
+            // manually handled stack for better performance
+            private Node[] m_stack = new Node[16];
+            private int m_stackIndex = 0;
+ 
+            public IEnumerable<Node> Run(Node node) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+ 
+                while(node != null) {
+                    if(node.Left != null) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            yield return node;
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            private void Push(Node value) {
+                m_stack[m_stackIndex++] = value;
+                if(m_stackIndex > m_stack.Length)
+                    Array.Resize(ref m_stack, (m_stackIndex - 1) * 2);
+            }
+            private Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+        }
+        #endregion
+ 
+        #region Explicit Interfaces
+        IEnumerator IEnumerable.GetEnumerator() {
+            return this.GetChildrenNodes().GetEnumerator();
+        }
+         
+        object ICollection.SyncRoot => this;
+        bool ICollection.IsSynchronized => false;
+         
+        void ICollection.CopyTo(Array array, int arrayIndex) {
+            if(array == null)
+                throw new ArgumentNullException(nameof(array));
+            if(arrayIndex < 0 || arrayIndex >= array.Length)
+                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+ 
+            foreach(var node in this.GetChildrenNodes())
+                array.SetValue(node, arrayIndex++);
+        }
+        #endregion
+ 
+        public sealed class Node {
+            public TKey Key { get; private set; }
+     
+            internal Node Left;
+            internal Node Right;
+            internal Node Parent;
+            internal bool IsBlack;
+ 
+            #region Next()
+            /// <summary>
+            ///     Best:  O(1)
+            ///     Worst: O(log n)
+            ///     
+            ///     Returns the next node.
+            ///     This behaves like an iterator, but will keep working even as the tree is being changed.
+            ///     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            /// </summary>
+            public Node Next() {
+                var node = this;
+ 
+                if(node.Right != null) {
+                    node = node.Right;
+                    while(node.Left != null)
+                        node = node.Left;
+                } else {
+                    var parent = node.Parent;
+                    while(parent != null && node == parent.Right) { 
+                        node   = parent; 
+                        parent = parent.Parent;
+                    }
+                    node = parent;
+                }
+                return node;
+            }
+            #endregion
+            #region Previous()
+            /// <summary>
+            ///     Best:  O(1)
+            ///     Worst: O(log n)
+            ///     
+            ///     Returns the previous node.
+            ///     This behaves like an iterator, but will keep working even as the tree is being changed.
+            ///     This will run roughly half the speed as using the iterator if iterating through the entire tree.
+            /// </summary>
+            public Node Previous() {
+                var node = this;
+                if(node.Left != null) {
+                    node = node.Left;
+                    while(node.Right != null)
+                        node = node.Right;
+                } else {
+                    var parent = node.Parent;
+                    while(parent != null && node == parent.Left) {
+                        node   = parent; 
+                        parent = parent.Parent;
+                    }
+                    node = parent;
+                }
+                return node;
+            }
+            #endregion
+            #region UpdateKey()
+            /// <summary>
+            ///     Change the key without updating the tree.
+            ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
+            ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
+            /// </summary>
+            public void UpdateKey(TKey key) {
+                this.Key = key;
+            }
+            #endregion
+ 
+            #region constructors
+            public Node(TKey key) {
+                this.Key = key;
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return this.Key?.ToString();
             }
             #endregion
         }
