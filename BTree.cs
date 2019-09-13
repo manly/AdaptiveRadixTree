@@ -571,6 +571,7 @@ namespace System.Collections.Specialized
  
             public KeyValuePair Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public KeyValuePair[] Items => this.Node?.Value.Items;
+            public int NodeCount => this.Node.Value.Count;
 
             #region Next()
             /// <summary>
@@ -1615,6 +1616,7 @@ namespace System.Collections.Specialized
  
             public TKey Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public TKey[] Items => this.Node?.Value.Items;
+            public int NodeCount => this.Node.Value.Count;
 
             #region Next()
             /// <summary>
