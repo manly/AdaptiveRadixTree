@@ -638,6 +638,14 @@ namespace System.Collections.Specialized
                 items[this.Index] = new KeyValuePair(x.Key, value);
             }
             #endregion
+            #region BitwiseNot()
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public BinarySearchResult BitwiseNot() {
+                return new BinarySearchResult(this.Node, ~this.Index);
+            }
+            #endregion
  
             internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
                 this.Node  = node;
@@ -1649,6 +1657,14 @@ namespace System.Collections.Specialized
             /// </summary>
             public void UpdateKey(TKey key) {
                 this.Node.Value.Items[this.Index] = key;
+            }
+            #endregion
+            #region BitwiseNot()
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public BinarySearchResult BitwiseNot() {
+                return new BinarySearchResult(this.Node, ~this.Index);
             }
             #endregion
  
