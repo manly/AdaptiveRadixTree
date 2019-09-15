@@ -81,6 +81,7 @@
     <Compile Include="PriorityQueue.cs" />
     <Compile Include="DynamicMemoryStream.cs" />
     <Compile Include="AdaptiveRadixTree.cs" />
+    <Compile Include="MemoryManager.cs" />
     <Compile Include="RedBlackTree.cs" />
     <Compile Include="SpellingSuggestor.cs" />
     <Compile Include="LicensePlateIndex.cs" />

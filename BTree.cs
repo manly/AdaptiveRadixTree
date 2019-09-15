@@ -1229,7 +1229,7 @@ namespace System.Collections.Specialized
     ///    Using an optimal self-balanced tree (for query times) since most queries will be purely lookups.
     ///    The nodes are sorted arrays.
     /// </remarks>
-    public sealed class BTree<TKey> : ICollection{
+    public sealed class BTree<TKey> : ICollection {
         private static readonly int DEFAULT_ITEMS_PER_NODE = Math.Max(4096 / IntPtr.Size, 16); // assume TKey is a class
         private const int MIN_VALID_COUNT = 5;        // 5 because Rebalance2FullNodesInto3() needs the last node containing overflows to still have 1 remaining space for the potential new item
  
