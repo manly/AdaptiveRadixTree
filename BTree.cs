@@ -753,7 +753,81 @@ namespace System.Collections.Specialized
             //}
         }
         #endregion
- 
+        #region GetAppender()
+        /// <summary>
+        ///     Generates a builder that allows efficient appending of items at the end of the list.
+        ///     This assumes the BTree is not being modified as calls are made to the appender/builder,
+        ///     or at least, that the last node will not change while using the appender.
+        /// </summary>
+        public Appender GetAppender() {
+            return new Appender(this);
+        }
+        public sealed class Appender {
+            public readonly BTree<TKey, TValue> m_owner;
+            private Node m_lastNode;
+            private TKey m_maximum;
+            private readonly Comparison<TKey> m_comparer;
+            public Appender(BTree<TKey, TValue> owner) {
+                m_owner    = owner;
+                m_comparer = owner.m_comparer.Compare;
+            }
+            /// <summary>
+            ///     O(1)
+            ///     
+            ///     Adds an item to the BTree at the end of it.
+            ///     Items must be provided in the same sorting order as the BTree.
+            ///     
+            ///     Throws ArgumentException() if keys are %lt;= this.Maximum.
+            ///     Throws ArgumentException() on duplicate key.
+            /// </summary>
+            /// <exception cref="ArgumentException" />
+            public void AddOrdered(TKey key, TValue value) {
+                var item = new KeyValuePair(key, value);
+
+                if(m_lastNode != null)
+                    this.Add(in item);
+                else {
+                    // first call to AddOrdered()
+                    if(m_owner.Count == 0) {
+                        var lastNode      = new Node(m_owner.m_itemsPerNode);
+                        lastNode.Count    = 1;
+                        lastNode.Items[0] = item;
+                        m_owner.m_tree.Add(key, lastNode);
+                        m_lastNode        = lastNode;
+                        m_maximum         = key;
+                        m_owner.Count++;
+                    } else {
+                        // read previous max
+                        var lastNode = m_owner.m_tree.Maximum.Value;
+                        m_lastNode   = lastNode;
+                        m_maximum    = lastNode.Items[lastNode.Count - 1].Key;
+
+                        this.Add(in item);
+                    }
+                }
+            }
+            private void Add(in KeyValuePair item) {
+                var cmp = m_comparer(item.Key, m_maximum);
+                if(cmp > 0) {
+                    var lastNode = m_lastNode;
+                    if(lastNode.Count == lastNode.Items.Length) {
+                        lastNode   = new Node(m_owner.m_itemsPerNode);
+                        m_owner.m_tree.Add(item.Key, lastNode);
+                        m_lastNode = lastNode;
+                    }
+                    var count             = lastNode.Count;
+                    lastNode.Items[count] = item;
+                    lastNode.Count        = count + 1;
+                    m_maximum             = item.Key;
+                    m_owner.Count++;
+                } else if(cmp < 0)
+                    throw new ArgumentException($"{this.GetType().Name} can only add items that are > btree.Maximum (ie: {item.Key} > {m_maximum}).", nameof(item));
+                else
+                    throw new ArgumentException($"Duplicate key ({item.Key}).", nameof(item));
+            }
+        }
+        #endregion
+
         #region private TryAdd()
         /// <summary>
         ///     O(node.Items.Count / 2)     O(1) operation, but memcpy() of half the items to insert.
@@ -1773,6 +1847,78 @@ namespace System.Collections.Specialized
             //while(node != search_end.Node) {
             //    node = node.Next();
             //}
+        }
+        #endregion
+        #region GetAppender()
+        /// <summary>
+        ///     Generates a builder that allows efficient appending of items at the end of the list.
+        ///     This assumes the BTree is not being modified as calls are made to the appender/builder,
+        ///     or at least, that the last node will not change while using the appender.
+        /// </summary>
+        public Appender GetAppender() {
+            return new Appender(this);
+        }
+        public sealed class Appender {
+            public readonly BTree<TKey> m_owner;
+            private Node m_lastNode;
+            private TKey m_maximum;
+            private readonly Comparison<TKey> m_comparer;
+            public Appender(BTree<TKey> owner) {
+                m_owner    = owner;
+                m_comparer = owner.m_comparer.Compare;
+            }
+            /// <summary>
+            ///     O(1)
+            ///     
+            ///     Adds an item to the BTree at the end of it.
+            ///     Items must be provided in the same sorting order as the BTree.
+            ///     
+            ///     Throws ArgumentException() if keys are %lt;= this.Maximum.
+            ///     Throws ArgumentException() on duplicate key.
+            /// </summary>
+            /// <exception cref="ArgumentException" />
+            public void AddOrdered(TKey key) {
+                if(m_lastNode != null)
+                    this.Add(key);
+                else {
+                    // first call to AddOrdered()
+                    if(m_owner.Count == 0) {
+                        var lastNode      = new Node(m_owner.m_itemsPerNode);
+                        lastNode.Count    = 1;
+                        lastNode.Items[0] = key;
+                        m_owner.m_tree.Add(key, lastNode);
+                        m_lastNode        = lastNode;
+                        m_maximum         = key;
+                        m_owner.Count++;
+                    } else {
+                        // read previous max
+                        var lastNode = m_owner.m_tree.Maximum.Value;
+                        m_lastNode   = lastNode;
+                        m_maximum    = lastNode.Items[lastNode.Count - 1];
+
+                        this.Add(key);
+                    }
+                }
+            }
+            private void Add(TKey key) {
+                var cmp = m_comparer(key, m_maximum);
+                if(cmp > 0) {
+                    var lastNode = m_lastNode;
+                    if(lastNode.Count == lastNode.Items.Length) {
+                        lastNode   = new Node(m_owner.m_itemsPerNode);
+                        m_owner.m_tree.Add(key, lastNode);
+                        m_lastNode = lastNode;
+                    }
+                    var count             = lastNode.Count;
+                    lastNode.Items[count] = key;
+                    lastNode.Count        = count + 1;
+                    m_maximum             = key;
+                    m_owner.Count++;
+                } else if(cmp < 0)
+                    throw new ArgumentException($"{this.GetType().Name} can only add items that are > btree.Maximum (ie: {key} > {m_maximum}).", nameof(key));
+                else
+                    throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
+            }
         }
         #endregion
  

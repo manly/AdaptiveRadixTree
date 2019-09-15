@@ -242,14 +242,16 @@ namespace System.Collections.Specialized
 
             long current              = 0;
             long allocatedMemoryTotal = 0;
+
+            // speed optimisation: use an appender to avoid O(log n) inserts
+            var appender = m_availAddresses.GetAppender();
             
             foreach(var (address, length) in allocatedMemory.OrderBy(o => o.address)) {
                 allocatedMemoryTotal += length;
 
                 var diff = address - current;
                 if(diff > 0) {
-                    // note: this could be sped off by using a forward-only adder
-                    m_availAddresses.Add(current, diff);
+                    appender.AddOrdered(current, diff); //m_availAddresses.Add(current, diff);
                     m_avail.Add(new MemorySegment(current, diff));
                 }
 
