@@ -21,7 +21,7 @@ namespace System.Collections.Specialized
     ///     The first one maps the available memory chunks and is ordered by (len, pos).
     ///     This allows quickly searching the smallest possible chunk when calling alloc() while having fast insert speeds (unlike sortedlist).
     ///     The second one is a B+Tree mapping available memory chunks and is ordered by (pos, len). 
-    ///     This allows a quick item.next() in order to determine if we have consecutive memory chunks we need to merge.
+    ///     This allows a quick item.previous()/next() in order to determine if we have consecutive memory chunks we need to merge.
     ///     Crucially, the B+Tree also needs to find the closest match to a memory location that we are freeing, since it will never be found in its list of available memory (ie: not freeing already freed memory).
     ///     Also, need quick insert()/remove() operations.
     /// </remarks>
@@ -56,7 +56,7 @@ namespace System.Collections.Specialized
             if(m_avail.Count > 0) {
                 var res = m_avail.BinarySearch(new MemorySegment(0, length), CompareMemorySegmentsSizeOnly);
 
-                if(res.Diff >= 0) {
+                if(res.Diff < 0) {
                     var x           = res.Node.Key;
                     var bsr         = m_availAddresses.BinarySearch(x.Address);
                     if(bsr.Index < 0)
@@ -100,15 +100,20 @@ namespace System.Collections.Specialized
 
             if(res.Items != null) {
                 if(res.Index < 0) {
-                    res = res.BitwiseNot();
-                        
-                    if(res.Index != 0 || res.Previous().Items != null) {
-                        var next = res.Next();
+                    res      = res.BitwiseNot();
+                    var prev = res.Previous();
+                    BTree<long, long>.BinarySearchResult next = default;
 
-                        if(next.Items != null)
-                            this.Free_TypicalCase(address, length, in res, in next);
-                        else
+                    if(res.Index != 0 || prev.Items != null) {
+                        if(res.Index < res.NodeCount || (next = res.Next()).Items != null) {
+                            if(res.Index == res.NodeCount)
+                                res = next;
+                            this.Free_TypicalCase(address, length, in prev, in res);
+                        } else {
+                            if(res.Index == res.Items.Length)
+                                res = prev;
                             this.RareFree_AfterLastAvailMemorySegment(address, length, in res);
+                        }
                     } else
                         this.RareFree_BeforeFirstAvailMemorySegment(address, length, in res);
                 } else
@@ -117,7 +122,7 @@ namespace System.Collections.Specialized
                 this.RareFree_NoFreeMemory(address, length);
         }
         private void Free_TypicalCase(long address, long length, in BTree<long, long>.BinarySearchResult bsr, in BTree<long, long>.BinarySearchResult next) {
-            //       res                          next
+            //       bsr                          next
             // [---free mem---][***in use***][---free mem---]
             var diff1 = address - (bsr.Item.Key + bsr.Item.Value);
             var diff2 = (address + length) - next.Item.Key;
@@ -246,7 +251,7 @@ namespace System.Collections.Specialized
             // speed optimisation: use an appender to avoid O(log n) inserts
             var appender = m_availAddresses.GetAppender();
             
-            foreach(var (address, length) in allocatedMemory.OrderBy(o => o.address)) {
+            foreach(var (address, length) in allocatedMemory.OrderBy(o => o.address)) { // orderby() must match the btree<> comparer
                 allocatedMemoryTotal += length;
 
                 var diff = address - current;
@@ -325,5 +330,4 @@ namespace System.Collections.Specialized
             #endregion
         }
     }
-
 }
