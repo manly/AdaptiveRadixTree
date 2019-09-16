@@ -6,7 +6,6 @@ using System.Collections.Specialized;
 
 namespace System.Collections.Specialized 
 {
-
     /// <summary>
     ///     Manages memory allocation without allocating memory.
     ///     Handles infinite (2^63) memory.

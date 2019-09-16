@@ -35,7 +35,7 @@ namespace System.Collections.Specialized
         public BTree(IComparer<TKey> comparer, int items_per_node = -1) : base() { 
             m_comparer              = comparer ?? throw new ArgumentNullException(nameof(comparer));
             m_itemsPerNode          = items_per_node < 0 ? DEFAULT_ITEMS_PER_NODE : items_per_node;
-            m_halfItemsPerNode      = items_per_node / 2;
+            m_halfItemsPerNode      = m_itemsPerNode / 2;
             m_twoThirdsItemsPerNode = (int)Math.Floor((m_itemsPerNode / 3d) * 2d);
             m_tree                  = new AvlTree<TKey, Node>(comparer);
  
@@ -1326,7 +1326,7 @@ namespace System.Collections.Specialized
         public BTree(IComparer<TKey> comparer, int items_per_node = -1) : base() { 
             m_comparer              = comparer ?? throw new ArgumentNullException(nameof(comparer));
             m_itemsPerNode          = items_per_node < 0 ? DEFAULT_ITEMS_PER_NODE : items_per_node;
-            m_halfItemsPerNode      = items_per_node / 2;
+            m_halfItemsPerNode      = m_itemsPerNode / 2;
             m_twoThirdsItemsPerNode = (int)Math.Floor((m_itemsPerNode / 3d) * 2d);
             m_tree                  = new AvlTree<TKey, Node>(comparer);
  
