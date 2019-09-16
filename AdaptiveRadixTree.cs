@@ -1,8 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
 
-#define TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE // remove this once MemoryManager is recoded to be fast
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -111,7 +109,7 @@ namespace System.Collections.Specialized
         protected long m_rootPointer = 0; // root pointer address is always zero
         protected readonly MemoryManager m_memoryManager;
 
-#if !TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
+        // performance boost over memorymanager, reducing alloc()/free() to O(1)
         private readonly FixedSizeMemoryManager m_memoryManagerNode4;
         private readonly FixedSizeMemoryManager m_memoryManagerNode8;
         private readonly FixedSizeMemoryManager m_memoryManagerNode16;
@@ -119,7 +117,6 @@ namespace System.Collections.Specialized
         private readonly FixedSizeMemoryManager m_memoryManagerNode64;
         private readonly FixedSizeMemoryManager m_memoryManagerNode128;
         private readonly FixedSizeMemoryManager m_memoryManagerNode256;
-#endif
 
         /// <summary>
         ///     The storage medium used.
@@ -137,10 +134,6 @@ namespace System.Collections.Specialized
         protected readonly Buffer m_keyBuffer;
         protected readonly Buffer m_valueBuffer;
 
-        // todo: code redblacktree and remake the memorymanager, as it is killing performance
-        // todo: remove TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
-        //       right now the O(1) allocators are massively slowing down execution (!) due to increased memory fragmentation
-        //       this shouldnt be a problem with redblacktree
         // todo: add byte adjustment to leaves that says how many bytes to skip for partial key, thus avoiding regenerating leaves constantly
 
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
@@ -231,7 +224,6 @@ namespace System.Collections.Specialized
 
             m_memoryManager = memoryManager;
 
-#if !TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
             // allows O(1) alloc speed
             m_memoryManagerNode4   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node4),   size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode8   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node8),   size => this.Alloc(size), (address, len) => this.Free(address, len));
@@ -240,7 +232,6 @@ namespace System.Collections.Specialized
             m_memoryManagerNode64  = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node64),  size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode128 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node128), size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode256 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node256), size => this.Alloc(size), (address, len) => this.Free(address, len));
-#endif
 
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
             this.Stream = storageStream ?? new TimeSeriesDB.IO.DynamicMemoryStream(131072);
@@ -545,6 +536,14 @@ namespace System.Collections.Specialized
             m_memoryManager.Clear();
             // pre-reserve the root pointer memory at address 0
             m_memoryManager.Load(new[] { ((long)0, (long)NODE_POINTER_BYTE_SIZE) });
+            m_memoryManagerNode4.Clear();
+            m_memoryManagerNode8.Clear();
+            m_memoryManagerNode16.Clear();
+            m_memoryManagerNode32.Clear();
+            m_memoryManagerNode64.Clear();
+            m_memoryManagerNode128.Clear();
+            m_memoryManagerNode256.Clear();
+
             m_rootPointer  = 0;
             this.LongCount = 0;
             this.Stream.SetLength(NODE_POINTER_BYTE_SIZE);
@@ -5313,9 +5312,8 @@ namespace System.Collections.Specialized
         #region protected Alloc()
         [MethodImpl(AggressiveInlining)]
         protected long Alloc(NodeType nodeType) {
-#if TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
-            return this.Alloc(CalculateNodeSize(nodeType));
-#else
+            //return this.Alloc(CalculateNodeSize(nodeType));
+
             switch(nodeType) {
                 case NodeType.Node4:   return m_memoryManagerNode4.Alloc();
                 case NodeType.Node8:   return m_memoryManagerNode8.Alloc();
@@ -5328,7 +5326,6 @@ namespace System.Collections.Specialized
                     return -1;
                     //throw new ArgumentException(nameof(nodeType));
             }
-#endif
         }
         [MethodImpl(AggressiveInlining)]
         protected long Alloc(long length) {
@@ -5338,9 +5335,8 @@ namespace System.Collections.Specialized
         #region protected Free()
         [MethodImpl(AggressiveInlining)]
         protected void Free(long address, NodeType nodeType) {
-#if TEMPORARY_UNTIL_MEMORY_MANAGER_RECODE
-            this.Free(address, CalculateNodeSize(nodeType));
-#else
+            //this.Free(address, CalculateNodeSize(nodeType));
+
             switch(nodeType) {
                 case NodeType.Node4:   m_memoryManagerNode4.Free(address);   break;
                 case NodeType.Node8:   m_memoryManagerNode8.Free(address);   break;
@@ -5351,7 +5347,6 @@ namespace System.Collections.Specialized
                 case NodeType.Node256: m_memoryManagerNode256.Free(address); break;
                 //default: throw new ArgumentException(nameof(nodeType));
             }
-#endif
         }
         [MethodImpl(AggressiveInlining)]
         protected void Free(long address, long length) {
@@ -6378,6 +6373,12 @@ namespace System.Collections.Specialized
                 }
 
                 m_available[m_availableCount++] = position;
+            }
+            /// <summary>
+            ///     O(1)
+            /// </summary>
+            public void Clear() {
+                m_availableCount = 0;
             }
         }
         #endregion
