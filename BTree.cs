@@ -614,6 +614,8 @@ namespace System.Collections.Specialized
             /// </summary>
             public void Update(TKey key, TValue value) {
                 this.Node.Value.Items[this.Index] = new KeyValuePair(key, value);
+                if(this.Index == 0)
+                    this.Node.UpdateKey(key);
             }
             #endregion
             #region UpdateKey()
@@ -627,6 +629,8 @@ namespace System.Collections.Specialized
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(key, x.Value);
+                if(this.Index == 0)
+                    this.Node.UpdateKey(key);
             }
             #endregion
             #region UpdateValue()
@@ -1733,6 +1737,8 @@ namespace System.Collections.Specialized
             /// </summary>
             public void UpdateKey(TKey key) {
                 this.Node.Value.Items[this.Index] = key;
+                if(this.Index == 0)
+                    this.Node.UpdateKey(key);
             }
             #endregion
             #region BitwiseNot()
