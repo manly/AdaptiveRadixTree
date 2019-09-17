@@ -19,6 +19,8 @@ namespace System.Collections.Specialized
     ///     This class intentionally uses 2 BinarySearchTree variants, with different goals.
     ///     The first one maps the available memory chunks and is ordered by (len, pos).
     ///     This allows quickly searching the smallest possible chunk when calling alloc() while having fast insert speeds (unlike sortedlist).
+    ///     Most importantly though, the vast majority of requests are BinarySearch() without any insert()/remove() because we just resize existing data.
+    ///     This is why an AvlTree is preferred to a RedBlackTree.
     ///     The second one is a B+Tree mapping available memory chunks and is ordered by (pos, len). 
     ///     This allows a quick item.previous()/next() in order to determine if we have consecutive memory chunks we need to merge.
     ///     Crucially, the B+Tree also needs to find the closest match to a memory location that we are freeing, since it will never be found in its list of available memory (ie: not freeing already freed memory).
