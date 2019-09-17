@@ -1089,8 +1089,10 @@ namespace System.Collections.Specialized
  
             // if all the current node items can fit in the prev+next node, then do so
             if(space_avail >= nodes_to_move) {
-                Array.Copy(node.Value.Items, 0, prev.Value.Items, prev.Value.Count, prev_space_left);
-                prev.Value.Count = m_itemsPerNode;
+                if(prev != null) {
+                    Array.Copy(node.Value.Items, 0, prev.Value.Items, prev.Value.Count, prev_space_left);
+                    prev.Value.Count = m_itemsPerNode;
+                }
                 Array.Copy(next.Value.Items, 0, next.Value.Items, nodes_to_move - prev_space_left, next.Value.Count);
                 Array.Copy(node.Value.Items, prev_space_left, next.Value.Items, 0, nodes_to_move - prev_space_left);
                 next.Value.Count += nodes_to_move - prev_space_left;
@@ -2183,8 +2185,10 @@ namespace System.Collections.Specialized
  
             // if all the current node items can fit in the prev+next node, then do so
             if(space_avail >= nodes_to_move) {
-                Array.Copy(node.Value.Items, 0, prev.Value.Items, prev.Value.Count, prev_space_left);
-                prev.Value.Count = m_itemsPerNode;
+                if(prev != null) {
+                    Array.Copy(node.Value.Items, 0, prev.Value.Items, prev.Value.Count, prev_space_left);
+                    prev.Value.Count = m_itemsPerNode;
+                }
                 Array.Copy(next.Value.Items, 0, next.Value.Items, nodes_to_move - prev_space_left, next.Value.Count);
                 Array.Copy(node.Value.Items, prev_space_left, next.Value.Items, 0, nodes_to_move - prev_space_left);
                 next.Value.Count += nodes_to_move - prev_space_left;
