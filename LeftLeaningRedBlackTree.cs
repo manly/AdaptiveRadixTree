@@ -90,10 +90,10 @@ namespace System.Collections.Specialized
                 while(current != null) {
                     int diff = m_comparer(key, current.Key);
     
-                    if(diff < 0)
-                        current = current.Left;
-                    else if(diff > 0)
+                    if(diff > 0)
                         current = current.Right;
+                    else if(diff < 0)
+                        current = current.Left;
                     else
                         return current.Value;
                 }
@@ -105,10 +105,10 @@ namespace System.Collections.Specialized
                 while(current != null) {
                     int diff = m_comparer(key, current.Key);
     
-                    if(diff < 0)
-                        current = current.Left;
-                    else if(diff > 0)
+                    if(diff > 0)
                         current = current.Right;
+                    else if(diff < 0)
+                        current = current.Left;
                     else {
                         current.Value = value;
                         return;
@@ -193,10 +193,10 @@ namespace System.Collections.Specialized
                 FlipColor(node);
     
             int diff = m_comparer(key, node.Key);
-            if(diff < 0)
-                node.Left = this.AddRecursive(node.Left, key, new_node);
-            else if(diff > 0)
+            if(diff > 0)
                 node.Right = this.AddRecursive(node.Right, key, new_node);
+            else if(diff < 0)
+                node.Left = this.AddRecursive(node.Left, key, new_node);
             else
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
     
@@ -312,10 +312,10 @@ namespace System.Collections.Specialized
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
     
-                if(diff < 0)
-                    current = current.Left;
-                else if(diff > 0)
+                if(diff > 0)
                     current = current.Right;
+                else if(diff < 0)
+                    current = current.Left;
                 else {
                     value = current.Value;
                     return true;
@@ -335,10 +335,10 @@ namespace System.Collections.Specialized
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
     
-                if(diff < 0)
-                    current = current.Left;
-                else if(diff > 0)
+                if(diff > 0)
                     current = current.Right;
+                else if(diff < 0)
+                    current = current.Left;
                 else
                     return true;
             }
@@ -365,12 +365,12 @@ namespace System.Collections.Specialized
             while(current != null) {
                 prev_diff = m_comparer(key, current.Key);
 
-                if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else if(prev_diff > 0) {
+                if(prev_diff > 0) {
                     prev    = current;
                     current = current.Right;
+                } else if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
                 } else
                     return new BinarySearchResult(current, 0);
             }
@@ -393,12 +393,12 @@ namespace System.Collections.Specialized
             while(current != null) {
                 prev_diff = comparer(key, current.Key);
 
-                if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else if(prev_diff > 0) {
+                if(prev_diff > 0) {
                     prev    = current;
                     current = current.Right;
+                } else if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
                 } else
                     return new BinarySearchResult(current, 0);
             }
@@ -456,13 +456,13 @@ namespace System.Collections.Specialized
                 // go up until we cross key, then go down
                 var diff = comparer(key, start.Key);
                 
-                if(diff < 0) {
+                if(diff > 0) {
                     while(node != null) {
                         var parent = node.Parent;
                         if(parent != null) {
-                            if(node == parent.Right) {
+                            if(node == parent.Left) {
                                 diff = comparer(key, parent.Key);
-                                if(diff > 0) {
+                                if(diff < 0) {
                                     // go down from here
                                     node = parent;
                                     break;
@@ -473,13 +473,13 @@ namespace System.Collections.Specialized
                         } else
                             return this.BinarySearch(key);
                     }
-                } else if(diff > 0) {
+                } else if(diff < 0) {
                     while(node != null) {
                         var parent = node.Parent;
                         if(parent != null) {
-                            if(node == parent.Left) {
+                            if(node == parent.Right) {
                                 diff = comparer(key, parent.Key);
-                                if(diff < 0) {
+                                if(diff > 0) {
                                     // go down from here
                                     node = parent;
                                     break;
@@ -502,12 +502,12 @@ namespace System.Collections.Specialized
             while(node != null) {
                 prev_diff = comparer(key, node.Key);
 
-                if(prev_diff < 0) {
-                    prev    = node;
-                    node = node.Left;
-                } else if(prev_diff > 0) {
-                    prev    = node;
+                if(prev_diff > 0) {
+                    prev = node;
                     node = node.Right;
+                } else if(prev_diff < 0) {
+                    prev = node;
+                    node = node.Left;
                 } else
                     return new BinarySearchResult(node, 0);
             }
@@ -618,12 +618,12 @@ namespace System.Collections.Specialized
         
                     int diff = m_owner.m_comparer(key, current.Key);
 
-                    if(diff < 0) {
+                    if(diff > 0)
+                        current = current.Right;
+                    else if(diff < 0) {
                         this.Push(current);
                         current = current.Left;
-                    } else if(diff > 0)
-                        current = current.Right;
-                    else
+                    } else
                         return current;
                 }
                 return prev;
@@ -1087,10 +1087,10 @@ namespace System.Collections.Specialized
                 FlipColor(node);
     
             int diff = m_comparer(key, node.Key);
-            if(diff < 0)
-                node.Left = this.AddRecursive(node.Left, key, new_node);
-            else if(diff > 0)
+            if(diff > 0)
                 node.Right = this.AddRecursive(node.Right, key, new_node);
+            else if(diff < 0)
+                node.Left = this.AddRecursive(node.Left, key, new_node);
             else
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
     
@@ -1205,10 +1205,10 @@ namespace System.Collections.Specialized
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
     
-                if(diff < 0)
-                    current = current.Left;
-                else if(diff > 0)
+                if(diff > 0)
                     current = current.Right;
+                else if(diff < 0)
+                    current = current.Left;
                 else
                     return true;
             }
@@ -1235,12 +1235,12 @@ namespace System.Collections.Specialized
             while(current != null) {
                 prev_diff = m_comparer(key, current.Key);
 
-                if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else if(prev_diff > 0) {
+                if(prev_diff > 0) {
                     prev    = current;
                     current = current.Right;
+                } else if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
                 } else
                     return new BinarySearchResult(current, 0);
             }
@@ -1263,12 +1263,12 @@ namespace System.Collections.Specialized
             while(current != null) {
                 prev_diff = comparer(key, current.Key);
 
-                if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else if(prev_diff > 0) {
+                if(prev_diff > 0) {
                     prev    = current;
                     current = current.Right;
+                } else if(prev_diff < 0) {
+                    prev    = current;
+                    current = current.Left;
                 } else
                     return new BinarySearchResult(current, 0);
             }
@@ -1326,13 +1326,13 @@ namespace System.Collections.Specialized
                 // go up until we cross key, then go down
                 var diff = comparer(key, start.Key);
                 
-                if(diff < 0) {
+                if(diff > 0) {
                     while(node != null) {
                         var parent = node.Parent;
                         if(parent != null) {
-                            if(node == parent.Right) {
+                            if(node == parent.Left) {
                                 diff = comparer(key, parent.Key);
-                                if(diff > 0) {
+                                if(diff < 0) {
                                     // go down from here
                                     node = parent;
                                     break;
@@ -1343,13 +1343,13 @@ namespace System.Collections.Specialized
                         } else
                             return this.BinarySearch(key);
                     }
-                } else if(diff > 0) {
+                } else if(diff < 0) {
                     while(node != null) {
                         var parent = node.Parent;
                         if(parent != null) {
-                            if(node == parent.Left) {
+                            if(node == parent.Right) {
                                 diff = comparer(key, parent.Key);
-                                if(diff < 0) {
+                                if(diff > 0) {
                                     // go down from here
                                     node = parent;
                                     break;
@@ -1372,12 +1372,12 @@ namespace System.Collections.Specialized
             while(node != null) {
                 prev_diff = comparer(key, node.Key);
 
-                if(prev_diff < 0) {
-                    prev    = node;
-                    node = node.Left;
-                } else if(prev_diff > 0) {
-                    prev    = node;
+                if(prev_diff > 0) {
+                    prev = node;
                     node = node.Right;
+                } else if(prev_diff < 0) {
+                    prev = node;
+                    node = node.Left;
                 } else
                     return new BinarySearchResult(node, 0);
             }
@@ -1488,12 +1488,12 @@ namespace System.Collections.Specialized
         
                     int diff = m_owner.m_comparer(key, current.Key);
 
-                    if(diff < 0) {
+                    if(diff > 0)
+                        current = current.Right;
+                    else if(diff < 0) {
                         this.Push(current);
                         current = current.Left;
-                    } else if(diff > 0)
-                        current = current.Right;
-                    else
+                    } else
                         return current;
                 }
                 return prev;
