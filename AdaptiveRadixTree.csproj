@@ -75,6 +75,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FastMemoryStream.cs" />
     <Compile Include="BTree.cs" />
     <Compile Include="LeftLeaningRedBlackTree.cs" />
     <Compile Include="AvlTree.cs" />

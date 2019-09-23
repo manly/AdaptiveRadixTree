@@ -9,6 +9,8 @@ namespace TimeSeriesDB.IO
     /// <summary>
     ///     MemoryStream that uses a list of byte[] internally.
     ///     Provides faster expanding due to avoided array recopy.
+    ///     This class is meant for flexible and efficient consecutive reads/writes.
+    ///     If you need to do lots of seeking, consider using FastMemoryStream instead. 
     /// </summary>
     public sealed class DynamicMemoryStream : Stream {
         private const int              BUFFER_SIZE               = 256;           // initial capacity, as well as doubled every new section
@@ -203,8 +205,6 @@ namespace TimeSeriesDB.IO
             // if we were past the buffers, then clear between m_length to m_position
             if(m_position > m_length || m_currentRemaining == 0)
                 this.InternalSetLength(m_position + 1, 1);
-
-            System.Diagnostics.Debug.Assert(m_currentRemaining > 0);
             
             m_current[m_currentIndex++] = value;
 
