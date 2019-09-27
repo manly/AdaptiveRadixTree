@@ -1,6 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
-
+    
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,10 +8,10 @@ using System.Text;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
+    
 using static System.Runtime.CompilerServices.MethodImplOptions;
-
-
+    
+    
 namespace System.Collections.Specialized 
 {
     /// <summary>
@@ -94,7 +94,7 @@ namespace System.Collections.Specialized
         //
         // No node may contain "partial_length==0" except for the root node.
         #endregion
-
+    
         protected const int  MAX_PREFIX_LEN                = 8;  // the max number of key characters per non-leaf node.
         protected const int  NODE_POINTER_BYTE_SIZE        = 5;  // increase this value if you need more than 1.1 TB
         protected const byte LEAF_NODE_KEY_TERMINATOR      = 0;  // terminate keys of leafs with this value
@@ -104,11 +104,11 @@ namespace System.Collections.Specialized
         protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32; // guesstimated, must be <= m_buffer.Length, includes only data
         protected const int  MAX_VARINT64_ENCODED_SIZE     = 9;
         protected const int  BUFFER_SIZE                   = 4096;
-
-
+    
+    
         protected long m_rootPointer = 0; // root pointer address is always zero
         protected readonly MemoryManager m_memoryManager;
-
+    
         // performance boost over memorymanager, reducing alloc()/free() to O(1)
         private readonly FixedSizeMemoryManager m_memoryManagerNode4;
         private readonly FixedSizeMemoryManager m_memoryManagerNode8;
@@ -117,7 +117,7 @@ namespace System.Collections.Specialized
         private readonly FixedSizeMemoryManager m_memoryManagerNode64;
         private readonly FixedSizeMemoryManager m_memoryManagerNode128;
         private readonly FixedSizeMemoryManager m_memoryManagerNode256;
-
+    
         /// <summary>
         ///     The storage medium used.
         ///     By default will use a MemoryStream designed for efficient resizes.
@@ -130,12 +130,12 @@ namespace System.Collections.Specialized
         protected readonly byte[] m_buffer = new byte[BUFFER_SIZE];
         public int Count => unchecked((int)Math.Min(this.LongCount, int.MaxValue));
         public long LongCount { get; private set; }
-
+    
         protected readonly Buffer m_keyBuffer;
         protected readonly Buffer m_valueBuffer;
-
+    
         // todo: add byte adjustment to leaves that says how many bytes to skip for partial key, thus avoiding regenerating leaves constantly
-
+    
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
         protected readonly Action<TValue, Buffer>         m_valueEncoder; // see GetDefaultEncoder()
@@ -147,7 +147,7 @@ namespace System.Collections.Specialized
         protected readonly Func<byte[], int, int, object> m_keyDecoder;   // see GetDefaultDecoder()
         protected readonly Func<byte[], int, int, object> m_valueDecoder; // see GetDefaultDecoder()
 #endif
-
+    
         #region constructors
         static AdaptiveRadixTree() {
             // sanity check constants
@@ -198,7 +198,7 @@ namespace System.Collections.Specialized
 #endif
             if(storageStream != null && storageStream.Length != 0)
                 throw new ArgumentException("Stream must be empty.", nameof(storageStream));
-
+    
             this.Clear();
         }
         /// <summary>
@@ -221,9 +221,9 @@ namespace System.Collections.Specialized
 #endif
             if(m_buffer.Length != BUFFER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), $"{nameof(m_buffer)}.Length must equal {nameof(BUFFER_SIZE)}");
-
+    
             m_memoryManager = memoryManager;
-
+    
             // allows O(1) alloc speed
             m_memoryManagerNode4   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node4),   size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode8   = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node8),   size => this.Alloc(size), (address, len) => this.Free(address, len));
@@ -232,20 +232,20 @@ namespace System.Collections.Specialized
             m_memoryManagerNode64  = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node64),  size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode128 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node128), size => this.Alloc(size), (address, len) => this.Free(address, len));
             m_memoryManagerNode256 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node256), size => this.Alloc(size), (address, len) => this.Free(address, len));
-
+    
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
             this.Stream = storageStream ?? new TimeSeriesDB.IO.DynamicMemoryStream(131072);
-
+    
             m_keyEncoder   = keyEncoder   ?? GetDefaultEncoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyEncoder),   $"The key encoder {nameof(TKey)}={typeof(TKey).Name} has no encoder specified. You must provide one or use a primitive/string/byte[].");
             m_valueEncoder = valueEncoder ?? GetDefaultEncoder<TValue>() ?? throw new ArgumentNullException(nameof(valueEncoder), $"The value encoder {nameof(TValue)}={typeof(TValue).Name} has no encoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
             m_keyDecoder   = keyDecoder   ?? GetDefaultDecoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyDecoder),   $"The key decoder {nameof(TKey)}={typeof(TKey).Name} has no decoder specified. You must provide one or use a primitive/string/byte[].");
             m_valueDecoder = valueDecoder ?? GetDefaultDecoder<TValue>() ?? throw new ArgumentNullException(nameof(valueDecoder), $"The value decoder {nameof(TValue)}={typeof(TValue).Name} has no decoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
-            
+                
             m_keyBuffer   = new Buffer();
             m_valueBuffer = new Buffer();
         }
         #endregion
-
+    
         #region static Load()
         public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream) {
             return Load(storageStream, null, null, null, null);
@@ -261,21 +261,21 @@ namespace System.Collections.Specialized
 #endif
             if(storageStream == null)
                 throw new ArgumentNullException(nameof(storageStream));
-
+    
             var memoryManager   = new MemoryManager();
             var allocatedMemory = InferMemoryUsage(storageStream, out long itemCount);
-
+    
             memoryManager.Load(allocatedMemory);
-
+    
             var res = new AdaptiveRadixTree<TKey, TValue>(memoryManager, storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder);
-
+    
             res.LongCount = itemCount;
-            
+                
             var raw = new byte[NODE_POINTER_BYTE_SIZE];
             storageStream.Position = 0;
             storageStream.Read(raw, 0, NODE_POINTER_BYTE_SIZE);
             res.m_rootPointer = ReadNodePointer(raw, 0);
-
+    
             return res;
         }
         /// <summary>
@@ -287,28 +287,28 @@ namespace System.Collections.Specialized
             stream.Position = 0;
             stream.Read(buffer, 0, NODE_POINTER_BYTE_SIZE);
             var rootPointer = ReadNodePointer(buffer, 0);
-
+    
             itemCount = 0;
-
+    
             var reservedMemory = new Dictionary<long, InternalReservedMemory> {
                 { 0, new InternalReservedMemory(NODE_POINTER_BYTE_SIZE, true) },
                 { NODE_POINTER_BYTE_SIZE, new InternalReservedMemory(NODE_POINTER_BYTE_SIZE, false) }
             };
-
+    
             // while this code may look inefficient, 
             // keep in mind dictionary.add()/remove()/lookup() are on average O(1)
-
+    
             foreach(var path in new PathEnumerator().Run(new NodePointer(0, rootPointer), stream, true, false)) {
                 var last = path.Trail[path.Trail.Count - 1];
                 var size = last.CalculateNodeSize();
                 long pos = last.Pointer.Target;
-                
+                    
                 if(last.Type == NodeType.Leaf)
                     itemCount++;
- 
+     
                 var is_pre  = reservedMemory.TryGetValue(pos, out var pre);
                 var is_post = reservedMemory.TryGetValue(pos + size, out var post);
-
+    
                 if(!is_pre && !is_post) {
                     reservedMemory.Add(pos, new InternalReservedMemory(size, true));
                     reservedMemory.Add(pos + size, new InternalReservedMemory(size, false));
@@ -332,7 +332,7 @@ namespace System.Collections.Specialized
                     reservedMemory.Remove(pos + size);
                 }
             }
-
+    
             var res = new List<(long start, long len)>(reservedMemory.Count);
             foreach(var kv in reservedMemory) {
                 if(!kv.Value.IsPre)
@@ -341,9 +341,9 @@ namespace System.Collections.Specialized
             }
             reservedMemory.Clear();
             reservedMemory = null; // intentionally allow garbage collection since this may grow large
-
+    
             res.Sort();
-
+    
             // verify no alloc overlap
             int max = res.Count;
             long prev = -1;
@@ -353,7 +353,7 @@ namespace System.Collections.Specialized
                     throw new FormatException("The stream contains duplicate allocations.");
                 prev = start + len;
             }
-
+    
             return res;
         }
         private class InternalReservedMemory {
@@ -365,7 +365,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region Keys
         /// <summary>
         ///     O(n)
@@ -422,22 +422,22 @@ namespace System.Collections.Specialized
             get{
                 if(!this.TryGetValue(in key, out var value))
                     throw new KeyNotFoundException();
-
+    
                 return value;
             }
             set {
                 var path               = this.TryGetPath(in key, false, true);
                 var key_already_exists = !this.TryAddItem(path, in key, in value);
-
+    
                 if(key_already_exists) {
                     // if the leaf exists, make a new leaf, point to it, and unalloc old leaf
                     var last = path.Trail[path.Trail.Count - 1];
-
+    
                     var valueBuffer = m_valueBuffer;
                     m_valueEncoder(value, valueBuffer);
-                    
+                        
                     path.ReadPathEntireKey(this, path.EncodedSearchKey);
-
+    
                     var remainingEncodedKey = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, path.EncodedSearchKey.Length - (last.PartialKeyLength - 1), last.PartialKeyLength - 1);
                     var address             = this.CreateLeafNode(in remainingEncodedKey, valueBuffer);
                     WriteNodePointer(m_buffer, 0, address);
@@ -449,7 +449,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region MinimumKey
         /// <summary>
         ///    O(k)    (k = # of characters of minimal key)
@@ -478,7 +478,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region Add()
         /// <summary>
         ///     O(k)    (k = # of characters)
@@ -488,7 +488,7 @@ namespace System.Collections.Specialized
         /// <exception cref="ArgumentException" />
         public void Add(in TKey key, in TValue value) {
             var path = this.TryGetPath(in key, false, true);
-
+    
             if(!this.TryAddItem(path, in key, in value))
                 throw new ArgumentException($"The key ({key}) already exists.", nameof(key));
         }
@@ -513,7 +513,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public bool Remove(in TKey key) {
             var path = this.TryGetPath(in key, false, true);
-
+    
             return this.TryRemoveItem(path);
         }
         #endregion
@@ -543,17 +543,17 @@ namespace System.Collections.Specialized
             m_memoryManagerNode64.Clear();
             m_memoryManagerNode128.Clear();
             m_memoryManagerNode256.Clear();
-
+    
             m_rootPointer  = 0;
             this.LongCount = 0;
             this.Stream.SetLength(NODE_POINTER_BYTE_SIZE);
-
+    
             Array.Clear(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
             this.Stream.Position = 0;
             this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
         }
         #endregion
-
+    
         #region TryAdd()
         /// <summary>
         ///    O(k)    (k = # of characters)
@@ -599,7 +599,7 @@ namespace System.Collections.Specialized
             return EqualityComparer<TValue>.Default.Equals(value, read_value);
         }
         #endregion
-
+    
         // StartsWith()
         #region StartsWith()
         /// <summary>
@@ -610,9 +610,9 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TKey> StartsWith(TKey key) {
             var path = this.TryGetPath(in key, false, false);
-
+    
             var resultType = this.StartsWithImplementation(path, out long pointer);
-
+    
             switch(resultType) {
                 case StartsWithResult.NoResults: 
                     break;
@@ -643,27 +643,27 @@ namespace System.Collections.Specialized
         }
         private StartsWithResult StartsWithImplementation(Path path, out long pointer) {
             pointer = -1;
-
+    
             // if theres no root
             if(path == null)
                 return StartsWithResult.NoResults;
-
+    
             // if no node match, or the key passed cant be encoded (ie: StartsWith(string.Empty)), or path.startswith(key) == false
             var no_results = 
                 path.Trail.Count == 0 || 
                 (path.Trail.Count == 1 && path.Trail[0].PartialKeyLength == 0) ||
                 path.CalculateKeyMatchLength() < path.EncodedSearchKey.Length;
-            
+                
             if(no_results) {
                 if(path.EncodedSearchKey.Length == 0)
                     // if key cant be encoded, then return everything
                     return StartsWithResult.AllItems;
-                
+                    
                 return StartsWithResult.NoResults;
             }
-
+    
             var last = path.Trail[path.Trail.Count - 1];
-
+    
             // note that path assumes were trying to find a leaf, and as such, will consider the [key + LEAF_NODE_KEY_TERMINATOR] to be what to search for
             // in our case, we were to return such result regardless, but the 'real path' we care about ignores the terminator character
             if(last.Type == NodeType.Leaf) {
@@ -680,7 +680,7 @@ namespace System.Collections.Specialized
                 pointer = last.Address;
                 path.EncodedSearchKey.Length -= last.PartialKeyMatchLength;
             }
-
+    
             return StartsWithResult.Pointer;
         }
         #endregion
@@ -693,9 +693,9 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TValue> StartsWithValues(TKey key) {
             var path = this.TryGetPath(in key, true, false);
-
+    
             var resultType = this.StartsWithImplementation(path, out long pointer);
-
+    
             switch(resultType) {
                 case StartsWithResult.NoResults: 
                     break;
@@ -724,9 +724,9 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> StartsWithItems(TKey key) {
             var path = this.TryGetPath(in key, true, false);
-
+    
             var resultType = this.StartsWithImplementation(path, out long pointer);
-
+    
             switch(resultType) {
                 case StartsWithResult.NoResults: 
                     break;
@@ -746,7 +746,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         // PartialMatch()
         #region PartialMatch()
         /// <summary>
@@ -762,7 +762,7 @@ namespace System.Collections.Specialized
                     yield return item;
                 yield break;
             }
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = false,
                 HammingDistance = 0,
@@ -771,28 +771,28 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetKey(this);
         }
         private static BitArray ParsePartialMatchFormat(string pattern, char wildcard, SearchOption match) {
             if(match == SearchOption.StartsWith) {
                 pattern = pattern.TrimEnd(wildcard);
-                
+                    
                 if(pattern.Length == 0)
                     return null;
             }
-
+    
             //if(!pattern.Contains(wildcard)) {
             //    foreach(var item in this.StartsWithKeys(m_keyEncoder(...)))
             //        yield return item;
             //    yield break;
             //}
-
+    
             var bitArray = new BitArray(pattern.Length * 256);
             for(int i = 0; i < pattern.Length; i++){
                 var c = pattern[i];
-
+    
                 if(c != wildcard) 
                     bitArray.Set(i * 256 + c, true);
                 else {
@@ -817,7 +817,7 @@ namespace System.Collections.Specialized
                     yield return item;
                 yield break;
             }
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = 0,
@@ -826,7 +826,7 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetValue(this);
         }
@@ -844,7 +844,7 @@ namespace System.Collections.Specialized
                     yield return item;
                 yield break;
             }
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = 0,
@@ -853,12 +853,12 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetItem(this);
         }
         #endregion
-
+    
         // RegExpMatch()
         #region RegExpMatch()
         /// <summary>
@@ -879,7 +879,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TKey> RegExpMatch(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = false,
                 HammingDistance = 0,
@@ -888,7 +888,7 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetKey(this);
         }
@@ -898,14 +898,14 @@ namespace System.Collections.Specialized
         }
         private IEnumerable<FilterablePathEnumerator.Node> RegExpMatchImplementation(BitArray bitArray, InternalSearchOptions searchOptions, FilterablePathEnumerator.Options filterOptions) {
             var realCharacters = bitArray.Length / 256;
-
+    
             filterOptions.Owner = this;
-
+    
             if(filterOptions.HammingDistance == 0) {
                 filterOptions.CalculateHammingDistance = new Func<FilterablePathEnumerator.FilterItem, int>(o => {
                     if(o.KeyLength > realCharacters)
                         return searchOptions.HammingCostPerExtraCharacter > 0 ? 1 : 0;
-
+    
                     int max = Math.Min(realCharacters, o.KeyLength);
                     for(int i = o.LastAcceptedLength; i < max; i++) {
                         if(!bitArray[i * 256 + o.EncodedKey[i]])
@@ -919,7 +919,7 @@ namespace System.Collections.Specialized
                         return searchOptions.HammingCostPerExtraCharacter > 0 ?
                             unchecked((int)Math.Min((o.KeyLength - realCharacters) * (long)searchOptions.HammingCostPerExtraCharacter, int.MaxValue)) : 
                             0;
-                    
+                        
                     int max = Math.Min(realCharacters, o.KeyLength);
                     int dist = 0;
                     for(int i = o.LastAcceptedLength; i < max; i++){
@@ -929,19 +929,19 @@ namespace System.Collections.Specialized
                     return dist;
                 });
             }
-
+    
             // note:
             // CalculateHammingDistance() cannot check for HammingCostPerMissingCharacter because we are drilling down the tree, 
             // and dont always know if were dealing with a leaf or not
             // and since the tree may contain [aaa] and [aaaaa] as entries, we have to let 'aaa' pass everytime and then check back on the results
             // to see if we filter or not
-
+    
             // consider caching the enumerator if you call this often
             var enumerator = new FilterablePathEnumerator();
             foreach(var item in enumerator.Run(filterOptions)) {
                 var keySize  = item.KeyLength;
                 long hamming = item.HammingDistance;
-                
+                    
                 if(keySize < realCharacters) {
                     hamming -= (realCharacters - keySize) * (long)searchOptions.HammingCostPerMissingCharacter;
                     if(hamming < 0)
@@ -954,7 +954,7 @@ namespace System.Collections.Specialized
                 //    if(hamming < 0)
                 //        continue;
                 //}
-        
+            
                 yield return item;
             }
         }
@@ -978,10 +978,10 @@ namespace System.Collections.Specialized
             var res            = new BitArray(format.Length * 256);
             int i              = 0;
             int realCharacters = 0;
-
+    
             // known misbehavior: [A-B-D] is supported, and gives the range [A-D] instead of throwing a FormatException
             // technically it should be written [A-BB-D] in regexes, but for simplicitys sake, I leave unfixed as a hidden feature
-            
+                
             while(i < format.Length) {
                 var c = format[i];
                 if(c == '\\') {
@@ -995,7 +995,7 @@ namespace System.Collections.Specialized
                 } else if(c == '[') {
                     var start = i;
                     i++;
-
+    
                     if(i + 1 < format.Length && format[i] == '*' && format[i + 1] == ']') {
                         for(int j = 0; j < 256; j++)
                             res[realCharacters * 256 + j] = true;
@@ -1081,7 +1081,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<TValue> RegExpMatchValues(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = 0,
@@ -1090,7 +1090,7 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetValue(this);
         }
@@ -1114,7 +1114,7 @@ namespace System.Collections.Specialized
         /// </summary>
         public IEnumerable<KeyValuePair<TKey, TValue>> RegExpMatchItems(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = 0,
@@ -1123,12 +1123,12 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = int.MaxValue,
                 HammingCostPerExtraCharacter   = match == SearchOption.ExactMatch ? int.MaxValue : 0,
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetItem(this);
         }
         #endregion
-
+    
         // NearNeighbors()
         #region RegExpNearNeighbors()
         /// <summary>
@@ -1152,7 +1152,7 @@ namespace System.Collections.Specialized
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
         public IEnumerable<TKey> RegExpNearNeighbors(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = false,
                 HammingDistance = hammingDistance,
@@ -1161,7 +1161,7 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = hammingCostPerMissingCharacter,
                 HammingCostPerExtraCharacter   = hammingCostPerExtraCharacter, // you could also make extra chars be free  "SearchOptions == StartsWith ? 0 : 1"
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetKey(this);
         }
@@ -1188,7 +1188,7 @@ namespace System.Collections.Specialized
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
         public IEnumerable<TValue> RegExpNearNeighborsValues(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = hammingDistance,
@@ -1197,7 +1197,7 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = hammingCostPerMissingCharacter,
                 HammingCostPerExtraCharacter   = hammingCostPerExtraCharacter, // you could also make extra chars be free  "SearchOptions == StartsWith ? 0 : 1"
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetValue(this);
         }
@@ -1224,7 +1224,7 @@ namespace System.Collections.Specialized
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
         public IEnumerable<KeyValuePair<TKey, TValue>> RegExpNearNeighborsItems(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 ExtractValue    = true,
                 HammingDistance = hammingDistance,
@@ -1233,12 +1233,12 @@ namespace System.Collections.Specialized
                 HammingCostPerMissingCharacter = hammingCostPerMissingCharacter,
                 HammingCostPerExtraCharacter   = hammingCostPerExtraCharacter, // you could also make extra chars be free  "SearchOptions == StartsWith ? 0 : 1"
             };
-
+    
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetItem(this);
         }
         #endregion
-
+    
         // Range()
         #region Range()
         public enum RangeOption {
@@ -1289,7 +1289,7 @@ namespace System.Collections.Specialized
                 yield return null; // signal list all
                 yield break;
             }
-
+    
             Buffer convertedStart = null;
             if(start != default) {
                 convertedStart = m_keyBuffer;
@@ -1299,7 +1299,7 @@ namespace System.Collections.Specialized
                 else
                     convertedStart = null;
             }
-
+    
             Buffer convertedEnd = null;
             if(end != default) {
                 convertedEnd = new Buffer();
@@ -1309,22 +1309,22 @@ namespace System.Collections.Specialized
                 else
                     convertedEnd = null;
             }
-
+    
             if(convertedStart == null && convertedEnd == null) {
                 yield return null; // signal list all
                 yield break;
             }
-
+    
             ValidateParams();
-
+    
             var filterOptions = new FilterablePathEnumerator.Options(){
                 Owner                    = this,
                 ExtractValue             = extractValue,
                 HammingDistance          = 0,
             };
-
+    
             // since this is a hot path, we de-duplicate the code (with tiny changes) rather than re-evaluate the scenario every pass
-
+    
             if(convertedStart != null && convertedEnd != null) {
                 if(option == RangeOption.Alphabetical) {
                     filterOptions.CalculateHammingDistance = new Func<FilterablePathEnumerator.FilterItem, int>(o => {
@@ -1453,13 +1453,13 @@ namespace System.Collections.Specialized
                     return 0;
                 });
             }
-
+    
             // note:
             // CalculateHammingDistance() cannot check for too early results because we are drilling down the tree, 
             // such as [aaa] when start was [aaaaa]
-            
+                
             bool startListing = convertedStart == null;
-
+    
             // consider caching the enumerator if you call this often
             var enumerator = new FilterablePathEnumerator();
             foreach(var item in enumerator.Run(filterOptions)) {
@@ -1481,10 +1481,10 @@ namespace System.Collections.Specialized
                     }
                     startListing = true;
                 }
-
+    
                 yield return item;
             }
-
+    
             void ValidateParams() {
                 // verify start <= end
                 if(convertedStart != null && convertedEnd != null) {
@@ -1503,7 +1503,7 @@ namespace System.Collections.Specialized
                     // if start=AAAAA end=AA
                     if(all_equal_characters && convertedEnd.Length < convertedStart.Length)
                         throw new ArgumentException($"{nameof(end)} ({end}) < {nameof(start)} ({start})", nameof(end));
-
+    
                     // note: not sure if more specific tests should be done "if(option == RangeOption.ListingOrder)"
                 }
             }
@@ -1551,7 +1551,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region Optimize()
         /// <summary>
         ///     Rebuilds the tree in a way that localizes branches to be stored nearby.
@@ -1563,7 +1563,7 @@ namespace System.Collections.Specialized
         /// </remarks>
         public AdaptiveRadixTree<TKey, TValue> Optimize(Stream storageStream = null) {
             var res = new AdaptiveRadixTree<TKey, TValue>(storageStream, m_keyEncoder, m_valueEncoder, m_keyDecoder, m_valueDecoder);
-
+    
             var breadthFirstEnumerator   = new PathEnumerator();
             var items                    = breadthFirstEnumerator.Run(
                 new NodePointer(0, m_rootPointer), 
@@ -1573,36 +1573,36 @@ namespace System.Collections.Specialized
                 null, 
                 -1, 
                 PathEnumerator.TraversalAlgorithm.BreadthFirst);
-
+    
             // this could be massively sped up by using a redblacktree instead of sortedlist
-
+    
             // sorted by _old
             var oldAddressesOrdered      = new (long _old, long _oldStart, long _new)[this.Count];
             int oldAddressesOrderedCount = 0;
             bool first                   = true;
             var rawValueBuffer           = new Buffer();
             long alloc_position          = NODE_POINTER_BYTE_SIZE;
-
+    
             foreach(var path in items) {
                 var last               = path.Trail[path.Trail.Count - 1];
                 int size               = last.CalculateNodeSize();
                 long oldAddress        = last.Pointer.Target;
                 long oldAddressAddress = last.Pointer.Address;
                 long newAddress;
-
+    
                 // copy node from tree to tree
                 if(last.Type != NodeType.Leaf) {
                     var rawNode         = last.GetRawNode(breadthFirstEnumerator);
                     var num_children    = rawNode[1];
                     var current_size    = size;
-
+    
                     // optimize space
                     if(last.Type > NodeType.Node4 && num_children <= MaxChildCount(last.Type - 1)) {
                         // if the node is oversized versus the current needs, then downsize it
                         DowngradeNode(rawNode, last.Type);
                         current_size = CalculateNodeSize(last.Type - 1);
                     }
-
+    
                     newAddress          = alloc_position; // res.Alloc(current_size);
                     alloc_position     += current_size;
                     res.Stream.Position = newAddress;
@@ -1612,7 +1612,7 @@ namespace System.Collections.Specialized
                     //// shift-down
                     //if(last.ValueIndex != 0)
                     //    BlockCopy(last.ValueBuffer, last.ValueIndex, last.ValueBuffer, 0, last.ValueLength);
-
+    
                     // just to be sure, dont toy with the valuebuffer even if it should be fine
                     // this is in order to avoid potential future issues with code changes
                     Buffer bufferValue;
@@ -1623,41 +1623,41 @@ namespace System.Collections.Specialized
                         BlockCopy(last.ValueBuffer, last.ValueIndex, bufferValue.Content, 0, last.ValueLength);
                     } else
                         bufferValue = new Buffer(last.ValueBuffer) { Length = last.ValueLength };
-
+    
                     newAddress = res.CreateLeafNode(last.GetKeyRaw(path), bufferValue, alloc_size => { var temp = alloc_position; alloc_position += alloc_size; return temp; });
                 }
-
+    
                 // fix root pointer
                 if(first) {
                     first = false;
                     res.m_rootPointer = newAddress;
                 }
-
+    
                 // fix pointer to current
                 var index                   = ~BinarySearch(oldAddressesOrderedCount, oldAddressAddress);
                 var (_old, _oldStart, _new) = oldAddressesOrdered[index];
-
+    
                 WriteNodePointer(res.m_buffer, 0, newAddress);
                 res.Stream.Position = _new + (oldAddressAddress - _oldStart);
                 res.Stream.Write(res.m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-                
+                    
                 BinarySearchInsert(oldAddress + size, oldAddress, newAddress);
-
+    
                 res.LongCount++;
             }
-
+    
             res.m_memoryManager.Load(new[] { ((long)0, alloc_position) });
-
+    
             return res;
-
+    
             int BinarySearch(int length, long value) {
                 int min = 0;
                 int max = min + length - 1;
-                
+                    
                 while(min <= max) {
                     int median = (min + max) >> 1;
                     var diff   = oldAddressesOrdered[median]._old - value;
-                    
+                        
                     if(diff < 0)
                         min = median + 1;
                     else if(diff > 0)
@@ -1665,13 +1665,13 @@ namespace System.Collections.Specialized
                     else
                         return median;
                 }
-                
+                    
                 return ~min;
             }
             void BinarySearchInsert(long oldAddress, long oldStart, long newAddress) {
                 if(oldAddressesOrderedCount == oldAddressesOrdered.Length)
                     Array.Resize(ref oldAddressesOrdered, oldAddressesOrderedCount * 2);
-
+    
                 var index = ~BinarySearch(oldAddressesOrderedCount, oldAddress);
                 if(index < oldAddressesOrderedCount) {
                     // up-shift
@@ -1694,33 +1694,33 @@ namespace System.Collections.Specialized
         /// </summary>
         public bool CalculateShortestUniqueKey(in TKey key, out TKey result) {
             var path = this.TryGetPath(in key, false, true);
-
+    
             // if no root or not found
             if(path == null || !path.IsKeyExactMatch()) {
                 result = default;
                 return false;
             }
-
+    
             var encodedKey       = path.EncodedSearchKey;
             var uniqueTrailStart = path.CalculateTrailUniquenessStart();
-
+    
             int uniqueLength = 1;
             for(int i = 0; i < uniqueTrailStart; i++)
                 uniqueLength += path.Trail[i].PartialKeyLength;
-            
+                
             result = encodedKey.GetPartialKey(this, ref uniqueLength);
             return true;
         }
         #endregion
-
+    
         #region DebugDump()
         public string DebugDump(bool includeMemoryManagerMemoryDump = false) {
             var sb = new StringBuilder();
             long totalNodesSize = NODE_POINTER_BYTE_SIZE; // root pointer
-
+    
             sb.AppendLine($"RootPointer @0 -> {m_rootPointer}");
             sb.AppendLine();
-
+    
             try{
                 DumpNodes();
                 sb.AppendLine();
@@ -1731,13 +1731,13 @@ namespace System.Collections.Specialized
                 sb.AppendLine("=============================");
                 sb.AppendLine(ex.ToString());
             }
-
+    
             sb.AppendLine();
             DumpMemoryManager();
             if(includeMemoryManagerMemoryDump)
                 DumpMemoryManagerMemory();
             sb.AppendLine();
-
+    
             try{
                 DumpItems();
             } catch(Exception ex) {
@@ -1746,10 +1746,10 @@ namespace System.Collections.Specialized
                 sb.AppendLine("=============================");
                 sb.AppendLine(ex.ToString());
             }
-
-
+    
+    
             return sb.ToString();
-
+    
             void DumpNodes() {
                 var raw = new byte[4096];
                 foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, true, true)) {
@@ -1758,7 +1758,7 @@ namespace System.Collections.Specialized
                     string value    = last.Type != NodeType.Leaf ? null : "  value=" + last.GetValue(this).ToString();
                     var size        = last.CalculateNodeSize();
                     totalNodesSize += size;
-
+    
                     sb.Append(' ', (path.Trail.Count - 1) * 3);
                     sb.AppendLine($"[@{last.Pointer.Target} ({size} bytes)] key='{key.ToString().Replace("\0", "\\0")}'  {last.Type.ToString()}{value?.ToString().Replace("\0", "\\0")}");
                 }
@@ -1772,14 +1772,29 @@ namespace System.Collections.Specialized
                     sb.AppendLine($"[{index++}] {item.Key.ToString().Replace("\0", "\\0")} - {item.Value?.ToString().Replace("\0", "\\0")}");
             }
             void DumpMemoryManager() {
+                var sub_memory_managers = new[] { 
+                    new { MemManager = m_memoryManagerNode4,   VarName = nameof(m_memoryManagerNode4) },
+                    new { MemManager = m_memoryManagerNode8,   VarName = nameof(m_memoryManagerNode8) },
+                    new { MemManager = m_memoryManagerNode16,  VarName = nameof(m_memoryManagerNode16) },
+                    new { MemManager = m_memoryManagerNode32,  VarName = nameof(m_memoryManagerNode32) },
+                    new { MemManager = m_memoryManagerNode64,  VarName = nameof(m_memoryManagerNode64) },
+                    new { MemManager = m_memoryManagerNode128, VarName = nameof(m_memoryManagerNode128) },
+                    new { MemManager = m_memoryManagerNode256, VarName = nameof(m_memoryManagerNode256) },
+                };
+                var sum_preallocated = sub_memory_managers.Sum(o => o.MemManager.TotalFree);
+    
                 sb.AppendLine($"MEMORY (capacity={m_memoryManager.Capacity})");
                 sb.AppendLine("=============================");
-                sb.AppendLine($"used={m_memoryManager.TotalAllocated}");
+                sb.AppendLine($"used={m_memoryManager.TotalAllocated} - {sum_preallocated} (pre-allocated/re-use) = {m_memoryManager.TotalAllocated - sum_preallocated} actually used");
                 sb.AppendLine($"free={m_memoryManager.TotalFree}");
+    
+                sb.AppendLine("----- pre-allocated/re-used chunks -----");
+                foreach(var item in sub_memory_managers)
+                    sb.AppendLine(string.Format("{0}.{1} = {2}   ({3} items)", item.VarName, nameof(FixedSizeMemoryManager.TotalFree), item.MemManager.TotalFree, item.MemManager.TotalFree / item.MemManager.AllocSize));
             }
             void DumpMemoryManagerMemory() {
                 var avails = m_memoryManager.GetAvailableMemory().ToList();
-
+    
                 sb.AppendLine();
                 sb.AppendLine($"MEMORY AVAILABLE ({avails.Count})");
                 for(int i = 0; i < avails.Count; i++) {
@@ -1797,18 +1812,30 @@ namespace System.Collections.Specialized
         public string CalculateMetrics() {
             var sb    = new StringBuilder();
             var nodes = new Dictionary<long, InternalMetrics>();
-
+    
             foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, false, false)) {
                 foreach(var trail in path.Trail) {
                     var key = trail.Pointer.Target;
                     if(!nodes.TryGetValue(key, out var metrics)) {
-                        metrics = new InternalMetrics() { Node = trail };
+                        // clone the node because this is meant for immediate use, otherwise objects are re-used
+                        metrics = new InternalMetrics() { Node = (PathEnumerator.Node)trail.Clone() };
                         nodes.Add(key, metrics);
                     }
                     metrics.ReferenceCount++;
                 }
             }
-
+    
+            var sub_memory_managers = new[] { 
+                new { MemManager = m_memoryManagerNode4,   VarName = nameof(m_memoryManagerNode4) },
+                new { MemManager = m_memoryManagerNode8,   VarName = nameof(m_memoryManagerNode8) },
+                new { MemManager = m_memoryManagerNode16,  VarName = nameof(m_memoryManagerNode16) },
+                new { MemManager = m_memoryManagerNode32,  VarName = nameof(m_memoryManagerNode32) },
+                new { MemManager = m_memoryManagerNode64,  VarName = nameof(m_memoryManagerNode64) },
+                new { MemManager = m_memoryManagerNode128, VarName = nameof(m_memoryManagerNode128) },
+                new { MemManager = m_memoryManagerNode256, VarName = nameof(m_memoryManagerNode256) },
+            };
+            var sum_preallocated = sub_memory_managers.Sum(o => o.MemManager.TotalFree);
+    
             sb.AppendLine($"nodes = {nodes.Values.Where(o => o.Node.Type != NodeType.Leaf).Count()}");
             sb.AppendLine($"leafs/items = {nodes.Values.Where(o => o.Node.Type == NodeType.Leaf).Count()}");
             sb.AppendLine();
@@ -1843,9 +1870,9 @@ namespace System.Collections.Specialized
                 sb.AppendLine($"leafs.keys.length[{group.Key.ToString()}].Count = {group.Value}");
             sb.AppendLine();
             sb.AppendLine($"memory_manager.capacity        = {m_memoryManager.Capacity}");
-            sb.AppendLine($"memory_manager.total_allocated = {m_memoryManager.TotalAllocated}");
+            sb.AppendLine($"memory_manager.total_allocated = {m_memoryManager.TotalAllocated} - {sum_preallocated} (pre-allocated/re-use) = {m_memoryManager.TotalAllocated - sum_preallocated} actually used");
             sb.AppendLine($"memory_manager.total_free      = {m_memoryManager.TotalFree}");
-
+    
             return sb.ToString();
         }
         private class InternalMetrics {
@@ -1853,8 +1880,8 @@ namespace System.Collections.Specialized
             public long ReferenceCount;
         }
         #endregion
-
-        
+    
+            
         // add() logic here
         #region private TryAddItem()
         /// <summary>
@@ -1867,27 +1894,27 @@ namespace System.Collections.Specialized
             if(path != null && path.IsKeyExactMatch())
                 // key already exists
                 return false;
-
+    
             var valueBuffer = m_valueBuffer;
             m_valueEncoder(value, valueBuffer);
-
+    
             if(path != null) {
                 var encodedKeySpan = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, 0, path.EncodedSearchKey.Length);
-
+    
                 if(path.Trail.Count != 0) {
                     // if theres only a partial match
                     var last              = path.Trail[path.Trail.Count - 1];
                     var key_match_length  = path.CalculateKeyMatchLength();
                     var partial_key_match = encodedKeySpan.Slice(key_match_length - last.PartialKeyMatchLength, last.PartialKeyMatchLength);
                     var new_leaf_key      = encodedKeySpan.Slice(key_match_length);
-
+    
                     var new_leaf_address = this.CreateLeafNode(in new_leaf_key, valueBuffer);
-
+    
                     // need to reload m_buffer with 'last' for AddItem()
                     this.Stream.Position = last.Address;
                     // intentionally dont try to load all if leaf, since it wont be entirely read most times
                     int readBytes        = this.Stream.Read(m_buffer, 0, CalculateNodePrefetchSize(last.Type));
-
+    
                     this.AddItem(
                         new NodePointer(last.ParentPointerAddress, last.Address),
                         //key_match_length,
@@ -1900,9 +1927,9 @@ namespace System.Collections.Specialized
                 } else {
                     // if theres literally nothing in common with root node, then we must add to root node
                     // keep in mind we share no partial key at all with the root
-
+    
                     var new_leaf_address = this.CreateLeafNode(in encodedKeySpan, valueBuffer);
-
+    
                     // need to reload m_buffer for AddItem()
                     var root             = m_rootPointer;
                     this.Stream.Position = root;
@@ -1910,7 +1937,7 @@ namespace System.Collections.Specialized
                     m_buffer[0]          = (byte)nodeType;
                     // intentionally dont try to load all if leaf, since it wont be entirely read most times
                     int readBytes        = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     this.AddItem(
                         new NodePointer(0, root),
                         //0,
@@ -1928,18 +1955,18 @@ namespace System.Collections.Specialized
                 if(keyBuffer.Length == 0)
                     throw new ArgumentException(nameof(key));
                 EscapeLeafKeyTerminator(keyBuffer);
-
+    
                 var encodedKeySpan = new ReadOnlySpan<byte>(keyBuffer.Content, 0, keyBuffer.Length);
-
+    
                 // leaf node
                 var new_leaf_address = this.CreateLeafNode(in encodedKeySpan, valueBuffer);
-
+    
                 WriteNodePointer(m_buffer, 0, new_leaf_address);
                 this.Stream.Position = 0;
                 this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
                 m_rootPointer = new_leaf_address;
             }
-
+    
             this.LongCount++;
             return true;
         }
@@ -1953,10 +1980,10 @@ namespace System.Collections.Specialized
         /// <param name="bufferRead">Only used in some specific scenarios</param>
         private void AddItem(NodePointer ptr, in ReadOnlySpan<byte> partial_key_match, int partial_key_length, int value_length, int bufferRead, byte new_item_c, long new_item_address) {
             var nodeType = (NodeType)m_buffer[0];
-
+    
             if(nodeType != NodeType.Leaf) {
                 var num_children = m_buffer[1];
-
+    
                 // if fully matching the current node
                 if(partial_key_match.Length == partial_key_length) {
                     // if space remains in node
@@ -1968,20 +1995,20 @@ namespace System.Collections.Specialized
                         // if the node is at capacity, then upgrade it, then add
                         UpgradeNode(m_buffer, nodeType);
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
-
+    
                         var new_node_type    = (NodeType)m_buffer[0];
                         var new_size         = CalculateNodeSize(new_node_type);
                         var new_address      = this.Alloc(new_node_type);
                         this.Stream.Position = new_address;
                         this.Stream.Write(m_buffer, 0, new_size);
-
+    
                         WriteNodePointer(m_buffer, 0, new_address);
                         this.Stream.Position = ptr.Address;
                         this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                         if(ptr.Address == 0)
                             m_rootPointer = new_address;
-
+    
                         this.Free(ptr.Target, nodeType);
                     }
                 } else {
@@ -2003,7 +2030,7 @@ namespace System.Collections.Specialized
                     //      [g]             as a compromise we only merge if both partial keys fit within one, otherwise, we leave as-is
                     var old_branch_prefixes = new ReadOnlySpan<byte>(m_buffer, 3 + partial_key_match.Length, partial_key_length - partial_key_match.Length).ToArray();
                     bool use_node_merge     = false;
-
+    
                     if(num_children == 1) {
                         // read the node at the end of m_buffer as it can't overlap with the current entry
                         var child            = GetMinChild(m_buffer, ptr.Target);
@@ -2015,7 +2042,7 @@ namespace System.Collections.Specialized
                             m_buffer[childWriteIndex] = (byte)child_nodetype;
                             var readBytes             = this.Stream.Read(m_buffer, childWriteIndex + 1, child_size - 1) + 1;
                             var child_partial_length  = m_buffer[childWriteIndex + 2];
-
+    
                             // if merge confirmed, then prepend old_branch_prefixes on secondary node
                             if(child_partial_length + old_branch_prefixes.Length <= MAX_PREFIX_LEN) {
                                 use_node_merge       = true;
@@ -2026,7 +2053,7 @@ namespace System.Collections.Specialized
                                 var old_branch_c       = old_branch_prefixes[0];
                                 this.Stream.Position   = old_branch_address;
                                 this.Stream.Write(m_buffer, childWriteIndex, child_size);
-
+    
                                 CreateEmptyNode4(m_buffer, 0, in partial_key_match);
                                 AddItemToNonFullNode(m_buffer, 0, old_branch_c, old_branch_address);
                                 AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
@@ -2034,20 +2061,20 @@ namespace System.Collections.Specialized
                                 var new_branch_address = this.Alloc(NodeType.Node4);
                                 this.Stream.Position   = new_branch_address;
                                 this.Stream.Write(m_buffer, 0, size2);
-
+    
                                 WriteNodePointer(m_buffer, 0, new_branch_address);
                                 this.Stream.Position = ptr.Address;
                                 this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                                 if(ptr.Address == 0)
                                     m_rootPointer = new_branch_address;
-
+    
                                 this.Free(ptr.Target, nodeType);
                                 this.Free(child.Target, child_nodetype);
                             }
                         }
                     }
-
+    
                     if(!use_node_merge) {
                         m_buffer[2] = unchecked((byte)old_branch_prefixes.Length);
                         BlockCopy(old_branch_prefixes, 0, m_buffer, 3, old_branch_prefixes.Length);
@@ -2056,7 +2083,7 @@ namespace System.Collections.Specialized
                         var old_branch_c       = old_branch_prefixes[0];
                         this.Stream.Position   = old_branch_address;
                         this.Stream.Write(m_buffer, 0, size);
-
+    
                         CreateEmptyNode4(m_buffer, 0, in partial_key_match);
                         AddItemToNonFullNode(m_buffer, 0, old_branch_c, old_branch_address);
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
@@ -2064,14 +2091,14 @@ namespace System.Collections.Specialized
                         var new_branch_address = this.Alloc(NodeType.Node4);
                         this.Stream.Position   = new_branch_address;
                         this.Stream.Write(m_buffer, 0, size2);
-
+    
                         WriteNodePointer(m_buffer, 0, new_branch_address);
                         this.Stream.Position = ptr.Address;
                         this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                         if(ptr.Address == 0)
                             m_rootPointer = new_branch_address;
-
+    
                         this.Free(ptr.Target, nodeType);
                     }
                 }
@@ -2079,12 +2106,12 @@ namespace System.Collections.Specialized
                 if(partial_key_match.Length > 0 && partial_key_match.Length < partial_key_length - 1) { // partial_key_match.Length > 0
                     // if this breaks, it means you called this method when the key already existed
                     System.Diagnostics.Debug.Assert(partial_key_match.Length < partial_key_length);
-
+    
                     // need to shorten the key of the leaf by partial_key_match.Length bytes
                     var currentLeafSize = CalculateLeafNodeSize(partial_key_length, value_length);
                     var resizedLeafSize = CalculateLeafNodeSize(partial_key_length - partial_key_match.Length, value_length);
                     var bytes_removed   = currentLeafSize - resizedLeafSize;
-
+    
                     int index = 1;
                     WriteVarUInt64(m_buffer, ref index, unchecked((ulong)(partial_key_length - partial_key_match.Length)));
                     WriteVarUInt64(m_buffer, ref index, unchecked((ulong)value_length));
@@ -2094,33 +2121,33 @@ namespace System.Collections.Specialized
                     long writePosition      = resizedLeafAddress;
                     bool firstCharacterRead = false;
                     byte firstCharacter     = 0;
-
+    
                     // copy prev leaf to new leaf (with shorter key)
                     while(remaining > 0) {
                         var processed = Math.Min(remaining, m_buffer.Length - index);
-
+    
                         this.Stream.Position = readPosition;
                         int readBytes = this.Stream.Read(m_buffer, index, processed);
-
+    
                         this.Stream.Position = writePosition;
                         this.Stream.Write(m_buffer, 0, index + readBytes);
-
+    
                         if(!firstCharacterRead && readBytes > 0) {
                             firstCharacter     = m_buffer[index];
                             firstCharacterRead = true;
                         }
-
+    
                         readPosition  += readBytes;
                         writePosition += index + readBytes;
                         remaining     -= readBytes;
                         index          = 0;
                     }
-
+    
                     var children = new List<(byte c, long address)>(2) {
                         (firstCharacter, resizedLeafAddress),
                         (new_item_c, new_item_address)
                     };
-
+    
                     // then build the entire partial_key_match branch that has just been removed from key
                     for(int i = ((partial_key_match.Length - 1) / MAX_PREFIX_LEN) * MAX_PREFIX_LEN; i >= 0; i -= MAX_PREFIX_LEN) {
                         var current_node_partial_key = partial_key_match.Slice(i, Math.Min(MAX_PREFIX_LEN, partial_key_match.Length - i));
@@ -2130,28 +2157,28 @@ namespace System.Collections.Specialized
                         var current_node_address = this.Alloc(NodeType.Node4);
                         this.Stream.Position = current_node_address;
                         this.Stream.Write(m_buffer, 0, CalculateNodeSize(NodeType.Node4));
-
+    
                         children.Clear();
                         children.Add((current_node_partial_key[0], current_node_address));
                     }
-                    
+                        
                     WriteNodePointer(m_buffer, 0, children[0].address);
                     this.Stream.Position = ptr.Address;
                     this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                     if(ptr.Address == 0)
                         m_rootPointer = children[0].address;
-                    
+                        
                     this.Free(ptr.Target, currentLeafSize);
                 } else if(partial_key_match.Length > 0) {
                     // this case is basically when your tree is [aaaa] and you try to add [aaaaXXXX]
-
+    
                     System.Diagnostics.Debug.Assert(partial_key_match.Length == partial_key_length - 1);
-
+    
                     // make a new leaf for the current leaf, with key being just LEAF_NODE_KEY_TERMINATOR
                     // copy the value from whats been already read
                     var valueBuffer = m_valueBuffer;
-
+    
                     valueBuffer.EnsureCapacity(value_length);
                     valueBuffer.Length               = value_length;
                     var current_leaf_raw_value_start = 1 + CalculateVarUInt64Length(unchecked((ulong)partial_key_length)) + CalculateVarUInt64Length(unchecked((ulong)value_length)) + partial_key_length;
@@ -2162,26 +2189,26 @@ namespace System.Collections.Specialized
                         this.Stream.Position = ptr.Target + bufferRead;
                         this.Stream.Read(valueBuffer.Content, size, remaining);
                     }
-
+    
                     var current_leaf_address = this.CreateLeafNode(ReadOnlySpan<byte>.Empty, valueBuffer);
                     var current_leaf_c       = LEAF_NODE_KEY_TERMINATOR;
-
+    
                     CreateEmptyNode4(m_buffer, 0, in partial_key_match);
                     AddItemToNonFullNode(m_buffer, 0, current_leaf_c, current_leaf_address);
                     AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
-
+    
                     size                 = CalculateNodeSize(NodeType.Node4);
                     var new_leaf_address = this.Alloc(NodeType.Node4);
                     this.Stream.Position = new_leaf_address;
                     this.Stream.Write(m_buffer, 0, size);
-
+    
                     WriteNodePointer(m_buffer, 0, new_leaf_address);
                     this.Stream.Position = ptr.Address;
                     this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                     if(ptr.Address == 0) // as explained, this should always be true
                         m_rootPointer = new_leaf_address;
-
+    
                     this.Free(ptr.Target, CalculateLeafNodeSize(partial_key_length, value_length));
                 } else { // partial_key_match.Length == 0
                     // this case is basically when your tree contains only one node [aaaa] you you try to insert [bbbb]
@@ -2190,27 +2217,27 @@ namespace System.Collections.Specialized
                     // in every other case, you should have *some* common prefix with the parent branch and thus not end up here
                     // ie: [*root* AB] -> [CDE] -> [*leaf* F]
                     //     if adding 'ABCDEXXXXX', then you should be adding to the node [CDE] and *not* the leaf 'F'
-
+    
                     // so the code here assumes ptr.Address==0
                     // which also means we intentionally create a node4 without any partial key
-
+    
                     // this works because all leafs must contain 1+ partial_length
                     var current_leaf_c       = m_buffer[CalculateVarUInt64LengthEncoded(m_buffer[1]) + 1];
                     var current_leaf_address = ptr.Target;
-
+    
                     CreateEmptyNode4(m_buffer, 0, in partial_key_match); // note: partial_key_match is empty
                     AddItemToNonFullNode(m_buffer, 0, current_leaf_c, current_leaf_address);
                     AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
-
+    
                     var size             = CalculateNodeSize(NodeType.Node4);
                     var new_leaf_address = this.Alloc(NodeType.Node4);
                     this.Stream.Position = new_leaf_address;
                     this.Stream.Write(m_buffer, 0, size);
-
+    
                     WriteNodePointer(m_buffer, 0, new_leaf_address);
                     this.Stream.Position = ptr.Address;
                     this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                     if(ptr.Address == 0) // as explained, this should always be true
                         m_rootPointer = new_leaf_address;
                 }
@@ -2221,12 +2248,12 @@ namespace System.Collections.Specialized
         private static void AddItemToNonFullNode(byte[] buffer, int index, byte c, long address) {
             // just rewrite the entire node, since that is likely faster than selectively writing just what changed and make multiple calls to Stream.Write()
             // keep in mind, Stream.Write() can be quite convoluted, with writeahead logs or even memory paging and whatnot
-
+    
             var nodeType      = (NodeType)buffer[index + 0];
             var num_children  = buffer[index + 1];
             int key_index     = CalculateKeysIndex(nodeType) + index;
             buffer[index + 1] = unchecked((byte)(num_children + 1));
-
+    
             switch(nodeType) {
                 case NodeType.Node4:
                 case NodeType.Node8:
@@ -2274,17 +2301,17 @@ namespace System.Collections.Specialized
             // char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial
             // char[n]               keys (no-order) |  char[n]               keys (ordered)  |  char[256]             keys (index+1)  |  ---
             // NodePointer[n]        children        |  NodePointer[n]        children        |  NodePointer[n]        children        |  NodePointer[n]        children
-
+    
             var upgradedNodeType = currentNodeType + 1;
-
+    
             if(currentNodeType >= NodeType.Node4 && currentNodeType <= NodeType.Node16) {
                 var num_children = buffer[1];
                 var index        = CalculateKeysIndex(currentNodeType);
-                
+                    
                 if(currentNodeType == NodeType.Node8)
                     // must order 8 keys/children
                     SelectionSortNode8Keys(buffer);
-
+    
                 BlockCopy(
                     buffer, 
                     index + MaxChildCount(currentNodeType),
@@ -2294,14 +2321,14 @@ namespace System.Collections.Specialized
             } else if(currentNodeType == NodeType.Node32) {
                 var num_children = buffer[1];
                 var index        = CalculateKeysIndex(NodeType.Node32);
-
+    
                 BlockCopy(
                     buffer, 
                     index + MaxChildCount(NodeType.Node32),
                     buffer, 
                     index + 256,
                     num_children * NODE_POINTER_BYTE_SIZE);
-
+    
                 // then move the keys to the node64 format
                 int keysCopyIndex = buffer.Length - num_children - 1;
                 BlockCopy(buffer, index, buffer, keysCopyIndex, num_children);
@@ -2329,7 +2356,7 @@ namespace System.Collections.Specialized
                 }
             } else
                 throw new ArgumentException(nameof(currentNodeType));
-            
+                
             buffer[0] = (byte)upgradedNodeType;
         }
         #endregion
@@ -2338,11 +2365,11 @@ namespace System.Collections.Specialized
         private static void SelectionSortNode8Keys(byte[] buffer) {
             var num_children = buffer[1]; // should be 8, but could be theoretically 0-8
             var keys_start   = CalculateKeysIndex(NodeType.Node8);
-
+    
             for(int i = 0; i < num_children - 1; i++) {
                 int min_index  = i;
                 byte min_value = buffer[keys_start + i];
-
+    
                 for(int j = i + 1; j < num_children; j++) {
                     var current = buffer[keys_start + j];
                     if(current < min_value) {
@@ -2350,7 +2377,7 @@ namespace System.Collections.Specialized
                         min_value = current;
                     }
                 }
-
+    
                 if(min_index != i) {
                     //swap(buffer[keys_start + i], buffer[keys_start + min_index]);
                     var swap                       = buffer[keys_start + i];
@@ -2375,7 +2402,7 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static int BinarySearchInsert(byte[] array, int min, int length, byte value) {
             var index = BinarySearch(array, min, length, value);
-            
+                
             if(index < 0) {
                 index = ~index;
                 if(index < min + length) {
@@ -2386,11 +2413,11 @@ namespace System.Collections.Specialized
                 array[index] = value;
             } else
                 throw new ArgumentException("The value already exists.", nameof(value));
-
+    
             return index - min;
         }
         #endregion
-
+    
         // remove() logic here
         #region private TryRemoveItem()
         /// <summary>
@@ -2403,27 +2430,27 @@ namespace System.Collections.Specialized
             if(path == null || !path.IsKeyExactMatch())
                 // key isnt found
                 return false;
-
+    
             int uniqueTrailStart = path.CalculateTrailUniquenessStart();
-            
+                
             int uniqueLength = 1;
             for(int i = 0; i < uniqueTrailStart; i++)
                 uniqueLength += path.Trail[i].PartialKeyLength;
-
+    
             // the item to remove within node
             var keyToRemove  = uniqueLength - 1 < path.EncodedSearchKey.Length ? path.EncodedSearchKey.Content[uniqueLength - 1] : LEAF_NODE_KEY_TERMINATOR;
             var nodeToModify = path.Trail[Math.Max(uniqueTrailStart - 1, 0)];
-
+    
             // if removing the last item 
             var removingLastItem = this.LongCount == 1; // nodeToModify.Type != NodeType.Leaf && nodeToModify.ChildrenCount == 1;
             if(!removingLastItem) {
                 var old_size = CalculateNodeSize(nodeToModify.Type);
-                
+                    
                 this.Stream.Position = nodeToModify.Address;
                 this.Stream.Read(m_buffer, 0, old_size);
-
+    
                 RemoveItemFromNode(m_buffer, 0, keyToRemove);
-
+    
                 // ex:      [abc]         try to delete 'abcde\0'         [abc]
                 //         /     \        which should generate:         /     \
                 //        /       \                                     /       \
@@ -2442,78 +2469,78 @@ namespace System.Collections.Specialized
                     var ptr              = GetMinChild(m_buffer, nodeToModify.Address);
                     this.Stream.Position = ptr.Target;
                     var offBranchType    = (NodeType)this.Stream.ReadByte();
-                
+                    
                     if(offBranchType != NodeType.Leaf) {
                         var new_size           = CalculateNodeSize(offBranchType);
                         var readBytes          = this.Stream.Read(m_buffer, old_size + 1, new_size - 1) + 1;
                         var partial_length     = m_buffer[2];
                         var off_partial_length = m_buffer[old_size + 2];
-                
+                    
                         if(partial_length + off_partial_length <= MAX_PREFIX_LEN) {
                             use_node_merge = true;
-                
+                    
                             // merge partial_key
                             m_buffer[old_size]     = (byte)offBranchType;
                             m_buffer[old_size + 2] = unchecked((byte)(partial_length + off_partial_length));
                             BlockCopy(m_buffer, old_size + 3, m_buffer, old_size + 3 + partial_length, off_partial_length);
                             BlockCopy(m_buffer, 3, m_buffer, old_size + 3, partial_length);
-                
+                    
                             var new_address      = this.Alloc(offBranchType);
                             this.Stream.Position = new_address;
                             this.Stream.Write(m_buffer, old_size, new_size);
-                
+                    
                             WriteNodePointer(m_buffer, 0, new_address);
                             this.Stream.Position = nodeToModify.ParentPointerAddress;
                             this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-                
+                    
                             if(nodeToModify.ParentPointerAddress == 0)
                                 m_rootPointer = new_address;
-                
+                    
                             this.Free(nodeToModify.Address, nodeToModify.Type);
                             this.Free(ptr.Target, offBranchType);
                         }
                     }
                 }
-
+    
                 if(!use_node_merge){
                     var new_size   = old_size;
                     var alloc_type = nodeToModify.Type;
-
+    
                     if(nodeToModify.ChildrenCount - 1 < MinChildCount(nodeToModify.Type)) {
                         DowngradeNode(m_buffer, nodeToModify.Type);
                         alloc_type = nodeToModify.Type - 1;
                         new_size   = CalculateNodeSize(alloc_type);
                     }
-
+    
                     var new_address      = this.Alloc(alloc_type);
                     this.Stream.Position = new_address;
                     this.Stream.Write(m_buffer, 0, new_size);
-
+    
                     WriteNodePointer(m_buffer, 0, new_address);
                     this.Stream.Position = nodeToModify.ParentPointerAddress;
                     this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-
+    
                     if(nodeToModify.ParentPointerAddress == 0)
                         m_rootPointer = new_address;
-
+    
                     this.Free(nodeToModify.Address, nodeToModify.Type);
                 }
-
+    
                 // free memory
                 for(int i = Math.Max(uniqueTrailStart, 1); i < path.Trail.Count; i++) {
                     var node  = path.Trail[i];
-
+    
                     if(node.Type != NodeType.Leaf)
                         this.Free(node.Address, node.Type);
                     else
                         this.Free(node.Address, CalculateLeafNodeSize(node.PartialKeyLength, node.ValueLength));
                 }
-
+    
                 this.LongCount--;
             } else
                 // case where there is only 1 item in total, and its the one were removing
                 this.Clear();
-
+    
             return true;
         }
         #endregion
@@ -2521,12 +2548,12 @@ namespace System.Collections.Specialized
         private static void RemoveItemFromNode(byte[] buffer, int index, byte c) {
             // just rewrite the entire node, since that is likely faster than selectively writing just what changed and make multiple calls to Stream.Write()
             // keep in mind, Stream.Write() can be quite convoluted, with writeahead logs or even memory paging and whatnot
-
+    
             var nodeType      = (NodeType)buffer[index + 0];
             var num_children  = buffer[index + 1];
             int key_index     = CalculateKeysIndex(nodeType) + index;
             buffer[index + 1] = unchecked((byte)(num_children - 1));
-
+    
             switch(nodeType) {
                 case NodeType.Node4:
                 case NodeType.Node8:
@@ -2545,27 +2572,27 @@ namespace System.Collections.Specialized
                             break;
                         }
                     }
-
+    
                     break;
                 case NodeType.Node16:
                 case NodeType.Node32:
                     // code below needs testing
-
+    
                     var deleteIndex = BinarySearch(buffer, key_index, num_children, c) - key_index;
                     // down-shift
                     var count   = num_children - deleteIndex - 1;
                     BlockCopy(buffer, key_index + deleteIndex + 1, buffer, key_index + deleteIndex, count);
-
+    
                     key_index  += MaxChildCount(nodeType);
                     var start   = key_index + deleteIndex * NODE_POINTER_BYTE_SIZE;
                     count       = (num_children - deleteIndex - 1) * NODE_POINTER_BYTE_SIZE;
                     BlockCopy(buffer, start + NODE_POINTER_BYTE_SIZE, buffer, start, count);
-
+    
                     break;
                 case NodeType.Node64:
                 case NodeType.Node128:
                     // since the add always write to num_children position, we need to find the key pointing to it
-
+    
                     // code below needs testing
                     var old_index = buffer[key_index + c];
                     buffer[key_index + c] = 0;
@@ -2598,13 +2625,13 @@ namespace System.Collections.Specialized
             // char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial         |  char[MAX_PREFIX_LEN]  partial
             // char[n]               keys (no-order) |  char[n]               keys (ordered)  |  char[256]             keys (index+1)  |  ---
             // NodePointer[n]        children        |  NodePointer[n]        children        |  NodePointer[n]        children        |  NodePointer[n]        children
-        
+            
             var downgradedNodeType = currentNodeType - 1;
-
+    
             if(currentNodeType >= NodeType.Node8 && currentNodeType <= NodeType.Node32) {
                 var num_children = buffer[1];
                 var index        = CalculateKeysIndex(currentNodeType);
-
+    
                 BlockCopy(
                     buffer, 
                     index + MaxChildCount(currentNodeType),
@@ -2616,7 +2643,7 @@ namespace System.Collections.Specialized
                 var index              = CalculateKeysIndex(NodeType.Node64);
                 int lastValidIndex     = 0;
                 int childrenWriteIndex = buffer.Length - num_children * NODE_POINTER_BYTE_SIZE - 1;
-
+    
                 for(int i = 0; i < 256; i++) {
                     var key = buffer[index + i];
                     if(key == 0)
@@ -2636,7 +2663,7 @@ namespace System.Collections.Specialized
                 int keysWriteIndex = buffer.Length - 256 - 1;
                 int lastValidIndex = 0;
                 Array.Clear(buffer, keysWriteIndex, 256);
-
+    
                 for(int i = 0; i < 256; i++) {
                     var child = ReadNodePointer(buffer, index + i * NODE_POINTER_BYTE_SIZE);
                     if(child == 0)
@@ -2650,7 +2677,7 @@ namespace System.Collections.Specialized
                 BlockCopy(buffer, keysWriteIndex, buffer, index, 256);
             } else
                 throw new ArgumentException(nameof(currentNodeType));
-            
+                
             buffer[0] = (byte)downgradedNodeType;
         }
         #endregion
@@ -2662,7 +2689,7 @@ namespace System.Collections.Specialized
         private static int MinChildCount(NodeType nodeType) {
             //return MaxChildCount(nodeType - 1) + 1;
             //return MaxChildCount(nodeType - 1) * 1.50 + 1;
-
+    
             switch(nodeType) {
                 case NodeType.Node4:   return 0; // 0 prevents trying to downsize
                 case NodeType.Node8:   return 3;
@@ -2672,14 +2699,14 @@ namespace System.Collections.Specialized
                 case NodeType.Node128: return 49;
                 case NodeType.Node256: return 97;
             }
-
+    
             // dont throw as it prevents inlining
             System.Diagnostics.Debug.Fail("Invalid node type.");
-
+    
             return 0;
         }
         #endregion
-
+    
         #region protected TryGetPath()
         /// <summary>
         ///    O(k)    (k = # of characters)
@@ -2690,21 +2717,21 @@ namespace System.Collections.Specialized
         protected Path TryGetPath(in TKey key, bool fetchValue, bool throwOnEmptyKey) {
             if(m_rootPointer == 0)
                 return null;
-
+    
             var current      = new NodePointer(0, m_rootPointer);
             int compareIndex = 0;
             var keyBuffer    = m_keyBuffer;
             m_keyEncoder(key, keyBuffer);
-
+    
             if(keyBuffer.Length == 0) {
                 if(throwOnEmptyKey)
                     throw new ArgumentException(nameof(key));
                 else
                     return null;
             }
-
+    
             EscapeLeafKeyTerminator(keyBuffer);
-
+    
             var res = new Path(){
                 Trail            = new List<NodeData>(8),
                 Value            = default,
@@ -2712,20 +2739,20 @@ namespace System.Collections.Specialized
                 LastBuffer       = m_buffer,
                 LastRead         = -1,
             };
-
+    
             while(current.Target != 0) {
                 this.Stream.Position = current.Target;
                 var nodeType = (NodeType)this.Stream.ReadByte();
                 m_buffer[0]  = (byte)nodeType;
-
+    
                 // assume fetching data is faster than multiple calls
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
                 res.LastRead  = readBytes;
-
+    
                 if(nodeType == NodeType.Leaf) {
                     int readIndex = 1;
                     bool bufferChanged;
-
+    
                     var leafData = new NodeData(){
                         Type                  = NodeType.Leaf,
                         Address               = current.Target,
@@ -2747,7 +2774,7 @@ namespace System.Collections.Specialized
                         out leafData.ValueLength,
                         out bufferChanged);
                     res.Trail.Add(leafData);
-
+    
                     if(fetchValue && res.IsKeyExactMatch()) {
                         byte[] big_buffer = null;
                         // this works because we know readIndex starts at value directly
@@ -2755,15 +2782,15 @@ namespace System.Collections.Specialized
                         res.Value         = (TValue)m_valueDecoder(temp.buffer, temp.index, temp.len);
                         //big_buffer      = null;
                     }
-
+    
                     if(bufferChanged) {
                         res.LastBuffer = null;
                         res.LastRead   = -1;
                     }
-
+    
                     break;
                 }
-                
+                    
                 var nodeData = new NodeData(){
                     Type                  = nodeType,
                     Address               = current.Target,
@@ -2774,17 +2801,17 @@ namespace System.Collections.Specialized
                     PartialKeyMatchLength = CompareNodeKey_LongestCommonPrefix(m_buffer, res.EncodedSearchKey, ref compareIndex),
                 };
                 res.Trail.Add(nodeData);
-
+    
                 if(!nodeData.IsSuccess())
                     break;
-
+    
                 byte num_children       = m_buffer[1];
                 var index               = CalculateKeysIndex(nodeType);
                 var currentKeyCharacter = compareIndex < res.EncodedSearchKey.Length ? res.EncodedSearchKey.Content[compareIndex] : LEAF_NODE_KEY_TERMINATOR;
-
+    
                 // system.numerics.vector requires vector.add(vector.bitwiseand(vector.equals(), [1,2,3,4,...])) and finally for(aggregatevector) to get the first value that isnt zero
                 // so basically, lack of cpu intrinsics makes vectors not worth it vs binarysearch
-
+    
                 if(nodeType == NodeType.Node4 || nodeType == NodeType.Node8) {
                     // unrolling this loop or using binarysearch is slower
                     bool found = false;
@@ -2825,7 +2852,7 @@ namespace System.Collections.Specialized
                         ReadNodePointer(m_buffer, address));
                 }
             }
-
+    
             return res;
         }
         protected sealed class Path {
@@ -2841,7 +2868,7 @@ namespace System.Collections.Specialized
             ///     This always matches the search key, and not the trail keys.
             /// </summary>
             public Buffer EncodedSearchKey;
-
+    
             /// <summary>
             ///     If set, means it contains the last node start data.
             ///     Always set for nodes, may be missing for Leafs.
@@ -2852,7 +2879,7 @@ namespace System.Collections.Specialized
             ///     Always set for nodes, may be missing for Leafs.
             /// </summary>
             public int LastRead;
-
+    
             public int CalculateKeyMatchLength() {
                 int res   = 0;
                 var count = this.Trail.Count;
@@ -2860,7 +2887,7 @@ namespace System.Collections.Specialized
                     res += this.Trail[i].PartialKeyMatchLength;
                 return res;
             }
-
+    
             /// <summary>
             ///     True only if the last item is a leaf and leaf_key.StartsWith(search_key).
             /// </summary>
@@ -2880,7 +2907,7 @@ namespace System.Collections.Specialized
                     this.CalculateKeyMatchLength() == this.EncodedSearchKey.Length &&
                     last.IsSuccess();
             }
-
+    
             public TKey GetKey(AdaptiveRadixTree<TKey, TValue> owner) {
                 this.ReadPathEntireKey(owner, this.EncodedSearchKey);
                 UnescapeLeafKeyTerminator(this.EncodedSearchKey.Content, 0, ref this.EncodedSearchKey.Length);
@@ -2892,7 +2919,7 @@ namespace System.Collections.Specialized
             public KeyValuePair<TKey, TValue> GetItem(AdaptiveRadixTree<TKey, TValue> owner) {
                 return new KeyValuePair<TKey, TValue>(this.GetKey(owner), this.GetValue());
             }
-
+    
             /// <summary>
             ///     Combines [EncodedSearchKey] + [Items.Last().PartialKeyLength after PartialKeyMatchLength]
             /// </summary>
@@ -2901,7 +2928,7 @@ namespace System.Collections.Specialized
                     pathKey.Length = 0;
                     return;
                 }
-
+    
                 var last        = this.Trail[this.Trail.Count - 1];
                 int totalLength = 0;
                 var count       = this.Trail.Count;
@@ -2909,23 +2936,23 @@ namespace System.Collections.Specialized
                     totalLength += this.Trail[i].PartialKeyLength;
                 if(last.Type == NodeType.Leaf && totalLength > 0)
                     totalLength--; // remove terminator
-                
+                    
                 pathKey.EnsureCapacity(totalLength);
                 pathKey.Length = totalLength;
-
+    
                 var keyMatchLength = this.CalculateKeyMatchLength();
-
+    
                 if(pathKey != this.EncodedSearchKey)
                     BlockCopy(this.EncodedSearchKey.Content, 0, pathKey.Content, 0, keyMatchLength);
-
+    
                 // if this is true, this method probably shouldnt have been called in the first place
                 if(keyMatchLength == totalLength)
                     return;
-
+    
                 //last.IsSuccess() == false
-                
+                    
                 var remainingPartialKeyLength = totalLength - keyMatchLength;
-
+    
                 if(last.Type != NodeType.Leaf) {
                     var skippable = 3 + last.PartialKeyMatchLength;
                     BlockCopy(this.LastBuffer, skippable, pathKey.Content, keyMatchLength, remainingPartialKeyLength);
@@ -2933,7 +2960,7 @@ namespace System.Collections.Specialized
                     byte[] buffer;
                     int start;
                     int read;
-
+    
                     if(this.LastBuffer != null) {
                         buffer = this.LastBuffer;
                         read   = this.LastRead;
@@ -2943,15 +2970,15 @@ namespace System.Collections.Specialized
                         read   = 1;
                         start  = 1;
                     }
-                    
+                        
                     owner.Stream.Position = last.Address + read;
                     start                += CalculateVarUInt64Length(unchecked((ulong)last.PartialKeyLength)) + CalculateVarUInt64Length(unchecked((ulong)last.ValueLength));
                     ReadLeafKey(buffer, ref start, ref read, owner.Stream, last.PartialKeyLength, ref pathKey.Content, ref keyMatchLength, 0);
-
+    
                     //System.Diagnostics.Debug.Assert(keyMatchLength - 1 == totalLength);
                 }
             }
-
+    
             /// <summary>
             ///     Returns the index within the trail where the key becomes unique.
             ///     Returns -1 if root points directly to item.
@@ -2962,15 +2989,15 @@ namespace System.Collections.Specialized
                 // but in practice, we avoid doing as much node update as possible during add/removes which may result in nodes containing just 1 item
                 // also nodes with just 1 item are normal if the [shared length > MAX_PREFIX_LEN]
                 // as a consequence, we do have to walk up the tree rather than assume only last item applies
-
+    
                 int uniqueTrailStart = -1;
                 for(int i = this.Trail.Count - 1; i >= 0; i--) {
                     var current = this.Trail[i];
-
+    
                     // note: only root entry can have partialkeylength==0
                     if((current.Type != NodeType.Leaf && current.ChildrenCount > 1) || current.PartialKeyLength == 0)
                         break;
-
+    
                     uniqueTrailStart = i;
                 }
                 return uniqueTrailStart;
@@ -2993,7 +3020,7 @@ namespace System.Collections.Specialized
             ///     Excludes LEAF_NODE_KEY_TERMINATOR.
             /// </summary>
             public int PartialKeyMatchLength;
-
+    
             /// <summary>
             ///     If true, means full match (partial key match == key length)
             /// </summary>
@@ -3002,7 +3029,7 @@ namespace System.Collections.Specialized
                     this.PartialKeyMatchLength == this.PartialKeyLength :
                     this.PartialKeyMatchLength == this.PartialKeyLength - 1;
             }
-
+    
             public override string ToString() {
                 return $"[@{this.Address}] {this.Type.ToString()}";
             }
@@ -3016,28 +3043,28 @@ namespace System.Collections.Specialized
         /// </summary>
         protected bool TryGetLeaf(in TKey key, bool fetchValue, out TValue value) {
             value = default;
-
+    
             var current = m_rootPointer;
             if(current == 0)
                 return false;
-
+    
             int compareIndex = 0;
             var keyBuffer    = m_keyBuffer;
             m_keyEncoder(key, keyBuffer);
-
+    
             if(keyBuffer.Length == 0)
                 throw new ArgumentException(nameof(key));
-
+    
             EscapeLeafKeyTerminator(keyBuffer);
-
+    
             while(current != 0) {
                 this.Stream.Position = current;
                 var nodeType = (NodeType)this.Stream.ReadByte();
                 m_buffer[0]  = (byte)nodeType;
-
+    
                 // assume fetching data is faster than multiple calls
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                 if(nodeType == NodeType.Leaf) {
                     int readIndex = 1;
                     var success = CompareLeafKey(m_buffer, ref readIndex, ref readBytes, this.Stream, keyBuffer, compareIndex, fetchValue ? LEAF_NODE_VALUE_PREFETCH_SIZE : 0, out long value_length);
@@ -3049,17 +3076,17 @@ namespace System.Collections.Specialized
                     }
                     return success;
                 }
-
+    
                 if(!CompareNodeKey(m_buffer, keyBuffer, ref compareIndex))
                     return false;
-
+    
                 byte num_children       = m_buffer[1];
                 var index               = CalculateKeysIndex(nodeType);
                 var currentKeyCharacter = compareIndex < keyBuffer.Length ? keyBuffer.Content[compareIndex] : LEAF_NODE_KEY_TERMINATOR;
-
+    
                 // system.numerics.vector requires vector.add(vector.bitwiseand(vector.equals(), [1,2,3,4,...])) and finally for(aggregatevector) to get the first value that isnt zero
                 // so basically, lack of cpu intrinsics makes vectors not worth it vs binarysearch
-
+    
                 if(nodeType == NodeType.Node4 || nodeType == NodeType.Node8) {
                     // unrolling this loop or using binarysearch is slower
                     bool found = false;
@@ -3088,11 +3115,11 @@ namespace System.Collections.Specialized
                     current = ReadNodePointer(m_buffer, index + currentKeyCharacter * NODE_POINTER_BYTE_SIZE);
                 }
             }
-
+    
             return false;
         }
         #endregion
-
+    
         #region private CreateLeafNode()
         /// <summary>
         ///     Returns the address.
@@ -3107,36 +3134,36 @@ namespace System.Collections.Specialized
             // var long              value_length (1-9 bytes)
             // char[partial_length]  partial
             // byte[value_length]    value
-
-
+    
+    
             // +1 for LEAF_NODE_KEY_TERMINATOR
             var varlen_key_size   = CalculateVarUInt64Length(unchecked((ulong)remainingEncodedKey.Length + 1));
             var varlen_value_size = CalculateVarUInt64Length(unchecked((ulong)encodedValue.Length));
             var alloc_size        = 1 + varlen_key_size + varlen_value_size + remainingEncodedKey.Length + 1 + encodedValue.Length;
             var address           = custom_alloc == null ? this.Alloc(alloc_size) : custom_alloc(alloc_size);
-
+    
             this.Stream.Position  = address;
-
+    
             m_buffer[0] = (byte)NodeType.Leaf;
-
+    
             int writeIndex = 1;
             WriteVarUInt64(m_buffer, ref writeIndex, unchecked((ulong)remainingEncodedKey.Length + 1));
             WriteVarUInt64(m_buffer, ref writeIndex, unchecked((ulong)encodedValue.Length));
-
+    
             WriteSpan(m_buffer, ref writeIndex, this.Stream, in remainingEncodedKey);
-
+    
             m_buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
             if(writeIndex == m_buffer.Length) {
                 this.Stream.Write(m_buffer, 0, writeIndex);
                 writeIndex = 0;
             }
-
+    
             var span = new ReadOnlySpan<byte>(encodedValue.Content, 0, encodedValue.Length);
             WriteSpan(m_buffer, ref writeIndex, this.Stream, in span);
-
+    
             if(writeIndex != 0)
                 this.Stream.Write(m_buffer, 0, writeIndex);
-
+    
             return address;
         }
         #endregion
@@ -3147,11 +3174,11 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static void CreateEmptyNode4(byte[] buffer, int index, in ReadOnlySpan<byte> partialKey) {
             System.Diagnostics.Debug.Assert(partialKey.Length <= MAX_PREFIX_LEN);
-
+    
             buffer[index + 0] = (byte)NodeType.Node4;               // node_type
             buffer[index + 1] = 0;                                  // num_children
             buffer[index + 2] = unchecked((byte)partialKey.Length); // partial_length
-
+    
             // partial
             partialKey.CopyTo(new Span<byte>(buffer, index + 3, partialKey.Length));
         }
@@ -3160,24 +3187,24 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static bool CompareNodeKey(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
-
+    
             // the only place this would make sense would be on the root node
             if(partial_length == 0)
                 return true;
-
+    
             System.Diagnostics.Debug.Assert(partial_length <= MAX_PREFIX_LEN);
-
+    
             // potentially allow "partial_length > encodedKey.Length - compareIndex" if leafs can have a zero length partial key
             // the == part of >= is because leafs must contain at least one character (LEAF_NODE_KEY_TERMINATOR)
             if(partial_length >= encodedKey.Length - compareIndex)
                 return false;
-
+    
             var res = new ReadOnlySpan<byte>(encodedKey.Content, compareIndex, partial_length)
                 .SequenceEqual(new ReadOnlySpan<byte>(buffer, 3, partial_length));
-            
+                
             if(res)
                 compareIndex += partial_length;
-
+    
             return res;
         }
         #endregion
@@ -3185,19 +3212,19 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static byte CompareNodeKey_LongestCommonPrefix(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
-
+    
             System.Diagnostics.Debug.Assert(partial_length <= MAX_PREFIX_LEN);
-
+    
             byte count = 0;
             byte len   = unchecked((byte)Math.Min(partial_length, encodedKey.Length - compareIndex));
-
+    
             for(byte i = 0; i < len; i++) {
                 if(encodedKey.Content[compareIndex + count] == buffer[3 + i])
                     count++;
                 else
                     break;
             }
-
+    
             compareIndex += count;
             return count;
         }
@@ -3209,19 +3236,19 @@ namespace System.Collections.Specialized
             value_length       = ReadVarInt64(buffer, ref bufferIndex);
             if(partial_length != encodedKey.Length + 1 - compareIndex)
                 return false;
-
+    
             // note: 
             // buffer + partial_length     LEAF_NODE_KEY_TERMINATOR included
             // encodedKey + compareIndex   LEAF_NODE_KEY_TERMINATOR *not* included
-
+    
             while(partial_length > 0) {
                 if(bufferIndex == bufferRead) {
                     bufferIndex = 0;
                     bufferRead  = stream.Read(buffer, 0, unchecked((int)Math.Min(partial_length + value_prefetch, buffer.Length)));
                 }
-
+    
                 var processed = unchecked((int)Math.Min(partial_length, bufferRead - bufferIndex));
-
+    
                 if(compareIndex + processed == encodedKey.Length + 1) {
                     // avoid processing LEAF_NODE_KEY_TERMINATOR
                     if(processed > 1 && !new ReadOnlySpan<byte>(encodedKey.Content, compareIndex, processed - 1).SequenceEqual(new ReadOnlySpan<byte>(buffer, bufferIndex, processed - 1)))
@@ -3233,12 +3260,12 @@ namespace System.Collections.Specialized
                     if(!new ReadOnlySpan<byte>(encodedKey.Content, compareIndex, processed).SequenceEqual(new ReadOnlySpan<byte>(buffer, bufferIndex, processed)))
                         return false;
                 }
-
+    
                 partial_length -= processed;
                 compareIndex   += processed;
                 bufferIndex    += processed;
             }
-
+    
             return true;
         }
         #endregion
@@ -3248,22 +3275,22 @@ namespace System.Collections.Specialized
             bufferChanged  = false;
             partial_length = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
             value_length   = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
-
+    
             // note: 
             // buffer + partial_length     LEAF_NODE_KEY_TERMINATOR included
             // encodedKey + compareIndex   LEAF_NODE_KEY_TERMINATOR *not* included
-
+    
             var remaining         = partial_length; // also indicates how further away it is from bufferIndex
             var compareIndexStart = compareIndex;
             var len               = Math.Min(remaining - 1, encodedKey.Length - compareIndex);
-
+    
             for(int i = 0; i < len; i++) {
                 if(bufferIndex == bufferRead) {
                     bufferIndex   = 0;
                     bufferRead    = stream.Read(buffer, 0, Math.Min(remaining + value_prefetch, buffer.Length));
                     bufferChanged = true;
                 }
-
+    
                 if(buffer[bufferIndex] == encodedKey.Content[compareIndex]) {
                     compareIndex++;
                     bufferIndex++;
@@ -3271,7 +3298,7 @@ namespace System.Collections.Specialized
                 } else
                     break;
             }
-
+    
             // if fully compared, then check LEAF_NODE_KEY_TERMINATOR
             bool terminator_match = false;
             if(remaining == 0 && compareIndex == encodedKey.Length) {
@@ -3285,10 +3312,10 @@ namespace System.Collections.Specialized
             } else {
                 // partial match; must re-adjust buffer/stream to skip directly to value
                 var move = Math.Min(remaining, bufferRead - bufferIndex);
-
+    
                 remaining   -= move;
                 bufferIndex += move;
-
+    
                 // if we need to skip somewhere past our buffer
                 if(remaining > 0) {
                     bufferIndex = 0;
@@ -3297,7 +3324,7 @@ namespace System.Collections.Specialized
                     //bufferChanged = true; // unsure if relevant
                 }
             }
-
+    
             return compareIndex - compareIndexStart + (terminator_match ? 1 : 0);
         }
         #endregion
@@ -3305,33 +3332,33 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static void ReadLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, int partial_length, ref byte[] key, ref int keySize, int value_prefetch) {
             // dont read terminal byte
-
+    
             partial_length--; // remove LEAF_NODE_KEY_TERMINATOR
-
+    
             if(key.Length - keySize < partial_length)
                 Array.Resize(ref key, unchecked((int)(keySize + partial_length)));
-
+    
             // note: 
             // buffer + partial_length   LEAF_NODE_KEY_TERMINATOR included
             // key                       LEAF_NODE_KEY_TERMINATOR *not* included
-
+    
             while(partial_length > 0) {
                 if(bufferIndex == bufferRead) {
                     bufferIndex = 0;
                     bufferRead  = stream.Read(buffer, 0, unchecked((int)Math.Min(partial_length + value_prefetch, buffer.Length)));
                 }
-
+    
                 var processed = unchecked((int)Math.Min(partial_length, bufferRead - bufferIndex));
-
+    
                 BlockCopy(buffer, bufferIndex, key, keySize, processed);
-
+    
                 // note: could read the LEAF_NODE_KEY_TERMINATOR to make sure its a properly formed leaf
-
+    
                 partial_length -= processed;
                 keySize        += processed;
                 bufferIndex    += processed;
             }
-
+    
             // skip terminal byte
             bufferIndex++;
         }
@@ -3340,21 +3367,21 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static (byte[] buffer, int index, int len) ReadLeafValue(byte[] buffer, int bufferIndex, int bufferRead, Stream stream, long value_length, ref byte[] alternativeBuffer, out bool bufferChanged) {
             bufferChanged = false;
-
+    
             if(value_length <= 0)
                 return (null, 0, 0);
-
+    
             // if value is already entirely read in buffer
             if(value_length <= bufferRead - bufferIndex)
                 return (buffer, bufferIndex, unchecked((int)value_length));
             else if(value_length <= buffer.Length) {
                 // if value isn't fully read, but it would fit in the buffer
-
+    
                 // downshift data
                 var size = bufferRead - bufferIndex;
                 if(bufferIndex > 0 && size > 0)
                     BlockCopy(buffer, bufferIndex, buffer, 0, size);
-
+    
                 bufferChanged = true;
                 var temp      = stream.Read(buffer, size, unchecked((int)(value_length - size)));
                 if(temp + size < value_length)
@@ -3362,18 +3389,18 @@ namespace System.Collections.Specialized
                 return (buffer, 0, unchecked((int)value_length));
             } else {
                 // if encoded value > buffer.Length
-
+    
                 // store in alternative buffer, and resize if required
                 if(alternativeBuffer == null || alternativeBuffer.Length < value_length)
                     alternativeBuffer = new byte[value_length];
-
+    
                 //bufferChanged = false;
-
+    
                 // downshift data
                 var size = bufferRead - bufferIndex;
                 if(size > 0)
                     BlockCopy(buffer, bufferIndex, alternativeBuffer, 0, size);
-
+    
                 var temp = stream.Read(alternativeBuffer, size, unchecked((int)(value_length - size)));
                 if(temp + size < value_length)
                     throw new ApplicationException("Unable to read value from node/leaf due to read() operation not returning the expected number of bytes.");
@@ -3381,12 +3408,12 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region private static ReadNodePointer()
         [MethodImpl(AggressiveInlining)]
         private static long ReadNodePointer(byte[] buffer, int index) {
             long res = 0;
-
+    
 #pragma warning disable CS0162 // Unreachable code detected
             if(NODE_POINTER_BYTE_SIZE >= 1)
                 res |= buffer[index + 0];
@@ -3405,7 +3432,7 @@ namespace System.Collections.Specialized
             if(NODE_POINTER_BYTE_SIZE >= 8)
                 res |= (long)buffer[index + 7] << 56;
 #pragma warning restore CS0162 // Unreachable code detected
-
+    
             return res;
         }
         #endregion
@@ -3430,11 +3457,11 @@ namespace System.Collections.Specialized
             if(NODE_POINTER_BYTE_SIZE >= 8)
                 buffer[index + 7] = unchecked((byte)((address >> 56) & 0xFF));
 #pragma warning restore CS0162 // Unreachable code detected
-
+    
             //index += NODE_POINTER_BYTE_SIZE;
         }
         #endregion
-
+    
         #region private static CalculateNodeSize()
         /// <summary>
         ///     Returns -1 on leaf.
@@ -3446,14 +3473,14 @@ namespace System.Collections.Specialized
                 case NodeType.Node8:   return 3 + MAX_PREFIX_LEN + 8   + (8 * NODE_POINTER_BYTE_SIZE);
                 case NodeType.Node16:  return 3 + MAX_PREFIX_LEN + 16  + (16 * NODE_POINTER_BYTE_SIZE);
                 case NodeType.Node32:  return 3 + MAX_PREFIX_LEN + 32  + (32 * NODE_POINTER_BYTE_SIZE);
-
+    
                 case NodeType.Node64:  return 3 + MAX_PREFIX_LEN + 256 + (64 * NODE_POINTER_BYTE_SIZE);
                 case NodeType.Node128: return 3 + MAX_PREFIX_LEN + 256 + (128 * NODE_POINTER_BYTE_SIZE);
-
+    
                 case NodeType.Node256: return 3 + MAX_PREFIX_LEN + (256 * NODE_POINTER_BYTE_SIZE);
-
+    
                 case NodeType.Leaf:    return -1;
-
+    
                 default:
                     throw new NotImplementedException();
             }
@@ -3476,7 +3503,7 @@ namespace System.Collections.Specialized
         private static int CalculateNodePrefetchSize(NodeType nodeType) {
             if(nodeType != NodeType.Leaf)
                 return CalculateNodeSize(nodeType);
-
+    
             return LEAF_NODE_PREFETCH_SIZE;
         }
         #endregion
@@ -3486,7 +3513,7 @@ namespace System.Collections.Specialized
             // this intentionally returns the keys location for Node256 even though there arent any
             if(nodeType != NodeType.Leaf)
                 return 3 + MAX_PREFIX_LEN;
-            
+                
             return -1;
         }
         #endregion
@@ -3516,11 +3543,11 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static int BinarySearch(byte[] array, int min, int length, byte value) {
             int max = min + length - 1;
-            
+                
             while(min <= max) {
                 int median = (min + max) >> 1;
                 var diff   = array[median] - value;
-                    
+                        
                 if(diff < 0)
                     min = median + 1;
                 else if(diff > 0)
@@ -3528,11 +3555,11 @@ namespace System.Collections.Specialized
                 else
                     return median;
             }
-                
+                    
             return ~min;
         }
         #endregion
-
+    
         #region private static ReadVarInt64()
         /// <summary>
         ///     Read variable length LE-encoded (little endian) int64.
@@ -3541,7 +3568,7 @@ namespace System.Collections.Specialized
         private static long ReadVarInt64(byte[] buffer, ref int index) {
             long res;
             byte c = buffer[index++];
-
+    
             if((c >> 7) == 0) {
                 return c;
             } else if((c >> 6) == 0) {
@@ -3604,7 +3631,7 @@ namespace System.Collections.Specialized
                     ((long)buffer[index + 7] << 56);
                 index += 8;
             }
-
+    
             return res;
         }
         /// <summary>
@@ -3616,15 +3643,15 @@ namespace System.Collections.Specialized
                 read = stream.Read(buffer, 0, buffer.Length);
                 index = 0;
             }
-
+    
             byte c = buffer[index++];
-
+    
             if((c >> 7) == 0)
                 return c;
-            
+                
             long res;
             int remaining = buffer.Length - index;
-
+    
             if((c >> 6) == 0) {
                 if(remaining == 0) {
                     read = stream.Read(buffer, 0, buffer.Length);
@@ -3745,7 +3772,7 @@ namespace System.Collections.Specialized
                     ((long)buffer[index + 7] << 56);
                 index += 8;
             }
-
+    
             return res;
         }
         #endregion
@@ -3756,7 +3783,7 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static void WriteVarUInt64(byte[] buffer, ref int index, ulong value) {
             // 20% speedup for using "ref int index" instead of returning the new index
-
+    
             //    value                   first byte  bits
             //                            (encoded_bytes)
             // <= 0x0000_0000_0000_007F   0xxx xxxx   7
@@ -3768,7 +3795,7 @@ namespace System.Collections.Specialized
             // <= 0x0001_FFFF_FFFF_FFFF   1111 110x   49
             // <= 0x00FF_FFFF_FFFF_FFFF   1111 1110   56
             // <= 0xFFFF_FFFF_FFFF_FFFF   1111 1111   64
-
+    
             if(value <= 0x0000_0000_0000_007Ful) {
                 buffer[index++] = unchecked((byte)value);
             } else if(value <= 0x0000_0000_0000_3FFFul) {
@@ -3839,7 +3866,7 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         private static void WriteVarUInt64(byte[] buffer, ref int index, Stream stream, ulong value) {
             // 20% speedup for using "ref int index" instead of returning the new index
-
+    
             //    value                   first byte  bits
             //                            (encoded_bytes)
             // <= 0x0000_0000_0000_007F   0xxx xxxx   7
@@ -3851,13 +3878,13 @@ namespace System.Collections.Specialized
             // <= 0x0001_FFFF_FFFF_FFFF   1111 110x   49
             // <= 0x00FF_FFFF_FFFF_FFFF   1111 1110   56
             // <= 0xFFFF_FFFF_FFFF_FFFF   1111 1111   64
-
-
+    
+    
             if(value <= 0x0000_0000_0000_007Ful) {
                 buffer[index++] = unchecked((byte)value);
             } else {
                 int remaining = buffer.Length - index;
-
+    
                 if(value <= 0x0000_0000_0000_3FFFul) {
                     if(remaining <= 1) {
                         stream.Write(buffer, 0, index);
@@ -3952,7 +3979,7 @@ namespace System.Collections.Specialized
                     index += 9;
                 }
             }
-
+    
             if(index == buffer.Length) {
                 stream.Write(buffer, 0, index);
                 index = 0;
@@ -4015,39 +4042,39 @@ namespace System.Collections.Specialized
         //[MethodImpl(AggressiveInlining)]
         private static void WriteSpan(byte[] buffer, ref int index, Stream stream, in ReadOnlySpan<byte> value) {
             // 20% speedup for using "ref int index" instead of returning the new index
-
+    
             var remaining = value.Length;
             if(remaining == 0)
                 return;
-            
+                
             var processed = Math.Min(remaining, buffer.Length - index);
-
+    
             // Buffer.BlockCopy()
             if(remaining <= value.Length)
                 value.CopyTo(new Span<byte>(buffer, index, processed));
             else
                 value.Slice(0, processed).CopyTo(new Span<byte>(buffer, index, processed));
-
+    
             index += processed;
-
+    
             if(index == buffer.Length) {
                 stream.Write(buffer, 0, index);
                 index = 0;
             }
-
+    
             remaining    -= processed;
             var readIndex = processed;
-
+    
             while(remaining > 0) {
                 processed = Math.Min(remaining, buffer.Length - index);
-
+    
                 // Buffer.BlockCopy()
                 value.Slice(readIndex, processed).CopyTo(new Span<byte>(buffer, index, processed));
-
+    
                 remaining -= processed;
                 readIndex += processed;
                 index     += processed;
-
+    
                 if(index == buffer.Length) {
                     stream.Write(buffer, 0, index);
                     index = 0;
@@ -4067,12 +4094,12 @@ namespace System.Collections.Specialized
             new ReadOnlySpan<byte>(source, sourceIndex, count).CopyTo(new Span<byte>(dest, destIndex, count));
         }
         #endregion
-
+    
         #region private static GetMinChild()
         private static NodePointer GetMinChild(byte[] buffer, long address) {
             var nodeType = (NodeType)buffer[0];
             var index    = CalculateKeysIndex(nodeType);
-
+    
             if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                 var pos = index + MaxChildCount(nodeType) + 0 * NODE_POINTER_BYTE_SIZE;
                 return new NodePointer(address + pos, ReadNodePointer(buffer, pos));
@@ -4099,7 +4126,7 @@ namespace System.Collections.Specialized
         private static NodePointer GetMaxChild(byte[] buffer, long address) {
             var nodeType = (NodeType)buffer[0];
             var index    = CalculateKeysIndex(nodeType);
-
+    
             if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                 byte num_children = buffer[1];
                 var pos           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
@@ -4132,27 +4159,27 @@ namespace System.Collections.Specialized
             var current   = m_rootPointer;
             var keyBuffer = new byte[32];
             int keySize   = 0;
-
+    
             while(current != 0) {
                 this.Stream.Position = current;
                 var nodeType = (NodeType)this.Stream.ReadByte();
                 m_buffer[0]  = (byte)nodeType;
-
+    
                 // assume fetching data is faster than multiple calls
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                 if(nodeType == NodeType.Leaf) {
                     int start           = 1;
                     int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
                     start              += CalculateVarUInt64LengthEncoded(m_buffer[start]); // long value_length = ReadVarInt64(m_buffer, ref start);
                     ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, partial_length2, ref keyBuffer, ref keySize, 0);
-
+    
                     UnescapeLeafKeyTerminator(keyBuffer, 0, ref keySize);
-
+    
                     key = (TKey)m_keyDecoder(keyBuffer, 0, keySize);
                     return true;
                 }
-
+    
                 // copy partial key
                 var partial_length = m_buffer[2];
                 for(byte i = 0; i < partial_length; i++) {
@@ -4160,10 +4187,10 @@ namespace System.Collections.Specialized
                         Array.Resize(ref keyBuffer, keySize * 2);
                     keyBuffer[keySize++] = m_buffer[3 + i];
                 }
-
+    
                 current = GetMinChild(m_buffer, current).Target;
             }
-
+    
             key = default;
             return false;
         }
@@ -4176,27 +4203,27 @@ namespace System.Collections.Specialized
             var current   = m_rootPointer;
             var keyBuffer = new byte[32];
             int keySize   = 0;
-
+    
             while(current != 0) {
                 this.Stream.Position = current;
                 var nodeType = (NodeType)this.Stream.ReadByte();
                 m_buffer[0]  = (byte)nodeType;
-
+    
                 // assume fetching data is faster than multiple calls
                 int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                 if(nodeType == NodeType.Leaf) {
                     int start           = 1;
                     int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
                     start              += CalculateVarUInt64LengthEncoded(m_buffer[start]); // long value_length = ReadVarInt64(m_buffer, ref start);
                     ReadLeafKey(m_buffer, ref start, ref readBytes, this.Stream, partial_length2, ref keyBuffer, ref keySize, 0);
-
+    
                     UnescapeLeafKeyTerminator(keyBuffer, 0, ref keySize);
-
+    
                     key = (TKey)m_keyDecoder(keyBuffer, 0, keySize);
                     return true;
                 }
-
+    
                 // copy partial key
                 var partial_length = m_buffer[2];
                 for(byte i = 0; i < partial_length; i++) {
@@ -4204,16 +4231,16 @@ namespace System.Collections.Specialized
                         Array.Resize(ref keyBuffer, keySize * 2);
                     keyBuffer[keySize++] = m_buffer[3 + i];
                 }
-
+    
                 current = GetMaxChild(m_buffer, current).Target;
             }
-
+    
             key = default;
             return false;
         }
         #endregion
-
-
+    
+    
         // enumerators
         #region public class ChildrenKeyEnumerator
         /// <summary>
@@ -4230,7 +4257,7 @@ namespace System.Collections.Specialized
             private int m_stackIndex = 0;
             private byte[] m_key = new byte[32];
             private readonly byte[] m_buffer = new byte[BUFFER_SIZE];
-
+    
             private readonly struct InternalNode {
                 public readonly long Address;
                 public readonly int KeySize;
@@ -4239,7 +4266,7 @@ namespace System.Collections.Specialized
                     this.KeySize = keySize;
                 }
             }
-
+    
             /// <summary>
             ///     Note: for performance reason, the same byte[] is passed and reused.
             /// </summary>
@@ -4248,13 +4275,13 @@ namespace System.Collections.Specialized
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
-
+    
                 // if theres no root
                 if(address == 0)
                     yield break;
-
+    
                 int keySize = 0;
-
+    
                 // copy initial key
                 if(initialKey != null && initialKeySize > 0) {
                     if(initialKeySize > initialKey.Length)
@@ -4265,25 +4292,25 @@ namespace System.Collections.Specialized
                     BlockCopy(initialKey, 0, m_key, 0, initialKeySize);
                     //new ReadOnlySpan<byte>(initialKey, 0, initialKeySize).CopyTo(new Span<byte>(m_key, 0, initialKeySize));
                 }
-
+    
                 this.Push(new InternalNode(address, keySize));
-
+    
                 var res = new Node(){
                     Key       = m_key,
                     KeyLength = 0,
                 };
-
+    
                 while(m_stackIndex > 0) {
                     var pop = this.Pop();
-
+    
                     keySize         = pop.KeySize;
                     stream.Position = pop.Address;
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start           = 1;
                         int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
@@ -4295,7 +4322,7 @@ namespace System.Collections.Specialized
                         yield return res;
                         continue;
                     }
-
+    
                     // copy partial key
                     var partial_length = m_buffer[2];
                     for(byte i = 0; i < partial_length; i++) {
@@ -4305,9 +4332,9 @@ namespace System.Collections.Specialized
                         }
                         m_key[keySize++] = m_buffer[3 + i];
                     }
-
+    
                     var index = CalculateKeysIndex(nodeType);
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
@@ -4362,7 +4389,7 @@ namespace System.Collections.Specialized
             private int m_stackIndex = 0;
             private readonly byte[] m_buffer = new byte[BUFFER_SIZE];
             private byte[] m_bigBuffer = null;
-
+    
             /// <summary>
             ///     Note: for performance reason, the same byte[] is passed and reused.
             /// </summary>
@@ -4371,23 +4398,23 @@ namespace System.Collections.Specialized
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
-
+    
                 // if theres no root
                 if(address == 0)
                     yield break;
-
+    
                 this.Push(address);
-
+    
                 var res = new Node();
-
+    
                 while(m_stackIndex > 0) {
                     stream.Position = this.Pop();
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start           = 1;
                         var partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
@@ -4399,9 +4426,9 @@ namespace System.Collections.Specialized
                         yield return res;
                         continue;
                     }
-
+    
                     var index = CalculateKeysIndex(nodeType);
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
@@ -4457,7 +4484,7 @@ namespace System.Collections.Specialized
             private byte[] m_key = new byte[32];
             private readonly byte[] m_buffer = new byte[BUFFER_SIZE];
             private byte[] m_bigBuffer = null;
-
+    
             private readonly struct InternalNode {
                 public readonly long Address;
                 public readonly int KeySize;
@@ -4466,7 +4493,7 @@ namespace System.Collections.Specialized
                     this.KeySize = keySize;
                 }
             }
-
+    
             /// <summary>
             ///     Note: for performance reason, the same byte[]s are passed and reused.
             /// </summary>
@@ -4475,13 +4502,13 @@ namespace System.Collections.Specialized
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
-
+    
                 // if theres no root
                 if(address == 0)
                     yield break;
-
+    
                 int keySize = 0;
-
+    
                 // copy initial key
                 if(initialKey != null && initialKeySize > 0) {
                     if(initialKeySize > initialKey.Length)
@@ -4492,22 +4519,22 @@ namespace System.Collections.Specialized
                     BlockCopy(initialKey, 0, m_key, 0, initialKeySize);
                     //new ReadOnlySpan<byte>(initialKey, 0, initialKeySize).CopyTo(new Span<byte>(m_key, 0, initialKeySize));
                 }
-
+    
                 this.Push(new InternalNode(address, keySize));
-
+    
                 var res = new Node();
-
+    
                 while(m_stackIndex > 0) {
                     var pop = this.Pop();
-
+    
                     keySize         = pop.KeySize;
                     stream.Position = pop.Address;
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start           = 1;
                         int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
@@ -4522,7 +4549,7 @@ namespace System.Collections.Specialized
                         yield return res;
                         continue;
                     }
-
+    
                     // copy partial key
                     var partial_length = m_buffer[2];
                     for(byte i = 0; i < partial_length; i++) {
@@ -4530,9 +4557,9 @@ namespace System.Collections.Specialized
                             Array.Resize(ref m_key, keySize * 2);
                         m_key[keySize++] = m_buffer[3 + i];
                     }
-
+    
                     var index = CalculateKeysIndex(nodeType);
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
@@ -4576,6 +4603,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(n)
         ///     Lists every node, as well as the entire set of parents for each of them.
+        ///     Be aware that returned data re-uses the same pointers, clone data if processing is not immediate.
         ///     This enumerator is made for re-use, to avoid array reallocations.
         /// </summary>
         protected sealed class PathEnumerator {
@@ -4589,7 +4617,7 @@ namespace System.Collections.Specialized
             private byte[] m_bigBuffer = null;
             private int m_head = 0;
             private int m_tail = 0;
-
+    
             private sealed class InternalNode {
                 public readonly NodePointer Pointer;
                 public readonly int KeySize;
@@ -4604,7 +4632,7 @@ namespace System.Collections.Specialized
                     this.Parent  = parent;
                 }
             }
-
+    
             public enum TraversalAlgorithm {
                 /// <summary>
                 ///     Depth-First pre-order traversal.
@@ -4615,9 +4643,10 @@ namespace System.Collections.Specialized
                 /// </summary>
                 BreadthFirst = 1,
             }
-
+    
             /// <summary>
             ///     If returnOnNodes==true, then you only need to read the last item of the path to know whats the 'current' node.
+            ///     Be aware that returned data re-uses the same pointers, clone data if processing is not immediate.
             /// </summary>
             /// <param name="returnOnNodes">If false, return only the path on leafs. If true, returns the path on every node.</param>
             public IEnumerable<Path> Run(NodePointer pointer, Stream stream, bool returnOnNodes, bool extractValue, byte[] initialKey = null, int initialKeySize = -1, TraversalAlgorithm traversalAlgorithm = TraversalAlgorithm.DepthFirst) {
@@ -4625,14 +4654,14 @@ namespace System.Collections.Specialized
                     Array.Clear(m_array, 0, m_count);
                     m_count = 0;
                 }
-
+    
                 // if theres no root
                 if(pointer.Target == 0)
                     return Enumerable.Empty<Path>();
-
+    
                 m_head = 0;
                 m_tail = 0;
-                
+                    
                 if(traversalAlgorithm == TraversalAlgorithm.DepthFirst)
                     return this.DepthFirst(pointer, stream, returnOnNodes, extractValue, initialKey, initialKeySize);
                 else
@@ -4644,7 +4673,7 @@ namespace System.Collections.Specialized
                     Trail = new List<Node>(16),
                 };
                 int keySize = 0;
-
+    
                 // copy initial key
                 if(initialKey != null && initialKeySize > 0) {
                     if(initialKeySize > initialKey.Length)
@@ -4657,19 +4686,19 @@ namespace System.Collections.Specialized
                     BlockCopy(initialKey, 0, m_key, 0, initialKeySize);
                     //new ReadOnlySpan<byte>(initialKey, 0, initialKeySize).CopyTo(new Span<byte>(m_key, 0, initialKeySize));
                 }
-
+    
                 this.Push(new InternalNode(pointer, keySize, 0, null, null));
-
+    
                 while(m_count > 0) {
                     var pop = this.Pop();
-
+    
                     keySize         = pop.KeySize;
                     stream.Position = pop.Pointer.Target;
                     var depth       = pop.Depth;
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
                     Node current;
-
+    
                     if(depth < path.Trail.Count) {
                         current    = path.Trail[depth];
                         var extras = path.Trail.Count - (depth + 1);
@@ -4679,13 +4708,13 @@ namespace System.Collections.Specialized
                         current    = new Node();
                         path.Trail.Add(current);
                     }
-
+    
                     current.Pointer = pop.Pointer;
                     current.Type    = nodeType;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start             = 1;
                         int keySizeStart      = keySize;
@@ -4705,7 +4734,7 @@ namespace System.Collections.Specialized
                         yield return path;
                         continue;
                     }
-
+    
                     // copy partial key
                     var partial_length = m_buffer[2];
                     for(byte i = 0; i < partial_length; i++) {
@@ -4715,15 +4744,15 @@ namespace System.Collections.Specialized
                         }
                         m_key[keySize++] = m_buffer[3 + i];
                     }
-
+    
                     current.ChildrenCount = m_buffer[1];
                     current.KeyLength     = partial_length;
-
+    
                     if(returnOnNodes)
                         yield return path;
-
+    
                     var index = CalculateKeysIndex(nodeType);
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
@@ -4777,7 +4806,7 @@ namespace System.Collections.Specialized
                     Trail = new List<Node>(16),
                 };
                 int keySize = 0;
-
+    
                 // copy initial key
                 if(initialKey != null && initialKeySize > 0) {
                     if(initialKeySize > initialKey.Length)
@@ -4790,24 +4819,24 @@ namespace System.Collections.Specialized
                     BlockCopy(initialKey, 0, m_key, 0, initialKeySize);
                     //new ReadOnlySpan<byte>(initialKey, 0, initialKeySize).CopyTo(new Span<byte>(m_key, 0, initialKeySize));
                 }
-
+    
                 this.Enqueue(new InternalNode(pointer, keySize, 0, null, null));
-
+    
                 while(m_count > 0) {
                     var pop = this.Dequeue();
-
+    
                     keySize         = pop.KeySize;
                     stream.Position = pop.Pointer.Target;
                     var depth       = pop.Depth;
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
                     var current     = new Node();
-
+    
                     if(depth < path.Trail.Count)
                         path.Trail[depth] = current;
                     else
                         path.Trail.Add(current);
-
+    
                     var d     = depth;
                     var xNode = pop;
                     while(d-- > 0) {
@@ -4817,13 +4846,13 @@ namespace System.Collections.Specialized
                         path.Trail[d] = xNode.Node;
                         xNode         = xNode.Parent;
                     }
-
+    
                     current.Pointer = pop.Pointer;
                     current.Type    = nodeType;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start             = 1;
                         int keySizeStart      = keySize;
@@ -4843,7 +4872,7 @@ namespace System.Collections.Specialized
                         yield return path;
                         continue;
                     }
-
+    
                     // copy partial key
                     var partial_length = m_buffer[2];
                     for(byte i = 0; i < partial_length; i++) {
@@ -4853,15 +4882,15 @@ namespace System.Collections.Specialized
                         }
                         m_key[keySize++] = m_buffer[3 + i];
                     }
-
+    
                     current.ChildrenCount = m_buffer[1];
                     current.KeyLength     = partial_length;
-
+    
                     if(returnOnNodes)
                         yield return path;
-
+    
                     var index = CalculateKeysIndex(nodeType);
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + 0 * NODE_POINTER_BYTE_SIZE;
@@ -4915,7 +4944,7 @@ namespace System.Collections.Specialized
                     m_head  = 0;
                     m_tail  = (m_count == capacity) ? 0 : m_count;
                 }
-
+    
                 m_array[m_tail] = value;
                 m_tail          = (m_tail + 1) % m_array.Length;
                 m_count++;
@@ -4927,7 +4956,7 @@ namespace System.Collections.Specialized
                 m_count--;
                 return node;
             }
-
+    
             public sealed class Path {
                 public List<Node> Trail;
                 /// <summary>
@@ -4937,7 +4966,7 @@ namespace System.Collections.Specialized
                 /// </summary>
                 public byte[] Key;
             }
-            public sealed class Node {
+            public sealed class Node : ICloneable {
                 public NodePointer Pointer;
                 public NodeType Type;
                 public byte ChildrenCount;
@@ -4948,7 +4977,7 @@ namespace System.Collections.Specialized
                 public byte[] ValueBuffer;
                 public int ValueIndex;
                 public int ValueLength;
-
+    
                 public TKey GetKey(AdaptiveRadixTree<TKey, TValue> owner, Path path, ref byte[] buffer) {
                     int length = this.KeyLength;
                     var rawKey = this.GetKeyRaw(path);
@@ -4984,9 +5013,21 @@ namespace System.Collections.Specialized
                         return null;
                     return owner.m_buffer;
                 }
-
+    
+                public object Clone() {
+                    return new Node() {
+                        ChildrenCount = this.ChildrenCount,
+                        KeyLength     = this.KeyLength,
+                        Pointer       = this.Pointer,
+                        Type          = this.Type,
+                        ValueBuffer   = this.ValueBuffer,
+                        ValueIndex    = this.ValueIndex,
+                        ValueLength   = this.ValueLength,
+                    };
+                }
+    
                 public override string ToString() {
-                    return $"[@{this.Pointer}] {this.Type.ToString()}";
+                    return $"[{this.Pointer}] {this.Type.ToString()}";
                 }
             }
         }
@@ -5008,7 +5049,7 @@ namespace System.Collections.Specialized
             private byte[] m_key = new byte[32];
             private readonly byte[] m_buffer = new byte[BUFFER_SIZE];
             private byte[] m_bigBuffer = null;
-
+    
             public class Options {
                 public AdaptiveRadixTree<TKey, TValue> Owner;
                 /// <summary>
@@ -5035,7 +5076,7 @@ namespace System.Collections.Specialized
                 /// </remarks>
                 public int HammingDistance = 0; // 0 = exact match, 1 = 1 character may differ, etc. Dont put negative values in there.
             }
-
+    
             private sealed class InternalNode {
                 public readonly long Address;
                 public readonly int PrevKeySize;
@@ -5059,7 +5100,7 @@ namespace System.Collections.Specialized
                 ///     null  = currently validating a node.child
                 /// </summary>
                 public bool? IsLeaf;
-
+    
                 /// <summary>
                 ///     Mostly there only for debugging purposes.
                 /// </summary>
@@ -5068,7 +5109,7 @@ namespace System.Collections.Specialized
                     return (TKey)owner.m_keyDecoder(this.EncodedKey, 0, this.KeyLength);
                 }
             }
-
+    
             /// <summary>
             ///     For performance reasons, the same item is always the one returned.
             ///     Copy it if you need all results (And copy the key too).
@@ -5078,43 +5119,43 @@ namespace System.Collections.Specialized
                     Array.Clear(m_array, 0, m_count);
                     m_count = 0;
                 }
-
+    
                 var owner                    = options.Owner;
                 var calculateHammingDistance = options.CalculateHammingDistance;
                 var extractValue             = options.ExtractValue;
-
+    
                 var pointer = owner.m_rootPointer;
                 var stream  = owner.Stream;
-
+    
                 // if theres no root
                 if(pointer == 0)
                     yield break;
-
+    
                 var res = new Node(){
                     Key = m_key,
                 };
                 var filter = new FilterItem(){
                     EncodedKey = m_key,
                 };
-
+    
                 this.Push(new InternalNode(pointer, 0, 0, options.HammingDistance));
-
+    
                 while(m_count > 0) {
                     var pop = this.Pop();
-
+    
                     var keySize     = pop.KeySize;
                     stream.Position = pop.Address;
                     long hamming    = pop.Hamming; // long to avoid overflows
                     var nodeType    = (NodeType)stream.ReadByte();
                     m_buffer[0]     = (byte)nodeType;
-
+    
                     res.Address               = pop.Address;
                     res.Type                  = nodeType;
                     filter.LastAcceptedLength = pop.PrevKeySize;
-
+    
                     // assume fetching data is faster than multiple calls
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
-
+    
                     if(nodeType == NodeType.Leaf) {
                         int start           = 1;
                         int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
@@ -5124,13 +5165,13 @@ namespace System.Collections.Specialized
                         filter.EncodedKey   = m_key;
                         filter.IsLeaf       = true;
                         filter.KeyLength    = keySize;
-
+    
                         if(filter.LastAcceptedLength >= keySize || (hamming -= calculateHammingDistance(filter)) >= 0) {
                             res.KeyLength       = keySize;
                             res.ChildrenCount   = 0;
                             res.HammingDistance = unchecked((int)hamming);
                             res.ValueLength     = value_length;
-
+    
                             if(extractValue) {
                                 var value       = ReadLeafValue(m_buffer, start, readBytes, stream, value_length, ref m_bigBuffer, out _);
                                 res.ValueBuffer = value.buffer;
@@ -5141,7 +5182,7 @@ namespace System.Collections.Specialized
                         }
                         continue;
                     }
-
+    
                     // copy partial key
                     var partial_length = m_buffer[2];
                     for(byte i = 0; i < partial_length; i++) {
@@ -5158,26 +5199,26 @@ namespace System.Collections.Specialized
                         res.Key           = m_key;
                         filter.EncodedKey = m_key;
                     }
-
+    
                     res.ChildrenCount = m_buffer[1];
                     res.KeyLength     = partial_length;
-
-
+    
+    
                     filter.IsLeaf    = false;
                     filter.KeyLength = keySize;
                     if(filter.KeyLength > filter.LastAcceptedLength && (hamming -= calculateHammingDistance(filter)) < 0)
                         continue;
-
-
+    
+    
                     var index        = CalculateKeysIndex(nodeType);
                     var writePos     = keySize; // filter.last_accepted_len + partial_length; // keySize
                     filter.KeyLength = keySize + 1;
                     filter.IsLeaf    = null;
-
+    
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         // note: potentially consider calling calculateHammingDistance() in proper order for the children
                         // in case the implementation assumes the received order matches the listing order
-
+    
                         byte num_children = m_buffer[1];
                         var ptr           = index + MaxChildCount(nodeType) + (num_children - 1) * NODE_POINTER_BYTE_SIZE;
                         var partialIndex  = index + (num_children - 1);
@@ -5185,14 +5226,14 @@ namespace System.Collections.Specialized
                         while(num_children-- > 0) {
                             var c                       = m_buffer[partialIndex];
                             filter.EncodedKey[writePos] = c;
-
+    
                             var ham_dist = hamming;
                             if(c == LEAF_NODE_KEY_TERMINATOR || (ham_dist -= calculateHammingDistance(filter)) >= 0) {
                                 var child        = ReadNodePointer(m_buffer, ptr);
                                 var internalNode = new InternalNode(child, keySize + 1, keySize, unchecked((int)ham_dist));
                                 this.Push(internalNode);
                             }
-
+    
                             ptr     -= NODE_POINTER_BYTE_SIZE;
                             realPtr -= NODE_POINTER_BYTE_SIZE;
                             partialIndex--;
@@ -5200,13 +5241,13 @@ namespace System.Collections.Specialized
                     } else if(nodeType == NodeType.Node64 || nodeType == NodeType.Node128) {
                         // note: potentially consider calling calculateHammingDistance() in proper order for the children
                         // in case the implementation assumes the received order matches the listing order
-
+    
                         for(int i = 255; i >= 0; i--) {
                             var redirect = m_buffer[index + i];
                             if(redirect != 0) {
                                 var c                       = unchecked((byte)i);
                                 filter.EncodedKey[writePos] = c;
-
+    
                                 var ham_dist = hamming;
                                 if(c == LEAF_NODE_KEY_TERMINATOR || (ham_dist -= calculateHammingDistance(filter)) >= 0) {
                                     var ptr          = index + 256 + (redirect - 1) * NODE_POINTER_BYTE_SIZE;
@@ -5219,7 +5260,7 @@ namespace System.Collections.Specialized
                     } else { // nodeType == NodeType.Node256
                         // note: potentially consider calling calculateHammingDistance() in proper order for the children
                         // in case the implementation assumes the received order matches the listing order
-
+    
                         var ptr     = index + (256 - 1) * NODE_POINTER_BYTE_SIZE;
                         var realPtr = pop.Address + ptr;
                         for(int i = 255; i >= 0; i--) {
@@ -5227,7 +5268,7 @@ namespace System.Collections.Specialized
                             if(child != 0) {
                                 var c                       = unchecked((byte)i);
                                 filter.EncodedKey[writePos] = c;
-
+    
                                 var ham_dist = hamming;
                                 if(c == LEAF_NODE_KEY_TERMINATOR || (ham_dist -= calculateHammingDistance(filter)) >= 0) {
                                     var internalNode = new InternalNode(child, keySize + 1, keySize, unchecked((int)ham_dist));
@@ -5250,21 +5291,21 @@ namespace System.Collections.Specialized
                 m_array[m_count] = default;
                 return node;
             }
-
+    
             public sealed class Node : AdaptiveRadixTree<TKey, TValue>.Node {
                 /// <summary>
                 ///     Remaining hamming distance.
                 /// </summary>
                 public int HammingDistance;
-
+    
                 public long Address;
                 internal NodeType Type;
                 public byte ChildrenCount;
-
+    
                 public override string ToString() {
                     return $"[@{this.Address}] {this.Type.ToString()}";
                 }
-
+    
                 public object Clone() {
                     return new Node() {
                         Address         = this.Address,
@@ -5295,7 +5336,7 @@ namespace System.Collections.Specialized
             public byte[] ValueBuffer;
             public int ValueIndex;
             public int ValueLength;
-
+    
             public TKey GetKey(AdaptiveRadixTree<TKey, TValue> owner) {
                 UnescapeLeafKeyTerminator(this.Key, 0, ref this.KeyLength);
                 return (TKey)owner.m_keyDecoder(this.Key, 0, this.KeyLength);
@@ -5308,12 +5349,12 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region protected Alloc()
         [MethodImpl(AggressiveInlining)]
         protected long Alloc(NodeType nodeType) {
             //return this.Alloc(CalculateNodeSize(nodeType));
-
+    
             switch(nodeType) {
                 case NodeType.Node4:   return m_memoryManagerNode4.Alloc();
                 case NodeType.Node8:   return m_memoryManagerNode8.Alloc();
@@ -5336,7 +5377,7 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         protected void Free(long address, NodeType nodeType) {
             //this.Free(address, CalculateNodeSize(nodeType));
-
+    
             switch(nodeType) {
                 case NodeType.Node4:   m_memoryManagerNode4.Free(address);   break;
                 case NodeType.Node8:   m_memoryManagerNode8.Free(address);   break;
@@ -5351,17 +5392,17 @@ namespace System.Collections.Specialized
         [MethodImpl(AggressiveInlining)]
         protected void Free(long address, long length) {
             var prevCapacity = m_memoryManager.Capacity;
-
+    
             m_memoryManager.Free(address, length);
-
+    
             var newCapacity = m_memoryManager.Capacity;
-            
+                
             // if we happen to downsize, then notify the stream
             if(newCapacity < prevCapacity)
                 this.Stream.SetLength(newCapacity);
         }
         #endregion
-
+    
         // default encoders
         #region public static GetDefaultEncoder<T>()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
@@ -5383,12 +5424,12 @@ namespace System.Collections.Specialized
             if(typeof(T) == typeof(DateTime)) return Unsafe.As<Action<T, Buffer>>(new Action<DateTime, Buffer>(EncodeDateTime));
             if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Action<T, Buffer>>(new Action<TimeSpan, Buffer>(EncodeTimeSpan));
             if(typeof(T) == typeof(byte[]))   return Unsafe.As<Action<T, Buffer>>(new Action<byte[], Buffer>(EncodeByteArray));
-
+    
             // note: if you need to store live values that can change, store an index to it instead
             // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-            
+                
             return null;
-
+    
             void EncodeString(string key, Buffer res) {
                 var count  = Encoding.UTF8.GetByteCount(key);
                 res.EnsureCapacity(count);
@@ -5500,10 +5541,10 @@ namespace System.Collections.Specialized
                 res.Length = 16;
                 var buffer = res.Content;
                 var bits   = decimal.GetBits(key);
-
+    
                 // technically could be compressed since theres some unused ranges
                 // int[3] bits [30-24] and [0-15] are always zero
-
+    
                 int bit = bits[0];
                 buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
                 buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
@@ -5575,12 +5616,12 @@ namespace System.Collections.Specialized
             if(typeof(T) == typeof(DateTime)) return EncodeDateTime;
             if(typeof(T) == typeof(TimeSpan)) return EncodeTimeSpan;
             if(typeof(T) == typeof(byte[]))   return EncodeByteArray;
-
+    
             // note: if you need to store live values that can change, store an index to it instead
             // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-            
+                
             return null;
-
+    
             void EncodeString(object key, Buffer res) {
                 var item   = (string)key;
                 var count  = Encoding.UTF8.GetByteCount(item);
@@ -5705,10 +5746,10 @@ namespace System.Collections.Specialized
                 res.Length = 16;
                 var buffer = res.Content;
                 var bits   = decimal.GetBits(item);
-
+    
                 // technically could be compressed since theres some unused ranges
                 // int[3] bits [30-24] and [0-15] are always zero
-
+    
                 int bit = bits[0];
                 buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
                 buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
@@ -5789,12 +5830,12 @@ namespace System.Collections.Specialized
             if(typeof(T) == typeof(DateTime)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, DateTime>(DecodeDateTime));
             if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, TimeSpan>(DecodeTimeSpan));
             if(typeof(T) == typeof(byte[]))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte[]>(DecodeByteArray));
-
+    
             // note: if you need to store live values that can change, store an index to it instead
             // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-            
+                
             return null;
-
+    
             string DecodeString(byte[] buffer, int start, int len) {
                 return Encoding.UTF8.GetString(buffer, start, len);
             }
@@ -5868,7 +5909,7 @@ namespace System.Collections.Specialized
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
-
+    
                 return new UnionFloat() { Binary = value_uint }.Value;
             }
             float DecodeFloat(byte[] buffer, int start, int len) {
@@ -5887,7 +5928,7 @@ namespace System.Collections.Specialized
             }
             decimal DecodeDecimal(byte[] buffer, int start, int len) {
                 var bits = new int[4];
-
+    
                 bits[0] =
                     (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8) |
@@ -5908,7 +5949,7 @@ namespace System.Collections.Specialized
                     (buffer[start + 13] << 8) |
                     (buffer[start + 14] << 16) |
                     (buffer[start + 15] << 24);
-
+    
                 return new decimal(bits);
             }
             DateTime DecodeDateTime(byte[] buffer, int start, int len) {
@@ -5958,12 +5999,12 @@ namespace System.Collections.Specialized
             if(typeof(T) == typeof(DateTime)) return DecodeDateTime;
             if(typeof(T) == typeof(TimeSpan)) return DecodeTimeSpan;
             if(typeof(T) == typeof(byte[]))   return DecodeByteArray;
-
+    
             // note: if you need to store live values that can change, store an index to it instead
             // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-            
+                
             return null;
-
+    
             object DecodeString(byte[] buffer, int start, int len) {
                 return Encoding.UTF8.GetString(buffer, start, len);
             }
@@ -6037,7 +6078,7 @@ namespace System.Collections.Specialized
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
-
+    
                 return new UnionFloat() { Binary = value_uint }.Value;
             }
             object DecodeFloat(byte[] buffer, int start, int len) {
@@ -6056,7 +6097,7 @@ namespace System.Collections.Specialized
             }
             object DecodeDecimal(byte[] buffer, int start, int len) {
                 var bits = new int[4];
-
+    
                 bits[0] =
                     (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8) |
@@ -6077,7 +6118,7 @@ namespace System.Collections.Specialized
                     (buffer[start + 13] << 8) |
                     (buffer[start + 14] << 16) |
                     (buffer[start + 15] << 24);
-
+    
                 return new decimal(bits);
             }
             object DecodeDateTime(byte[] buffer, int start, int len) {
@@ -6113,15 +6154,15 @@ namespace System.Collections.Specialized
         #region public class Buffer
         public sealed class Buffer {
             private const int DEFAULT_CAPACITY = 32;
-
+    
             public byte[] Content;
             public int Length;
-
+    
             public Buffer(int capacity = DEFAULT_CAPACITY) : this(new byte[capacity]){ }
             public Buffer(byte[] buffer) {
                 this.Content = buffer ?? throw new ArgumentNullException(nameof(buffer));
             }
-
+    
             /// <summary>
             ///     Ensures the buffer can contain the capacity requested.
             /// </summary>
@@ -6129,7 +6170,7 @@ namespace System.Collections.Specialized
                 if(this.Content.Length < capacity)
                     Array.Resize(ref this.Content, capacity);
             }
-
+    
             public TKey GetKey(AdaptiveRadixTree<TKey, TValue> owner) {
                 UnescapeLeafKeyTerminator(this.Content, 0, ref this.Length);
                 return (TKey)owner.m_keyDecoder(this.Content, 0, this.Length);
@@ -6156,33 +6197,33 @@ namespace System.Collections.Specialized
         private static void EscapeLeafKeyTerminator(Buffer result) {
             // LEAF_NODE_KEY_ESCAPE_CHAR = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR
             // LEAF_NODE_KEY_TERMINATOR  = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR2
-
+    
             int length    = result.Length;
             int readIndex = 0;
             var buffer    = result.Content;
             while(length > 0) {
                 var index = new ReadOnlySpan<byte>(buffer, readIndex, length).IndexOfAny(LEAF_NODE_KEY_TERMINATOR, LEAF_NODE_KEY_ESCAPE_CHAR);
-
+    
                 if(index < 0)
                     break;
-
+    
                 readIndex += index;
                 length    -= index;
-
+    
                 var c = buffer[readIndex];
                 if(c == LEAF_NODE_KEY_TERMINATOR)
                     buffer[readIndex] = LEAF_NODE_KEY_ESCAPE_CHAR;
                 readIndex++;
-
+    
                 if(result.Length == buffer.Length) {
                     result.EnsureCapacity(result.Length * 2);
                     buffer = result.Content;
                 }
-
+    
                 BlockCopy(buffer, readIndex, buffer, readIndex + 1, length);
-
+    
                 buffer[readIndex++] = c == LEAF_NODE_KEY_TERMINATOR ? LEAF_NODE_KEY_ESCAPE_CHAR2 : LEAF_NODE_KEY_ESCAPE_CHAR;
-
+    
                 result.Length++;
                 length--;
             }
@@ -6199,7 +6240,7 @@ namespace System.Collections.Specialized
         private static void UnescapeLeafKeyTerminator(byte[] buffer, int start, ref int len) {
             // intentionally copy, were basically ignoring this value
             int stopAt = len;
-
+    
             UnescapeLeafKeyTerminator(buffer, start, ref len, ref stopAt);
         }
         /// <summary>
@@ -6214,45 +6255,45 @@ namespace System.Collections.Specialized
             // note: cannot contain LEAF_NODE_KEY_TERMINATOR anywhere, so dont check
             // LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR  = LEAF_NODE_KEY_ESCAPE_CHAR
             // LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR2 = LEAF_NODE_KEY_TERMINATOR
-
+    
             int length     = stopAt;
             int readIndex  = start;
             int writeIndex = start;
             while(length > 0) {
                 var index = new ReadOnlySpan<byte>(buffer, readIndex, length).IndexOf(LEAF_NODE_KEY_ESCAPE_CHAR);
-
+    
                 if(readIndex < writeIndex)
                     BlockCopy(buffer, readIndex, buffer, writeIndex, index >= 0 ? index : length + (len - stopAt));
-
+    
                 if(index < 0)
                     break;
-
+    
                 readIndex  += index + 1;
                 writeIndex += index;
                 length     -= index + 1;
-
+    
                 // missing escaped character
                 if(length <= 0 && stopAt <= len)
                     throw new FormatException("invalid escaping sequence.");
-
+    
                 var escapeSequence = buffer[readIndex++];
-
+    
                 if(escapeSequence == LEAF_NODE_KEY_ESCAPE_CHAR2)
                     buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
                 else if(escapeSequence == LEAF_NODE_KEY_ESCAPE_CHAR)
                     buffer[writeIndex++] = LEAF_NODE_KEY_ESCAPE_CHAR;
                 else
                     throw new FormatException("invalid escaping sequence.");
-
+    
                 len--;
                 stopAt--;
-
+    
                 if(len <= 0)
                     return;
             }
         }
         #endregion
-        
+            
         protected internal enum NodeType : byte { // ordering matters, and so does values
             Node4   = 1,
             Node8   = 2,
@@ -6263,7 +6304,7 @@ namespace System.Collections.Specialized
             Node256 = 7,
             Leaf    = 255,
         }
-
+    
         #region protected struct NodePointer
         protected readonly struct NodePointer : IEquatable<NodePointer> {
             /// <summary>
@@ -6274,16 +6315,16 @@ namespace System.Collections.Specialized
             ///     The location this pointer points towards.
             /// </summary>
             public readonly long Target;
-
+    
             public NodePointer(long address, long target) : this() {
                 this.Address = address;
                 this.Target  = target;
             }
-
+    
             public override int GetHashCode() {
                 return (this.Address, this.Target).GetHashCode();
             }
-
+    
             public bool Equals(NodePointer other) {
                 return other.Address == this.Address && other.Target == this.Target;
             }
@@ -6292,7 +6333,7 @@ namespace System.Collections.Specialized
                     return false;
                 return this.Equals((NodePointer)obj);
             }
-
+    
             public override string ToString() {
                 return $"(@{this.Address}) -> {this.Target}";
             }
@@ -6306,30 +6347,32 @@ namespace System.Collections.Specialized
         /// </summary>
         private sealed class FixedSizeMemoryManager {
             private const int SIZE = 8192 / sizeof(long);
-
+    
             public readonly int AllocSize;
             public readonly int PreAllocChunk;
-
+    
             private readonly long[] m_available = new long[SIZE];
             private int m_availableCount;
-
+    
             private readonly Func<long, long> m_alloc;
             private readonly Action<long, long> m_free;
-
+    
+            public int TotalFree => m_availableCount * this.AllocSize;
+    
             public FixedSizeMemoryManager(int allocSize, Func<long, long> alloc, Action<long, long> free) {
                 this.AllocSize     = allocSize;
                 this.PreAllocChunk = Math.Min(Math.Max(4096 / allocSize, 8), SIZE);
                 m_alloc            = alloc;
                 m_free             = free;
             }
-
+    
             /// <summary>
             ///     O(1)
             /// </summary>
             public long Alloc() {
                 if(m_availableCount > 0)
                     return m_available[--m_availableCount];
-
+    
                 // pre-alloc if we ran out
                 var size = this.PreAllocChunk * this.AllocSize;
                 var pos  = m_alloc(size);
@@ -6349,12 +6392,12 @@ namespace System.Collections.Specialized
                     // since we do want to downsize the stream, we favor releasing the furthest positions first
                     // this also helps cache locality
                     Array.Sort(m_available);
-
+    
                     // group by adjacent
                     long start     = -1;
                     long end       = 0;
                     int startIndex = SIZE / 2;
-
+    
                     for(int i = startIndex; i < SIZE; i++) {
                         var item = m_available[i];
                         if(start < 0) {
@@ -6371,7 +6414,7 @@ namespace System.Collections.Specialized
                         m_free(start, end - start);
                     m_availableCount = startIndex;
                 }
-
+    
                 m_available[m_availableCount++] = position;
             }
             /// <summary>
@@ -6382,7 +6425,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+    
         #region explicit interface(s) implementations
         void ICollection.CopyTo(Array array, int index) {
             foreach(var kvp in this.Items)
@@ -6391,10 +6434,10 @@ namespace System.Collections.Specialized
         IEnumerator IEnumerable.GetEnumerator() {
             return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).GetEnumerator();
         }
-
+    
         object ICollection.SyncRoot => this; // very cheap
         bool ICollection.IsSynchronized => false;
-
+    
 #if IMPLEMENT_DICTIONARY_INTERFACES
         void IDictionary<TKey, TValue>.Add(TKey key, TValue value) {
             this.Add(in key, in value);
@@ -6402,31 +6445,31 @@ namespace System.Collections.Specialized
         void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item) {
             this.Add(item.Key, item.Value);
         }
-
+    
         bool IDictionary<TKey, TValue>.Remove(TKey key) {
             return this.Remove(in key);
         }
         bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item) {
             if(!this.Contains(item.Key, item.Value))
                 return false;
-
+    
             return this.Remove(item.Key);
         }
-
+    
         ICollection<TKey> IDictionary<TKey, TValue>.Keys {
             get {
                 // ugh, should make the ICollection lazy loaded
                 return this.Keys.ToList();
             }
         }
-        
+            
         ICollection<TValue> IDictionary<TKey, TValue>.Values {
             get {
                 // ugh, should make the ICollection lazy loaded
                 return this.Values.ToList();
             }
         }
-        
+            
         TValue IDictionary<TKey, TValue>.this[TKey key] {
             get => this[in key];
             set => this[in key] = value;
@@ -6434,14 +6477,14 @@ namespace System.Collections.Specialized
         TValue IReadOnlyDictionary<TKey, TValue>.this[TKey key] {
             get => this[in key];
         }
-
+    
         bool IDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value) {
             return this.TryGetValue(in key, out value);
         }
         bool IReadOnlyDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value) {
             return this.TryGetValue(in key, out value);
         }
-
+    
         bool IDictionary<TKey, TValue>.ContainsKey(TKey key) {
             return this.ContainsKey(in key);
         }
@@ -6451,21 +6494,21 @@ namespace System.Collections.Specialized
         bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item) {
             return this.Contains(item.Key, item.Value);
         }
-
+    
         void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex) {
             foreach(var kvp in this.Items)
                 array[arrayIndex++] = kvp;
         }
-
+    
         bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly => false;
-
+    
         IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator() {
             return this.Items.GetEnumerator();
         }
 #endif
         #endregion
     }
-
+    
     public enum SearchOption {
         /// <summary>
         ///     Only results matching the pattern length will be returned.
@@ -6477,8 +6520,8 @@ namespace System.Collections.Specialized
         /// </summary>
         StartsWith,
     }
-
-
+    
+    
     public class AdaptiveRadixTreeTest {
         #region public static GenerateTestKeys()
         /// <param name="max_random_entries_per_character">ex: 3, key='ABCD', result='ABBCCCD'</param>
@@ -6486,7 +6529,7 @@ namespace System.Collections.Specialized
             var random = new Random(unchecked((int)seed));
             for(long i = 0; i < count; i++) {
                 var key = ChangeBase(i);
-
+    
                 if(max_random_entries_per_character <= 1)
                     yield return key;
                 else {
@@ -6507,31 +6550,31 @@ namespace System.Collections.Specialized
         #region private static ChangeBase()
         private static string ChangeBase(long value, string new_base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
             var current = Math.Abs(value);
-
+    
             if(current >= 0 && current < new_base.Length) {
                 return value >= 0 ?
                     new string(new_base[unchecked((int)value)], 1) :
                     new string(new char[2] { '-', new_base[unchecked((int)value)] });
             }
-
+    
             char[] res;
             int new_base_size = new_base.Length;
             var size          = unchecked((int)Math.Ceiling(Math.Log(current + 1, new_base_size)));
-            
+                
             if(value > 0)
                 res = new char[size];
             else {
                 res = new char[size + 1];
                 res[0] = '-';
             }
-
+    
             int index = res.Length;
-
+    
             do {
                 res[--index] = new_base[unchecked((int)(current % new_base_size))];
                 current     /= new_base_size;
             } while(current > 0);
-
+    
             return new string(res);
         }
         #endregion
