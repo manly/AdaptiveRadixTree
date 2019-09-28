@@ -2593,14 +2593,13 @@ namespace System.Collections.Specialized
                 case NodeType.Node128:
                     // since the add always write to num_children position, we need to find the key pointing to it
     
-                    // code below needs testing
                     var old_index = buffer[key_index + c];
                     buffer[key_index + c] = 0;
-                    if(old_index - 1 != num_children) {
-                        int i = new ReadOnlySpan<byte>(buffer, key_index, 256).IndexOf(unchecked((byte)(num_children + 1)));
+                    if(old_index != num_children) {
+                        int i = new ReadOnlySpan<byte>(buffer, key_index, 256).IndexOf(num_children);
                         System.Diagnostics.Debug.Assert(i >= 0);
                         buffer[key_index + i] = old_index;
-                        var child = ReadNodePointer(buffer, key_index + 256 + (buffer[key_index + i] - 1) * NODE_POINTER_BYTE_SIZE);
+                        var child = ReadNodePointer(buffer, key_index + 256 + (num_children - 1) * NODE_POINTER_BYTE_SIZE);
                         WriteNodePointer(buffer, key_index + 256 + (old_index - 1) * NODE_POINTER_BYTE_SIZE, child);
                     }
                     break;
