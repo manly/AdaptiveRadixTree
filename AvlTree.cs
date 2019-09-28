@@ -10,22 +10,25 @@ namespace System.Collections.Specialized
     ///    Implements an AVL tree (Adelson-Velsky and Landis).
     ///    This is a self-balancing binary search tree that takes 2 extra bits per node over a binary search tree.
     ///    Search/Insert/Delete() run in O(log n).
-    ///    This tree is optimized for lookup times. For heavy updates a RBTree is favored.
+    ///    Despite many claims to the contrary, practical tests show much better performance from this over Red-Black Trees.
     /// </summary>
     /// <remarks>
     ///    More strictly balanced than Red-Black Trees, leading to better lookup times.
+    ///    Typically, AvlTrees are wrongly considered slower because they enforce stricter balance, or because they require more balancing operations.
+    ///    Empyrical testing shows that number_of_rotations is a poor measure of performance, as it yields little difference.
+    ///    Likewise, maintaining an additional parent pointer should be a lot slower than an implementation without one, yet, the performance impact
+    ///    is negligible.
+    ///    So the overall benefit from more strictly enforced tree height results in more overall benefits than the cost of the rotations, 
+    ///    making AvlTree better suited for general use than Red-Black Trees. The only difference is the one extra bit required, 
+    ///    but .NET memory alignments prevent that bit saving to come into effect anyway.
     ///    
     ///    worst case       |   AVL tree      |   RB tree
     ///    =======================================
     ///    height           | 1.44 log n      | 2 log(n + 1)
     ///    update           | log n           | log n
     ///    lookup           | log n  (faster) | log n
-    ///    insert rotations | 2               | 2
-    ///    delete rotations | log n           | 3
-    ///    
-    ///    Inserting in AVL tree may imply a rebalance. After inserting, updating the ancestors has to be done up to the root, 
-    ///    or up to a point where the 2 subtrees are of equal depth. The probability of having to update n nodes is 1/3^k. 
-    ///    Rebalancing is O(1). Removing an element may imply more than one rebalancing (up to half the tree depth).
+    ///    insert rotations | 2               | 2               (very poor measure of performance)
+    ///    delete rotations | log n           | 3               (very poor measure of performance)
     /// </remarks>
     public sealed class AvlTree<TKey, TValue> : ICollection
 #if IMPLEMENT_DICTIONARY_INTERFACES
@@ -1374,22 +1377,25 @@ namespace System.Collections.Specialized
     ///    Implements an AVL tree (Adelson-Velsky and Landis).
     ///    This is a self-balancing binary search tree that takes 2 extra bits per node over a binary search tree.
     ///    Search/Insert/Delete() run in O(log n).
-    ///    This tree is optimized for lookup times. For heavy updates a RBTree is favored.
+    ///    Despite many claims to the contrary, practical tests show much better performance from this over Red-Black Trees.
     /// </summary>
     /// <remarks>
     ///    More strictly balanced than Red-Black Trees, leading to better lookup times.
+    ///    Typically, AvlTrees are wrongly considered slower because they enforce stricter balance, or because they require more balancing operations.
+    ///    Empyrical testing shows that number_of_rotations is a poor measure of performance, as it yields little difference.
+    ///    Likewise, maintaining an additional parent pointer should be a lot slower than an implementation without one, yet, the performance impact
+    ///    is negligible.
+    ///    So the overall benefit from more strictly enforced tree height results in more overall benefits than the cost of the rotations, 
+    ///    making AvlTree better suited for general use than Red-Black Trees. The only difference is the one extra bit required, 
+    ///    but .NET memory alignments prevent that bit saving to come into effect anyway.
     ///    
     ///    worst case       |   AVL tree      |   RB tree
     ///    =======================================
     ///    height           | 1.44 log n      | 2 log(n + 1)
     ///    update           | log n           | log n
     ///    lookup           | log n  (faster) | log n
-    ///    insert rotations | 2               | 2
-    ///    delete rotations | log n           | 3
-    ///    
-    ///    Inserting in AVL tree may imply a rebalance. After inserting, updating the ancestors has to be done up to the root, 
-    ///    or up to a point where the 2 subtrees are of equal depth. The probability of having to update n nodes is 1/3^k. 
-    ///    Rebalancing is O(1). Removing an element may imply more than one rebalancing (up to half the tree depth).
+    ///    insert rotations | 2               | 2               (very poor measure of performance)
+    ///    delete rotations | log n           | 3               (very poor measure of performance)
     /// </remarks>
     public sealed class AvlTree<TKey> : ICollection {
         private Node m_header; // note: root = m_header.Parent
