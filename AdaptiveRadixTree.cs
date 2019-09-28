@@ -6432,7 +6432,7 @@ namespace System.Collections.Specialized
                 array.SetValue(kvp, index++);
         }
         IEnumerator IEnumerable.GetEnumerator() {
-            return ((IEnumerable<KeyValuePair<TKey, TValue>>)this).GetEnumerator();
+            return this.Items.GetEnumerator();
         }
     
         object ICollection.SyncRoot => this; // very cheap
