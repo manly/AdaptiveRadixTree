@@ -1753,14 +1753,23 @@ namespace System.Collections.Specialized
             void DumpNodes() {
                 var raw = new byte[4096];
                 foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, true, true)) {
-                    var last        = path.Trail[path.Trail.Count - 1];
-                    var key         = last.GetKey(this, path, ref raw);
+                    var last              = path.Trail[path.Trail.Count - 1];
+                    TKey key              = default;
+                    bool format_exception = false;
+                    try {
+                        key = last.GetKey(this, path, ref raw);
+                    } catch(FormatException) {
+                        // occurs when a key part simply doesnt make sense on its own
+                        // this isnt an error per-se, since it can occur naturally
+                        // you're not meant to ever read "key parts", only full keys
+                        format_exception = true;
+                    }
                     string value    = last.Type != NodeType.Leaf ? null : "  value=" + last.GetValue(this).ToString();
                     var size        = last.CalculateNodeSize();
                     totalNodesSize += size;
     
                     sb.Append(' ', (path.Trail.Count - 1) * 3);
-                    sb.AppendLine($"[@{last.Pointer.Target} ({size} bytes)] key='{key.ToString().Replace("\0", "\\0")}'  {last.Type.ToString()}{value?.ToString().Replace("\0", "\\0")}");
+                    sb.AppendLine($"[@{last.Pointer.Target} ({size} bytes)] key='{(!format_exception ? key.ToString().Replace("\0", "\\0") : "format_exception")}'  {last.Type.ToString()}{value?.ToString().Replace("\0", "\\0")}");
                 }
             }
             void DumpItems() {
@@ -1872,7 +1881,10 @@ namespace System.Collections.Specialized
             sb.AppendLine($"memory_manager.capacity        = {m_memoryManager.Capacity}");
             sb.AppendLine($"memory_manager.total_allocated = {m_memoryManager.TotalAllocated} - {sum_preallocated} (pre-allocated/re-use) = {m_memoryManager.TotalAllocated - sum_preallocated} actually used");
             sb.AppendLine($"memory_manager.total_free      = {m_memoryManager.TotalFree}");
-    
+            sb.AppendLine("----- pre-allocated/re-used chunks -----");
+            foreach(var item in sub_memory_managers)
+                sb.AppendLine(string.Format("{0}.{1} = {2}   ({3} items)", item.VarName, nameof(FixedSizeMemoryManager.TotalFree), item.MemManager.TotalFree, item.MemManager.TotalFree / item.MemManager.AllocSize));
+
             return sb.ToString();
         }
         private class InternalMetrics {
