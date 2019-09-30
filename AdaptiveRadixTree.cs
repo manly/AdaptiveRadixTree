@@ -1,5 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
+#define ENABLE_LOGGING
 
 using System;
 using System.Collections.Generic;
@@ -1931,6 +1932,10 @@ namespace System.Collections.Specialized
                 var encodedKeySpan = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, 0, path.EncodedSearchKey.Length);
     
                 if(path.Trail.Count != 0) {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.TryAddItem)}() #1");
+#endif
+
                     // if theres only a partial match
                     var last              = path.Trail[path.Trail.Count - 1];
                     var key_match_length  = path.CalculateKeyMatchLength();
@@ -1954,6 +1959,9 @@ namespace System.Collections.Specialized
                         new_leaf_key.Length > 0 ? new_leaf_key[0] : (byte)0,
                         new_leaf_address);
                 } else {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.TryAddItem)}() #2");
+#endif
                     // if theres literally nothing in common with root node, then we must add to root node
                     // keep in mind we share no partial key at all with the root
     
@@ -1978,6 +1986,10 @@ namespace System.Collections.Specialized
                         new_leaf_address);
                 }
             } else {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.TryAddItem)}() #3");
+#endif
+
                 // if theres no root (m_rootPointer == 0)
                 var keyBuffer = m_keyBuffer;
                 m_keyEncoder(key, keyBuffer); 
@@ -2017,10 +2029,18 @@ namespace System.Collections.Specialized
                 if(partial_key_match.Length == partial_key_length) {
                     // if space remains in node
                     if(num_children < MaxChildCount(nodeType)) {
+#if ENABLE_LOGGING
+                        System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #1");
+#endif
+
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
                         this.Stream.Position = ptr.Target;
                         this.Stream.Write(m_buffer, 0, CalculateNodeSize(nodeType));
                     } else {
+#if ENABLE_LOGGING
+                        System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #2");
+#endif
+
                         // if the node is at capacity, then upgrade it, then add
                         UpgradeNode(m_buffer, nodeType);
                         AddItemToNonFullNode(m_buffer, 0, new_item_c, new_item_address);
@@ -2041,6 +2061,10 @@ namespace System.Collections.Specialized
                         this.Free(ptr.Target, nodeType);
                     }
                 } else {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #3");
+#endif
+
                     // if partially matching the current node
                     // then we need to shorten the key
                     //
@@ -2074,6 +2098,9 @@ namespace System.Collections.Specialized
     
                             // if merge confirmed, then prepend old_branch_prefixes on secondary node
                             if(child_partial_length + old_branch_prefixes.Length <= MAX_PREFIX_LEN) {
+#if ENABLE_LOGGING
+                                System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #4");
+#endif
                                 use_node_merge       = true;
                                 m_buffer[childWriteIndex + 2] = unchecked((byte)(child_partial_length + old_branch_prefixes.Length));
                                 BlockCopy(m_buffer, childWriteIndex + 3, m_buffer, childWriteIndex + 3 + old_branch_prefixes.Length, child_partial_length);
@@ -2105,7 +2132,11 @@ namespace System.Collections.Specialized
                     }
     
                     if(!use_node_merge) {
-                        m_buffer[2] = unchecked((byte)old_branch_prefixes.Length);
+#if ENABLE_LOGGING
+                        System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #5");
+#endif
+
+                        m_buffer[2]            = unchecked((byte)old_branch_prefixes.Length);
                         BlockCopy(old_branch_prefixes, 0, m_buffer, 3, old_branch_prefixes.Length);
                         var size               = CalculateNodeSize(nodeType);
                         var old_branch_address = this.Alloc(nodeType);
@@ -2133,6 +2164,10 @@ namespace System.Collections.Specialized
                 }
             } else { // leaf
                 if(partial_key_match.Length > 0 && partial_key_match.Length < partial_key_length - 1) { // partial_key_match.Length > 0
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #6");
+#endif
+
                     // if this breaks, it means you called this method when the key already existed
                     System.Diagnostics.Debug.Assert(partial_key_match.Length < partial_key_length);
     
@@ -2200,6 +2235,10 @@ namespace System.Collections.Specialized
                         
                     this.Free(ptr.Target, currentLeafSize);
                 } else if(partial_key_match.Length > 0) {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #7");
+#endif
+
                     // this case is basically when your tree is [aaaa] and you try to add [aaaaXXXX]
     
                     System.Diagnostics.Debug.Assert(partial_key_match.Length == partial_key_length - 1);
@@ -2240,6 +2279,10 @@ namespace System.Collections.Specialized
     
                     this.Free(ptr.Target, CalculateLeafNodeSize(partial_key_length, value_length));
                 } else { // partial_key_match.Length == 0
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.AddItem)}() #8");
+#endif
+
                     // this case is basically when your tree contains only one node [aaaa] you you try to insert [bbbb]
                     //
                     // for what its worth, this *only* makes sense if the current leaf is the root node
@@ -2473,13 +2516,17 @@ namespace System.Collections.Specialized
             // if removing the last item 
             var removingLastItem = this.LongCount == 1; // nodeToModify.Type != NodeType.Leaf && nodeToModify.ChildrenCount == 1;
             if(!removingLastItem) {
+#if ENABLE_LOGGING
+                System.Diagnostics.Debug.WriteLine($"{nameof(this.TryRemoveItem)}() #1");
+#endif
+
                 var old_size = CalculateNodeSize(nodeToModify.Type);
-                    
+
                 this.Stream.Position = nodeToModify.Address;
                 this.Stream.Read(m_buffer, 0, old_size);
-    
+
                 RemoveItemFromNode(m_buffer, 0, keyToRemove);
-    
+
                 // ex:      [abc]         try to delete 'abcde\0'         [abc]
                 //         /     \        which should generate:         /     \
                 //        /       \                                     /       \
@@ -2498,77 +2545,89 @@ namespace System.Collections.Specialized
                     var ptr              = GetMinChild(m_buffer, nodeToModify.Address);
                     this.Stream.Position = ptr.Target;
                     var offBranchType    = (NodeType)this.Stream.ReadByte();
-                    
+
                     if(offBranchType != NodeType.Leaf) {
                         var new_size           = CalculateNodeSize(offBranchType);
                         var readBytes          = this.Stream.Read(m_buffer, old_size + 1, new_size - 1) + 1;
                         var partial_length     = m_buffer[2];
                         var off_partial_length = m_buffer[old_size + 2];
-                    
+
                         if(partial_length + off_partial_length <= MAX_PREFIX_LEN) {
+#if ENABLE_LOGGING
+                            System.Diagnostics.Debug.WriteLine($"{nameof(this.TryRemoveItem)}() #2");
+#endif
+
                             use_node_merge = true;
-                    
+
                             // merge partial_key
-                            m_buffer[old_size]     = (byte)offBranchType;
+                            m_buffer[old_size] = (byte)offBranchType;
                             m_buffer[old_size + 2] = unchecked((byte)(partial_length + off_partial_length));
                             BlockCopy(m_buffer, old_size + 3, m_buffer, old_size + 3 + partial_length, off_partial_length);
                             BlockCopy(m_buffer, 3, m_buffer, old_size + 3, partial_length);
-                    
+
                             var new_address      = this.Alloc(offBranchType);
                             this.Stream.Position = new_address;
                             this.Stream.Write(m_buffer, old_size, new_size);
-                    
+
                             WriteNodePointer(m_buffer, 0, new_address);
                             this.Stream.Position = nodeToModify.ParentPointerAddress;
                             this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-                    
+
                             if(nodeToModify.ParentPointerAddress == 0)
                                 m_rootPointer = new_address;
-                    
+
                             this.Free(nodeToModify.Address, nodeToModify.Type);
                             this.Free(ptr.Target, offBranchType);
                         }
                     }
                 }
-    
-                if(!use_node_merge){
+
+                if(!use_node_merge) {
+#if ENABLE_LOGGING
+                    System.Diagnostics.Debug.WriteLine($"{nameof(this.TryRemoveItem)}() #3");
+#endif
+
                     var new_size   = old_size;
                     var alloc_type = nodeToModify.Type;
-    
+
                     if(nodeToModify.ChildrenCount - 1 < MinChildCount(nodeToModify.Type)) {
                         DowngradeNode(m_buffer, nodeToModify.Type);
                         alloc_type = nodeToModify.Type - 1;
-                        new_size   = CalculateNodeSize(alloc_type);
+                        new_size = CalculateNodeSize(alloc_type);
                     }
-    
+
                     var new_address      = this.Alloc(alloc_type);
                     this.Stream.Position = new_address;
                     this.Stream.Write(m_buffer, 0, new_size);
-    
+
                     WriteNodePointer(m_buffer, 0, new_address);
                     this.Stream.Position = nodeToModify.ParentPointerAddress;
                     this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-    
+
                     if(nodeToModify.ParentPointerAddress == 0)
                         m_rootPointer = new_address;
-    
+
                     this.Free(nodeToModify.Address, nodeToModify.Type);
                 }
-    
+
                 // free memory
                 for(int i = Math.Max(uniqueTrailStart, 1); i < path.Trail.Count; i++) {
                     var node  = path.Trail[i];
-    
+
                     if(node.Type != NodeType.Leaf)
                         this.Free(node.Address, node.Type);
                     else
                         this.Free(node.Address, CalculateLeafNodeSize(node.PartialKeyLength, node.ValueLength));
                 }
-    
+
                 this.LongCount--;
-            } else
+            } else {
+#if ENABLE_LOGGING
+                System.Diagnostics.Debug.WriteLine($"{nameof(this.TryRemoveItem)}() #4");
+#endif
                 // case where there is only 1 item in total, and its the one were removing
                 this.Clear();
+            }
     
             return true;
         }
