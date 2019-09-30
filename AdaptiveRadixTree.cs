@@ -1,6 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
-#define ENABLE_LOGGING
+//#define ENABLE_LOGGING
 
 using System;
 using System.Collections.Generic;
@@ -2296,6 +2296,8 @@ namespace System.Collections.Specialized
                     // this works because all leafs must contain 1+ partial_length
                     var current_leaf_c       = m_buffer[CalculateVarUInt64LengthEncoded(m_buffer[1]) + 1];
                     var current_leaf_address = ptr.Target;
+
+                    System.Diagnostics.Debug.Assert(current_leaf_c != new_item_c);
     
                     CreateEmptyNode4(m_buffer, 0, in partial_key_match); // note: partial_key_match is empty
                     AddItemToNonFullNode(m_buffer, 0, current_leaf_c, current_leaf_address);
