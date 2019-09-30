@@ -1902,7 +1902,7 @@ namespace System.Collections.Specialized
             public long ReferenceCount;
         }
         #endregion
-    
+
             
         // add() logic here
         #region private TryAddItem()
@@ -4670,7 +4670,7 @@ namespace System.Collections.Specialized
             ///     Be aware that returned data re-uses the same pointers, clone data if processing is not immediate.
             /// </summary>
             /// <param name="returnOnNodes">If false, return only the path on leafs. If true, returns the path on every node.</param>
-            public IEnumerable<Path> Run(NodePointer pointer, Stream stream, bool returnOnNodes, bool extractValue, byte[] initialKey = null, int initialKeySize = -1, TraversalAlgorithm traversalAlgorithm = TraversalAlgorithm.DepthFirst) {
+            public IEnumerable<Path> Run(NodePointer pointer, Stream stream, bool returnOnNodes, bool extractValue, byte[] initialKey = null, int initialKeySize = 0, TraversalAlgorithm traversalAlgorithm = TraversalAlgorithm.DepthFirst) {
                 if(m_count > 0) {
                     Array.Clear(m_array, 0, m_count);
                     m_count = 0;
