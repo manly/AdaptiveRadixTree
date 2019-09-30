@@ -1769,7 +1769,14 @@ namespace System.Collections.Specialized
                     totalNodesSize += size;
     
                     sb.Append(' ', (path.Trail.Count - 1) * 3);
-                    sb.AppendLine($"[@{last.Pointer.Target} ({size} bytes)] key='{(!format_exception ? key.ToString().Replace("\0", "\\0") : "format_exception")}'  {last.Type.ToString()}{value?.ToString().Replace("\0", "\\0")}");
+                    sb.AppendLine(string.Format("[@{0} ({1} bytes)] key='{2}'  {3}{4}{5}{6}", 
+                        last.Pointer.Target, 
+                        size, 
+                        (!format_exception ? key.ToString().Replace("\0", "\\0") : "format_exception"), 
+                        last.Pointer.Address == 0 ? "(***root***)  " : null, //last.Pointer.Target == m_rootPointer ? "" : "",
+                        last.Type.ToString(), 
+                        value?.ToString().Replace("\0", "\\0"),
+                        last.KeyLength == 0 ? (last.Pointer.Address == 0 ? null : "  >>> error_invalid_keylength=0 on non-root node!") : null));
                 }
             }
             void DumpItems() {
@@ -1903,7 +1910,7 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-            
+        
         // add() logic here
         #region private TryAddItem()
         /// <summary>
