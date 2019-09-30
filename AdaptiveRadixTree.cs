@@ -4291,7 +4291,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     Note: for performance reason, the same byte[] is passed and reused.
             /// </summary>
-            public IEnumerable<Node> Run(long address, Stream stream, byte[] initialKey = null, int initialKeySize = -1) {
+            public IEnumerable<Node> Run(long address, Stream stream, byte[] initialKey = null, int initialKeySize = 0) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
@@ -4518,7 +4518,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     Note: for performance reason, the same byte[]s are passed and reused.
             /// </summary>
-            public IEnumerable<Node> Run(long address, Stream stream, byte[] initialKey = null, int initialKeySize = -1) {
+            public IEnumerable<Node> Run(long address, Stream stream, byte[] initialKey = null, int initialKeySize = 0) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
