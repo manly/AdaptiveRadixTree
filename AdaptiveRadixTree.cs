@@ -2294,8 +2294,10 @@ namespace System.Collections.Specialized
                     // which also means we intentionally create a node4 without any partial key
     
                     // this works because all leafs must contain 1+ partial_length
-                    var current_leaf_c       = m_buffer[CalculateVarUInt64LengthEncoded(m_buffer[1]) + 1];
-                    var current_leaf_address = ptr.Target;
+                    var partial_length_index  = CalculateVarUInt64LengthEncoded(m_buffer[1]) + 1;
+                    partial_length_index     += CalculateVarUInt64LengthEncoded(m_buffer[partial_length_index]);
+                    var current_leaf_c        = m_buffer[partial_length_index];
+                    var current_leaf_address  = ptr.Target;
 
                     System.Diagnostics.Debug.Assert(current_leaf_c != new_item_c);
     
