@@ -1,6 +1,6 @@
 ﻿//#define IMPLEMENT_DICTIONARY_INTERFACES // might want to disable due to System.Linq.Enumerable extensions clutter
 #define USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE // if you dont want any external dependencies, comment this. this is only used to avoid needless casts
-    
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,10 +8,10 @@ using System.Text;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-    
+
 using static System.Runtime.CompilerServices.MethodImplOptions;
-    
-    
+
+
 namespace System.Collections.Specialized 
 {
     /// <summary>
@@ -1884,6 +1884,16 @@ namespace System.Collections.Specialized
             sb.AppendLine("----- pre-allocated/re-used chunks -----");
             foreach(var item in sub_memory_managers)
                 sb.AppendLine(string.Format("{0}.{1} = {2}   ({3} items)", item.VarName, nameof(FixedSizeMemoryManager.TotalFree), item.MemManager.TotalFree, item.MemManager.TotalFree / item.MemManager.AllocSize));
+
+            //sb.AppendLine();
+            //sb.AppendLine("allocated chunks");
+            //var allocated_chunks = m_memoryManager
+            //    .GetAllocatedMemory()
+            //    .GroupBy(o => o.length)
+            //    .Select(o => new { o.Key, Count =  o.Count() })
+            //    .OrderBy(o => o.Key);
+            //foreach(var item in allocated_chunks)
+            //    sb.AppendLine($"[size={item.Key}] count={item.Count}");
 
             return sb.ToString();
         }
