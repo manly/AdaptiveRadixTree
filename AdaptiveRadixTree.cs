@@ -1827,15 +1827,16 @@ namespace System.Collections.Specialized
         ///     Also helps tuning of values based on data.
         /// </summary>
         public string CalculateMetrics() {
-            var sb    = new StringBuilder();
-            var nodes = new Dictionary<long, InternalMetrics>();
+            var sb     = new StringBuilder();
+            var nodes  = new Dictionary<long, InternalMetrics>();
     
             foreach(var path in new PathEnumerator().Run(new NodePointer(0, m_rootPointer), this.Stream, false, false)) {
-                foreach(var trail in path.Trail) {
-                    var key = trail.Pointer.Target;
+                for(int i = 0; i < path.Trail.Count; i++) {
+                    var trail = path.Trail[i];
+                    var key   = trail.Pointer.Target;
                     if(!nodes.TryGetValue(key, out var metrics)) {
                         // clone the node because this is meant for immediate use, otherwise objects are re-used
-                        metrics = new InternalMetrics() { Node = (PathEnumerator.Node)trail.Clone() };
+                        metrics = new InternalMetrics() { Node = (PathEnumerator.Node)trail.Clone(), Depth = i };
                         nodes.Add(key, metrics);
                     }
                     metrics.ReferenceCount++;
@@ -1893,6 +1894,16 @@ namespace System.Collections.Specialized
             foreach(var item in sub_memory_managers)
                 sb.AppendLine(string.Format("{0}.{1} = {2}   ({3} items)", item.VarName, nameof(FixedSizeMemoryManager.TotalFree), item.MemManager.TotalFree, item.MemManager.TotalFree / item.MemManager.AllocSize));
 
+            var nodes_per_depth = nodes.Values.Where(o => o.Node.Type != NodeType.Leaf).GroupBy(o => o.Depth).OrderBy(o => o.Key).ToList();
+            var leafs_per_depth = nodes.Values.Where(o => o.Node.Type == NodeType.Leaf).GroupBy(o => o.Depth).OrderBy(o => o.Key).ToList();
+
+            sb.AppendLine();
+            foreach(var item in nodes_per_depth)
+                sb.AppendLine(string.Format("node.depth[{0}].count = {1}", item.Key, item.Count()));
+            sb.AppendLine();
+            foreach(var item in leafs_per_depth)
+                sb.AppendLine(string.Format("leaf.depth[{0}].count = {1}", item.Key, item.Count()));
+
             //sb.AppendLine();
             //sb.AppendLine("allocated chunks");
             //var allocated_chunks = m_memoryManager
@@ -1908,6 +1919,7 @@ namespace System.Collections.Specialized
         private class InternalMetrics {
             public PathEnumerator.Node Node;
             public long ReferenceCount;
+            public int Depth;
         }
         #endregion
 
