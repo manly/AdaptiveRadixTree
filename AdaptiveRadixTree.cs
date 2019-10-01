@@ -1899,7 +1899,16 @@ namespace System.Collections.Specialized
 
             sb.AppendLine();
             foreach(var item in nodes_per_depth)
-                sb.AppendLine(string.Format("node.depth[{0}].count = {1}", item.Key, item.Count()));
+                sb.AppendLine(string.Format("node.depth[{0}].count = {1}  (4/8/16/32/64/128/256={2},{3},{4},{5},{6},{7},{8})", 
+                    item.Key, 
+                    item.Count(), 
+                    item.Where(o => o.Node.Type == NodeType.Node4).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node8).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node16).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node32).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node64).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node128).Count(),
+                    item.Where(o => o.Node.Type == NodeType.Node256).Count()));
             sb.AppendLine();
             foreach(var item in leafs_per_depth)
                 sb.AppendLine(string.Format("leaf.depth[{0}].count = {1}", item.Key, item.Count()));
