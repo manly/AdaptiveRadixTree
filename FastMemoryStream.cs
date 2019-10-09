@@ -34,6 +34,7 @@ namespace System.IO
             m_sections    = new byte[4][];
             m_sections[0] = new byte[BUFFER_SIZE];
             m_current     = m_sections[0];
+            this.Capacity = BUFFER_SIZE;
         }
         public FastMemoryStream(byte[] buffer, int offset, int count) : this() {
             this.Write(buffer, offset, count);
@@ -78,21 +79,26 @@ namespace System.IO
             int section    = unchecked((int)(pos / BUFFER_SIZE));
             var current    = m_current;
             while(true) {
-                int read   = Math.Min(remaining, BUFFER_SIZE);
+                int read   = Math.Min(remaining, BUFFER_SIZE - index);
 
                 Buffer.BlockCopy(current, index, buffer, offset, read);
-                index      = 0;
                 offset    += read;
                 remaining -= read;
 
-                if(remaining == 0)
+                if(remaining == 0) {
+                    if(index + read == BUFFER_SIZE) {
+                        current   = ++section < m_sections.Length ? m_sections[section] : null;
+                        m_current = current;
+                    }
                     break;
+                }
 
-                current = ++section < m_sections.Length ? m_sections[section] : null;
+                index     = 0;
+                current   = ++section < m_sections.Length ? m_sections[section] : null;
+                m_current = current;
             }
 
             m_position += count;
-            m_current   = current;
             return count;
         }
         #endregion
@@ -127,7 +133,7 @@ namespace System.IO
             
             var pos = m_position;
             // if we were past the buffers, then clear between m_length to m_position
-            if(pos > m_length)
+            if(pos > m_length || m_current == null)
                 this.InternalSetLength(pos + count, count);
 
             int section           = unchecked((int)(pos / BUFFER_SIZE));
@@ -144,7 +150,7 @@ namespace System.IO
                 if(m_length < pos)
                     m_length = pos;
 
-                if(current_remaining - count == 0) {
+                if(current_remaining - write == 0) {
                     if(pos >= this.Capacity) {
                         if(count > 0) {
                             if(++section == m_sections.Length)
@@ -228,7 +234,7 @@ namespace System.IO
                 return;
 
             int sections = unchecked((int)(this.Capacity / BUFFER_SIZE));
-            int needed   = unchecked((int)(value / BUFFER_SIZE));
+            int needed   = unchecked((int)(value / BUFFER_SIZE)) + 1;
 
             if(value > m_length) {
                 // clear data between m_length and value
@@ -239,7 +245,7 @@ namespace System.IO
                     int qty             = unchecked((int)Math.Min(bytes_to_clear, BUFFER_SIZE - current_index));
                     Array.Clear(m_sections[current_section], current_index, qty);
                     bytes_to_clear     -= qty;
-                    while(bytes_to_clear > 0) {
+                    while(bytes_to_clear > 0 && current_section < sections - 1) {
                         Array.Clear(m_sections[++current_section], 0, unchecked((int)Math.Min(BUFFER_SIZE, bytes_to_clear)));
                         bytes_to_clear -= BUFFER_SIZE;
                     }
@@ -285,16 +291,16 @@ namespace System.IO
                 throw new NotSupportedException("The Length is too large to support Read() operations on that position.");
 
             var remaining = this.Length;
-            var res = new byte[remaining];
-            int index = 0;
-            int count = m_sections.Length;
+            var res       = new byte[remaining];
+            int index     = 0;
+            int count     = m_sections.Length;
             for(int i = 0; i < count; i++) {
                 var current = m_sections[i];
                 var request = unchecked((int)Math.Min(BUFFER_SIZE, remaining));
                 if(request <= 0)
                     break;
                 Buffer.BlockCopy(current, 0, res, index, request);
-                index += request;
+                index     += request;
                 remaining -= request;
             }
             return res;
