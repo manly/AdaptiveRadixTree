@@ -1,11 +1,12 @@
-﻿using System.Runtime.CompilerServices;
+﻿//#define ENABLE_SANITY_CHECKS  // disable for speed
+using System.Runtime.CompilerServices;
 
 
 namespace System.IO
 {
     /// <summary>
     ///     A fast MemoryStream that uses a list of fixed byte[] internally.
-    ///     No safety checks are done anywhere.
+    ///     Meant for efficient resize and seeks.
     /// </summary>
     public sealed class FastMemoryStream : Stream {
         private const int BUFFER_SIZE = 131072; // > 85k to avoid GC 1, must be power of 2
@@ -58,14 +59,16 @@ namespace System.IO
 
         #region Read()
         public override int Read(byte[] buffer, int offset, int count) {
-            //if(buffer == null)
-            //    throw new ArgumentNullException(nameof(buffer));
-            //if(offset < 0)
-            //    throw new ArgumentOutOfRangeException(nameof(offset));
-            //if(count < 0)
-            //    throw new ArgumentOutOfRangeException(nameof(count));
-            //if(offset + count > buffer.Length)
-            //    throw new ArgumentException();
+#if ENABLE_SANITY_CHECKS
+            if(buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+            if(offset < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+            if(count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            if(offset + count > buffer.Length)
+                throw new ArgumentException();
+#endif
 
             long pos = m_position;
             // clip count to remaining
@@ -122,15 +125,17 @@ namespace System.IO
         #endregion
         #region Write()
         public override void Write(byte[] buffer, int offset, int count) {
-            //if(buffer == null)
-            //    throw new ArgumentNullException(nameof(buffer));
-            //if(offset < 0)
-            //    throw new ArgumentOutOfRangeException(nameof(offset));
-            //if(count < 0)
-            //    throw new ArgumentOutOfRangeException(nameof(count));
-            //if(offset + count > buffer.Length)
-            //    throw new ArgumentException();
-            
+#if ENABLE_SANITY_CHECKS
+            if(buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+            if(offset < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset));
+            if(count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            if(offset + count > buffer.Length)
+                throw new ArgumentException();
+#endif
+
             var pos = m_position;
             // if we were past the buffers, then clear between m_length to m_position
             if(pos > m_length || m_current == null)

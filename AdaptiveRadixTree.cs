@@ -235,7 +235,7 @@ namespace System.Collections.Specialized
             m_memoryManagerNode256 = new FixedSizeMemoryManager(CalculateNodeSize(NodeType.Node256), size => this.Alloc(size), (address, len) => this.Free(address, len));
     
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
-            this.Stream = storageStream ?? new TimeSeriesDB.IO.DynamicMemoryStream(131072);
+            this.Stream = storageStream ?? new FastMemoryStream(); // new MemoryStream(131072);
     
             m_keyEncoder   = keyEncoder   ?? GetDefaultEncoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyEncoder),   $"The key encoder {nameof(TKey)}={typeof(TKey).Name} has no encoder specified. You must provide one or use a primitive/string/byte[].");
             m_valueEncoder = valueEncoder ?? GetDefaultEncoder<TValue>() ?? throw new ArgumentNullException(nameof(valueEncoder), $"The value encoder {nameof(TValue)}={typeof(TValue).Name} has no encoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
