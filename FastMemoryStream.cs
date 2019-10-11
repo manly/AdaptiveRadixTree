@@ -216,7 +216,7 @@ namespace System.IO
                 throw new IOException();
 
             int section = unchecked((int)(offset / BUFFER_SIZE));
-            m_current   = m_sections[section];
+            m_current   = section < m_sections.Length ? m_sections[section] : null;
             m_position  = offset;
             return offset;
         }
@@ -265,7 +265,7 @@ namespace System.IO
                 }
             } else if(sections > needed) { 
                 // decreasing capacity
-                while(sections > needed) {
+                while(sections - 1 > needed) {
                     m_sections[sections] = null;
                     if(sections == m_sections.Length / 2 && sections > 8)
                         Array.Resize(ref m_sections, sections / 2);
