@@ -135,8 +135,6 @@ namespace System.Collections.Specialized
         protected readonly Buffer m_keyBuffer;
         protected readonly Buffer m_valueBuffer;
     
-        // todo: add byte adjustment to leaves that says how many bytes to skip for partial key, thus avoiding regenerating leaves constantly
-    
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
         protected readonly Action<TValue, Buffer>         m_valueEncoder; // see GetDefaultEncoder()

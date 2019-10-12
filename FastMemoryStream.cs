@@ -19,15 +19,7 @@ namespace System.IO
 
         #region constructors
         static FastMemoryStream() {
-            int bit_count   = 0;
-            int buffer_size = BUFFER_SIZE;
-            for(int i = 0; i < 32; i++) {
-                if((buffer_size & 1) == 1)
-                    bit_count++;
-                buffer_size >>= 1;
-            }
-            if(bit_count != 1)
-                throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), "must be a multiple of 2.");
+            CheckBufferSize(BUFFER_SIZE);
         }
         public FastMemoryStream() {
             m_position    = 0;
@@ -314,6 +306,19 @@ namespace System.IO
         #region ToString()
         public override string ToString() {
             return string.Format("{0} Pos={1}, Len={2}", this.GetType().Name, this.Position.ToString(System.Globalization.CultureInfo.InvariantCulture), this.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        #endregion
+
+        #region private static CheckBufferSize()
+        private static void CheckBufferSize(int buffer_size) {
+            int bit_count   = 0;
+            for(int i = 0; i < 32; i++) {
+                if((buffer_size & 1) == 1)
+                    bit_count++;
+                buffer_size >>= 1;
+            }
+            if(bit_count != 1)
+                throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), "must be a multiple of 2.");
         }
         #endregion
     }
