@@ -14,6 +14,9 @@ namespace System.Collections.Specialized
     ///     ie: [abcd] => {abcd, abc, bcd, ab, bc, cd, a, b, c, d}
     /// </summary>
     public sealed class NGramIndex {
+        private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
+        private const char DEFAULT_WILDCARD_ANYTHING = '*';
+
         private readonly Dictionary<string, List<NGram>> m_dict = new Dictionary<string, List<NGram>>();
 
         public readonly int MinNGramLength; // inclusive
@@ -26,7 +29,7 @@ namespace System.Collections.Specialized
         #region constructors
         /// <param name="minNGramLength">Inclusive.</param>
         /// <param name="maxNGramLength">Inclusive.</param>
-        public NGramIndex(int minNGramLength, int maxNGramLength, bool allowDuplicates, char wildcard_unknown_character = '?', char wildcard_anything_character = '*') {
+        public NGramIndex(int minNGramLength, int maxNGramLength, bool allowDuplicates, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             this.MinNGramLength   = Math.Max(minNGramLength, 1);
             this.MaxNGramLength   = Math.Max(maxNGramLength, this.MinNGramLength);
             this.AllowDuplicates  = allowDuplicates;
@@ -182,6 +185,8 @@ namespace System.Collections.Specialized
         #endregion
         #region ContainsFullValue()
         /// <summary>
+        ///     Returns true if value was previously added.
+        ///     
         ///     Throws ArgumentNullException on null value.
         ///     Throws ArgumentException on empty/duplicate value.
         /// </summary>

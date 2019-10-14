@@ -7,6 +7,7 @@ namespace System.Collections.Specialized
 {
     /// <summary>
     ///    Implements a B+Tree using roughly AvlTree&lt;TKey, SortedArray&lt;KeyValuePair&gt;&gt;.
+    ///    Guarantees a fill_ratio of 66%+ on inserts, and 50%+ on deletes.
     /// </summary>
     /// <remarks>
     ///    Using an optimal self-balanced tree (for query times) since most queries will be purely lookups.
@@ -706,23 +707,17 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(n)
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         /// </summary>
-        public IEnumerable<KeyValuePair> Range(TKey start, TKey end) {
+        public IEnumerable<KeyValuePair> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
             if(this.Count == 0)
                 yield break;
  
             var search_start = this.BinarySearch(start);
             var search_end   = this.BinarySearch(end);
  
-            var index_start = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
-            var index_end   = search_end.Index;
-            if(index_end < 0) {
-                index_end = ~index_end;
-                if(index_end < search_end.Node.Value.Count && m_comparer.Compare(end, search_end.Items[index_end].Key) == 0)
-                    index_end++;
-            } else
-                index_end++;
+            var index_start = search_start.Index < 0 ? ~search_start.Index : search_start.Index + (include_start ? 0 : 1);
+            var index_end   = search_end.Index < 0 ? ~search_end.Index : search_end.Index + (include_end ? 1 : 0);
  
             var search_end_node = search_end.Node;
             if(search_start.Node == search_end_node) {
@@ -1304,6 +1299,7 @@ namespace System.Collections.Specialized
 
     /// <summary>
     ///    Implements a B+Tree using roughly AvlTree&lt;TKey, SortedArray&lt;Key&gt;&gt;.
+    ///    Guarantees a fill_ratio of 66%+ on inserts, and 50%+ on deletes.
     /// </summary>
     /// <remarks>
     ///    Using an optimal self-balanced tree (for query times) since most queries will be purely lookups.
@@ -1806,23 +1802,17 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(n)
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         /// </summary>
-        public IEnumerable<TKey> Range(TKey start, TKey end) {
+        public IEnumerable<TKey> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
             if(this.Count == 0)
                 yield break;
  
             var search_start = this.BinarySearch(start);
             var search_end   = this.BinarySearch(end);
  
-            var index_start = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
-            var index_end   = search_end.Index;
-            if(index_end < 0) {
-                index_end = ~index_end;
-                if(index_end < search_end.Node.Value.Count && m_comparer.Compare(end, search_end.Items[index_end]) == 0)
-                    index_end++;
-            } else
-                index_end++;
+            var index_start = search_start.Index < 0 ? ~search_start.Index : search_start.Index + (include_start ? 0 : 1);
+            var index_end   = search_end.Index < 0 ? ~search_end.Index : search_end.Index + (include_end ? 1 : 0);
  
             var search_end_node = search_end.Node;
             if(search_start.Node == search_end_node) {

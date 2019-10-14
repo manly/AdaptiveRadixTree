@@ -895,16 +895,16 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(2 log n + m)   m = number of items returned
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         ///     Use RangeEnumerator instead for efficient re-use.
         /// </summary>
-        public IEnumerable<Node> Range(TKey start, TKey end) {
-            return new RangeEnumerator(this).Run(start, end);
+        public IEnumerable<Node> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
+            return new RangeEnumerator(this).Run(start, end, include_start, include_end);
         }
         /// <summary>
         ///     O(2 log n + m)   m = number of items returned
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         ///     This enumerator is made for re-use, to avoid array reallocations.
         /// </summary>
         public sealed class RangeEnumerator {
@@ -918,15 +918,15 @@ namespace System.Collections.Specialized
                 m_owner = owner;
             }
          
-            public IEnumerable<Node> Run(TKey start, TKey end) {
+            public IEnumerable<Node> Run(TKey start, TKey end, bool include_start = true, bool include_end = true) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
          
                 var start_path = new HashSet<Node>();
-                var node       = this.FindStartNode(start, start_path);
-                var end_node   = this.FindEndNode(end);
+                var node       = this.FindStartNode(start, start_path, include_start);
+                var end_node   = this.FindEndNode(end, include_end);
          
                 while(node != null) {
                     if(node.Left != null && !start_path.Contains(node)) {
@@ -955,18 +955,19 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindStartNode(TKey start, HashSet<Node> path) {
+            private Node FindStartNode(TKey start, HashSet<Node> path, bool include_start) {
                 var node = this.TryGetPath(start, path);
-                if(m_owner.m_comparer(start, node.Key) > 0)
+                var diff = m_owner.m_comparer(start, node.Key);
+                if(diff > 0 || (!include_start && diff == 0))
                     node = node.Next();
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindEndNode(TKey end) {
+            private Node FindEndNode(TKey end, bool include_end) {
                 var x    = m_owner.BinarySearch(end);
                 var node = x.Node;
-                if(x.Diff < 0)
-                    node = x.Node.Previous();
+                if(x.Diff < 0 || (!include_end && x.Diff == 0))
+                    node = node.Previous();
                 return node;
             }
             private Node TryGetPath(TKey key, HashSet<Node> path) {
@@ -2176,16 +2177,16 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(2 log n + m)   m = number of items returned
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         ///     Use RangeEnumerator instead for efficient re-use.
         /// </summary>
-        public IEnumerable<Node> Range(TKey start, TKey end) {
-            return new RangeEnumerator(this).Run(start, end);
+        public IEnumerable<Node> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
+            return new RangeEnumerator(this).Run(start, end, include_start, include_end);
         }
         /// <summary>
         ///     O(2 log n + m)   m = number of items returned
         ///     
-        ///     Returns all nodes between the 2 keys, including from/to.
+        ///     Returns all nodes between the 2 keys.
         ///     This enumerator is made for re-use, to avoid array reallocations.
         /// </summary>
         public sealed class RangeEnumerator {
@@ -2199,15 +2200,15 @@ namespace System.Collections.Specialized
                 m_owner = owner;
             }
          
-            public IEnumerable<Node> Run(TKey start, TKey end) {
+            public IEnumerable<Node> Run(TKey start, TKey end, bool include_start = true, bool include_end = true) {
                 if(m_stackIndex > 0) {
                     Array.Clear(m_stack, 0, m_stackIndex);
                     m_stackIndex = 0;
                 }
          
                 var start_path = new HashSet<Node>();
-                var node       = this.FindStartNode(start, start_path);
-                var end_node   = this.FindEndNode(end);
+                var node       = this.FindStartNode(start, start_path, include_start);
+                var end_node   = this.FindEndNode(end, include_end);
          
                 while(node != null) {
                     if(node.Left != null && !start_path.Contains(node)) {
@@ -2236,18 +2237,19 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindStartNode(TKey start, HashSet<Node> path) {
+            private Node FindStartNode(TKey start, HashSet<Node> path, bool include_start) {
                 var node = this.TryGetPath(start, path);
-                if(m_owner.m_comparer(start, node.Key) > 0)
+                var diff = m_owner.m_comparer(start, node.Key);
+                if(diff > 0 || (!include_start && diff == 0))
                     node = node.Next();
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindEndNode(TKey end) {
+            private Node FindEndNode(TKey end, bool include_end) {
                 var x    = m_owner.BinarySearch(end);
                 var node = x.Node;
-                if(x.Diff < 0)
-                    node = x.Node.Previous();
+                if(x.Diff < 0 || (!include_end && x.Diff == 0))
+                    node = node.Previous();
                 return node;
             }
             private Node TryGetPath(TKey key, HashSet<Node> path) {
