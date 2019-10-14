@@ -991,6 +991,97 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
+        #region AvlTree<string, TValue>.StartsWith()
+        ///// <summary>
+        /////     O(log n + m)   m = number of items returned
+        /////     
+        /////     Use StartsWithEnumerator instead for efficient re-use.
+        ///// </summary>
+        //internal static IEnumerable<AvlTree<string, TValue>.Node> StartsWith(AvlTree<string, TValue> tree, string key) {
+        //    return new StartsWithEnumerator(tree).Run(key);
+        //}
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        ///     
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        public sealed class StartsWithEnumerator {
+            // manually handled stack for better performance
+            private AvlTree<string, TValue>.Node[] m_stack = new AvlTree<string, TValue>.Node[16];
+            private int m_stackIndex = 0;
+         
+            private readonly AvlTree<string, TValue> m_owner;
+         
+            public StartsWithEnumerator(AvlTree<string, TValue> owner) {
+                m_owner = owner;
+            }
+         
+            public IEnumerable<AvlTree<string, TValue>.Node> Run(string key) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+         
+                var start_path = new HashSet<AvlTree<string, TValue>.Node>();
+                var node       = this.FindStartNode(key, start_path);
+         
+                while(node != null) {
+                    if(node.Left != null && !start_path.Contains(node)) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            if(node.Key.Length < key.Length || string.CompareOrdinal(node.Key, 0, key, 0, key.Length) != 0)
+                                yield break;
+
+                            yield return node;
+                                
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(AvlTree<string, TValue>.Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private AvlTree<string, TValue>.Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private AvlTree<string, TValue>.Node FindStartNode(string key, HashSet<AvlTree<string, TValue>.Node> path) {
+                var node = this.TryGetPath(key, path);
+                var diff = m_owner.m_comparer(key, node.Key);
+                if(diff > 0)
+                    node = node.Next();
+                return node;
+            }
+            private AvlTree<string, TValue>.Node TryGetPath(string key, HashSet<AvlTree<string, TValue>.Node> path) {
+                var current = m_owner.m_header.Parent;
+                var prev    = current;
+                while(current != null) {
+                    path.Add(current);
+                    prev = current;
+         
+                    int diff = m_owner.m_comparer(key, current.Key);
+
+                    if(diff > 0)
+                        current = current.Right;
+                    else if(diff < 0) {
+                        this.Push(current);
+                        current = current.Left;
+                    } else
+                        return current;
+                }
+                return prev;
+            }
+        }
+        #endregion
  
         #region private static RotateLeft()
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2273,6 +2364,97 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
+        #region AvlTree<string>.StartsWith()
+        ///// <summary>
+        /////     O(log n + m)   m = number of items returned
+        /////     
+        /////     Use StartsWithEnumerator instead for efficient re-use.
+        ///// </summary>
+        //internal static IEnumerable<AvlTree<string>.Node> StartsWith(AvlTree<string> tree, string key) {
+        //    return new StartsWithEnumerator(tree).Run(key);
+        //}
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        ///     
+        ///     This enumerator is made for re-use, to avoid array reallocations.
+        /// </summary>
+        public sealed class StartsWithEnumerator {
+            // manually handled stack for better performance
+            private AvlTree<string>.Node[] m_stack = new AvlTree<string>.Node[16];
+            private int m_stackIndex = 0;
+         
+            private readonly AvlTree<string> m_owner;
+         
+            public StartsWithEnumerator(AvlTree<string> owner) {
+                m_owner = owner;
+            }
+         
+            public IEnumerable<AvlTree<string>.Node> Run(string key) {
+                if(m_stackIndex > 0) {
+                    Array.Clear(m_stack, 0, m_stackIndex);
+                    m_stackIndex = 0;
+                }
+         
+                var start_path = new HashSet<AvlTree<string>.Node>();
+                var node       = this.FindStartNode(key, start_path);
+         
+                while(node != null) {
+                    if(node.Left != null && !start_path.Contains(node)) {
+                        this.Push(node);
+                        node = node.Left;
+                    } else {
+                        do {
+                            if(node.Key.Length < key.Length || string.CompareOrdinal(node.Key, 0, key, 0, key.Length) != 0)
+                                yield break;
+
+                            yield return node;
+                                
+                            node = node.Right;
+                        } while(node == null && m_stackIndex > 0 && (node = this.Pop()) != null);
+                    }
+                }
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void Push(AvlTree<string>.Node value) {
+                if(m_stackIndex == m_stack.Length)
+                    Array.Resize(ref m_stack, m_stackIndex * 2);
+                m_stack[m_stackIndex++] = value;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private AvlTree<string>.Node Pop() {
+                var node = m_stack[--m_stackIndex];
+                m_stack[m_stackIndex] = default;
+                return node;
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private AvlTree<string>.Node FindStartNode(string key, HashSet<AvlTree<string>.Node> path) {
+                var node = this.TryGetPath(key, path);
+                var diff = m_owner.m_comparer(key, node.Key);
+                if(diff > 0)
+                    node = node.Next();
+                return node;
+            }
+            private AvlTree<string>.Node TryGetPath(string key, HashSet<AvlTree<string>.Node> path) {
+                var current = m_owner.m_header.Parent;
+                var prev    = current;
+                while(current != null) {
+                    path.Add(current);
+                    prev = current;
+         
+                    int diff = m_owner.m_comparer(key, current.Key);
+
+                    if(diff > 0)
+                        current = current.Right;
+                    else if(diff < 0) {
+                        this.Push(current);
+                        current = current.Left;
+                    } else
+                        return current;
+                }
+                return prev;
+            }
+        }
+        #endregion
  
         #region private static RotateLeft()
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2573,5 +2755,29 @@ namespace System.Collections.Specialized
             }
             #endregion
         }
+    }
+
+
+    public static class AvlTreeExtensions {
+        #region static AvlTree<string>.StartsWith()
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        ///     
+        ///     Use StartsWithEnumerator instead for efficient re-use.
+        /// </summary>
+        public static IEnumerable<AvlTree<string>.Node> StartsWith(this AvlTree<string> tree, string key) {
+            return new AvlTree<string>.StartsWithEnumerator(tree).Run(key);
+        }
+        #endregion
+        #region static AvlTree<string, TValue>.StartsWith()
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        ///     
+        ///     Use StartsWithEnumerator instead for efficient re-use.
+        /// </summary>
+        public static IEnumerable<AvlTree<string, TValue>.Node> StartsWith<TValue>(this AvlTree<string, TValue> tree, string key) {
+            return new AvlTree<string, TValue>.StartsWithEnumerator(tree).Run(key);
+        }
+        #endregion
     }
 }

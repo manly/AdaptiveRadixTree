@@ -265,6 +265,7 @@ namespace System.Collections.Specialized
         #endregion
         // todo: combinesearchformat() so that anything following * is treated with uncertain positioning
         //       and any [chunk+?+chunk], [chunk+?] or [?+chunk] gets combined into one chunk
+        // maybe replace dict by btree and use btree.startswith()
 
         #region private GenerateNGrams()
         /// <summary>
