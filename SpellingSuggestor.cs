@@ -289,6 +289,9 @@ namespace System.Collections.Specialized
 
         #region private class Node
         private sealed class Node {
+            
+            // todo: should probably replace Permutations by AvlTree[] or BTree[] for massive speedup of add()/delete()
+
             public string[] Permutations = new string[4]; // ordered by "Length(distance),OriginalString"
             public int Count;
 

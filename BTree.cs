@@ -2,7 +2,7 @@
  
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
- 
+
 namespace System.Collections.Specialized
 {
     /// <summary>
@@ -814,7 +814,7 @@ namespace System.Collections.Specialized
             ///     Adds an item to the BTree at the end of it.
             ///     Items must be provided in the same sorting order as the BTree.
             ///     
-            ///     Throws ArgumentException() if keys are %lt;= this.Maximum.
+            ///     Throws ArgumentException() if keys are &lt;= this.Maximum.
             ///     Throws ArgumentException() on duplicate key.
             /// </summary>
             /// <exception cref="ArgumentException" />
@@ -1947,7 +1947,7 @@ namespace System.Collections.Specialized
             ///     Adds an item to the BTree at the end of it.
             ///     Items must be provided in the same sorting order as the BTree.
             ///     
-            ///     Throws ArgumentException() if keys are %lt;= this.Maximum.
+            ///     Throws ArgumentException() if keys are &lt;= this.Maximum.
             ///     Throws ArgumentException() on duplicate key.
             /// </summary>
             /// <exception cref="ArgumentException" />
