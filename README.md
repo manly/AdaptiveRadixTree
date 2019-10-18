@@ -1,5 +1,5 @@
 # AdaptiveRadixTree
-C# AdaptiveRadixTree implementation + FuzzyStringMatch stuff + LicensePlateIndex
+C# Adaptive Radix Tree implementation + Fuzzy String Match stuff + License Plate Index + NGram Index
 
 For now this is a placeholder for bits of code written on my own time for fun. 
 Most of the code is the AdaptiveRadixTree implementation, which includes multiple nifty search options.
