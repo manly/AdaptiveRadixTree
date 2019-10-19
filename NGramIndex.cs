@@ -333,7 +333,7 @@ namespace System.Collections.Specialized
 
             var searchFormatIndex = sub_searches[0].start;
             var dict = sub_searches[0].list
-                .Where(o => filter(o.Value))
+                .Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value))
                 .GroupBy(o => o.Value)
                 .ToDictionary(o => o.Key, o => new Matches(){ SearchFormatIndex = searchFormatIndex, NGrams = o.ToList(), Epoch = -1 });
                 
@@ -482,14 +482,14 @@ namespace System.Collections.Specialized
                     section.MinCharsAfter++;
                 }
 
-                for(int j = 0; j < section.SearchStart - section.WildcardUnknownBefore; j++) {
-                    if(format[j] != this.WildcardUnknown)
-                        section.MinCharsBefore++;
+                if(i > 0) {
+                    var prev = sections[i - 1];
+                    section.MinCharsBefore += prev.SearchLength + prev.MinCharsBefore + prev.MinCharsAfter;
                 }
-                for(int j = section.SearchStart + section.SearchLength + section.WildcardUnknownAfter; j < format.Length; j++) {
-                    if(format[j] != this.WildcardUnknown)
-                        section.MinCharsAfter++;
-                }
+            }
+            for(int i = sections.Count - 2; i >= 0; i--) {
+                var next = sections[i + 1];
+                sections[i].MinCharsAfter += next.SearchLength + next.MinCharsBefore + next.MinCharsAfter;
             }
 
             if(match == SearchOption.ExactMatch) {
@@ -498,8 +498,9 @@ namespace System.Collections.Specialized
             }
 
             return new ParsedFormat() {
-                Format   = format,
-                Sections = sections,
+                Format          = format,
+                Sections        = sections,
+                TotalCharacters = sections[0].SearchLength + sections[0].MinCharsBefore + sections[0].MinCharsAfter,
             };
         }
         /// <summary>
@@ -529,6 +530,7 @@ namespace System.Collections.Specialized
             ///     Unmodified user-specified search format.
             /// </summary>
             public string Format;
+            public int TotalCharacters;
             public List<ConsecutiveParseSection> Sections;
         }
         /// <summary>
