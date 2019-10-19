@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.IO;
 
 
 namespace System.Collections.Specialized
@@ -297,8 +296,12 @@ namespace System.Collections.Specialized
                 epoch++;
             }
 
-            var regexPattern = this.ConvertSearchFormatToRegex(parsed, false);
-            var regex        = new System.Text.RegularExpressions.Regex(regexPattern);
+            var regex = new WildcardRegex(
+                format_including_wildcards, 
+                match == SearchOption.ExactMatch ? WildcardRegex.SearchOption.ExactMatch : WildcardRegex.SearchOption.Partial, 
+                this.WildcardUnknown, 
+                this.WildcardAnything);
+            //new System.Text.RegularExpressions.Regex(regex.ToRegex());
 
             var intersection = results
                 .Where(o => o.Value.Epoch == epoch - 1)
@@ -576,74 +579,9 @@ namespace System.Collections.Specialized
             public bool ResultMustMatchAtEnd;
         }
         #endregion
-        #region private ConvertSearchFormatToRegex()
-        /// <param name="return_in_sql_quotes">if true, will return the string to be passed in sql, ie: "where searchcolumn ~ value"</param>
-        private string ConvertSearchFormatToRegex(ParsedFormat format, bool return_in_sql_quotes) {
-            int capacity = format.Format.Length;
-            if(capacity <= 4096)
-                capacity *= 2;
-            else {
-                // fast approximate count - not meant to be an exact count
-                capacity += 2;
-                for(int i = 0; i < format.Format.Length; i++) {
-                    var c = format.Format[i];
-                    if(c == this.WildcardAnything)
-                        capacity += 2;
-                    else if(!IsAlphaNumeric(c))
-                        capacity++;
-                }
-            }
-
-            var sb = new StringBuilder(capacity);
-
-            if(return_in_sql_quotes)
-                sb.Append('\'');
-
-            for(int j = 0; j < format.Sections.Count; j++) {
-                var section = format.Sections[j];
-
-                if(j > 0)
-                    sb.Append(".*");
-
-                if(section.ResultMustMatchAtStart)
-                    sb.Append('^');
-                for(int i = 0; i < section.WildcardUnknownBefore; i++)
-                    sb.Append('?');
-
-                for(int i = 0; i < section.SearchLength; i++) {
-                    var c = format.Format[section.SearchStart + i];
-
-                    if(c == this.WildcardUnknown)
-                        sb.Append('.');
-                    else if(return_in_sql_quotes && c == '\'')
-                        sb.Append("''");
-                    else {
-                        if(!IsAlphaNumeric(c))
-                            sb.Append('\\');
-                        sb.Append(c);
-                    }
-                }
-
-                for(int i = 0; i < section.WildcardUnknownAfter; i++)
-                    sb.Append('?');
-                if(section.ResultMustMatchAtEnd)
-                    sb.Append('$');
-            }
-
-            if(return_in_sql_quotes)
-                sb.Append('\'');
-
-            return sb.ToString();
-
-            bool IsAlphaNumeric(char c) {
-                //char.IsLetterOrDigit(c)
-                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-            }
-        }
-        #endregion
 
 
-        // maybe replace dict by btree and use btree.startswith()
+        // maybe replace dict by radix/btree and use btree.startswith()
 
         ///// <summary>
         /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
@@ -759,7 +697,7 @@ namespace System.Collections.Specialized
             /// </summary>
             Partial,
         }
-        public sealed class NGram {
+        private sealed class NGram {
             public readonly string Value;
             public readonly int Start;
             public readonly int Length;

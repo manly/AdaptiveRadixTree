@@ -78,6 +78,7 @@
     <Compile Include="FastMemoryStream.cs" />
     <Compile Include="BTree.cs" />
     <Compile Include="AvlTree.cs" />
+    <Compile Include="WildcardRegex.cs" />
     <Compile Include="NGramIndex.cs" />
     <Compile Include="PriorityQueue.cs" />
     <Compile Include="DynamicMemoryStream.cs" />
