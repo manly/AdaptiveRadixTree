@@ -500,6 +500,19 @@ namespace System.Collections.Specialized
                 sections[sections.Count - 1].ResultMustMatchAtEnd = format[format.Length - 1] != this.WildcardAnything;
             }
 
+            // merge '??' section with prev
+            // ex: 'abc*??*456' -> 'abc??*456'
+            int index = 1;
+            while(index < sections.Count) {
+                var section = sections[index];
+                if(section.SearchLength == 0 && !section.ResultMustMatchAtStart && !section.ResultMustMatchAtEnd && (section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0)) {
+                    var prev = sections[index - 1];
+                    prev.WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                    sections.RemoveAt(index);
+                } else 
+                    index++;
+            }
+
             return new ParsedFormat() {
                 Format          = format,
                 Sections        = sections,

@@ -45,6 +45,7 @@ namespace System.Collections.Specialized
             m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
 
             if(option == SearchOption.ExactMatch) {
+                // not sure if we should check if theres a non-? character before first * 
                 m_resultMustMatchAtStart = format[0] != this.WildcardAnything;
                 m_resultMustMatchAtEnd   = format[format.Length - 1] != this.WildcardAnything;
             }
@@ -85,7 +86,27 @@ namespace System.Collections.Specialized
             if(length < m_totalCharacters)
                 return (startIndex, -1);
 
+            // special case: reverse processing
+            // technically can't even be done currently
+            if(m_resultMustMatchAtEnd && !m_resultMustMatchAtStart)
+                return this.RareReverseMatch(value, startIndex, length);
 
+            int end = startIndex - length;
+            int nextStartIndex = startIndex + 1;
+            int sectionIndex = 0;
+            while(length > 0) {
+                // nextStartIndex = index of first match
+                startIndex = nextStartIndex;
+                var section = m_sections[sectionIndex];
+                if(section.Length > 0) {
+                    value.IndexOf(this.Format, section.Start, section.Length, StringComparison.Ordinal);
+                } else {
+                    // case where format='??'  or  'aa*?'
+
+                }
+            }
+        }
+        private (int start, int length) RareReverseMatch(string value, int startIndex, int length)) {
         }
         #endregion
         #region Matches()
@@ -120,6 +141,8 @@ namespace System.Collections.Specialized
 
                 if(res.length >= 0) {
                     yield return res;
+                    if(m_resultMustMatchAtStart || m_resultMustMatchAtEnd)
+                        yield break;
                     // dont allow overlapping results
                     startIndex = res.start + res.length;
                     length     = end - startIndex;
@@ -151,6 +174,10 @@ namespace System.Collections.Specialized
                 sb.Append('\'');
             if(m_resultMustMatchAtStart)
                 sb.Append('^');
+
+            // special case: means the format = '*'
+            if(m_sections.Length == 0)
+                sb.Append(".*");
 
             for(int j = 0; j < m_sections.Length; j++) {
                 var section = m_sections[j];
@@ -216,6 +243,19 @@ namespace System.Collections.Specialized
                 }
             }
 
+            // merge '??' section with prev
+            // ex: 'abc*??*456' -> 'abc??*456'
+            int index = 1;
+            while(index < sections.Count - (m_resultMustMatchAtEnd ? 1 : 0)) {
+                var section = sections[index];
+                if(section.Length == 0 && (section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0)) {
+                    var prev = sections[index - 1];
+                    prev.WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                    sections.RemoveAt(index);
+                } else 
+                    index++;
+            }
+
             var res = new ConsecutiveParseSection[sections.Count];
             for(int i = 0; i < res.Length; i++) {
                 var section = sections[i];
@@ -255,6 +295,8 @@ namespace System.Collections.Specialized
         }
         #endregion
 
+        // potential todo for long strings: boyer-moore string search algorithm with pre-processed searches
+        // problem is this wouldnt work well on short searches
 
         public enum SearchOption {
             /// <summary>
