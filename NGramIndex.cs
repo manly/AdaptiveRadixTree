@@ -506,11 +506,21 @@ namespace System.Collections.Specialized
             while(index < sections.Count) {
                 var section = sections[index];
                 if(section.SearchLength == 0 && !section.ResultMustMatchAtStart && !section.ResultMustMatchAtEnd && (section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0)) {
-                    var prev = sections[index - 1];
-                    prev.WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                    sections[index - 1].WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
                     sections.RemoveAt(index);
                 } else 
                     index++;
+            }
+            // move ['??' at section start] to [previous section end] for faster parse
+            // ex: 'abc?*??456' -> 'abc???*456'
+            index = 1;
+            while(index < sections.Count) {
+                var section = sections[index];
+                if(section.WildcardUnknownBefore > 0) {
+                    sections[index - 1].WildcardUnknownAfter += section.WildcardUnknownBefore;
+                    section.WildcardUnknownBefore = 0;
+                }
+                index++;
             }
 
             return new ParsedFormat() {
