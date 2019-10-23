@@ -220,6 +220,16 @@ namespace System.Collections.Specialized
             return false;
         }
         #endregion
+        #region GetItems()
+        /// <summary>
+        ///     O(n)
+        ///     Returns the added items.
+        ///     This is really inefficient and meant really only for debugging.
+        /// </summary>
+        public IEnumerable<string> GetItems() {
+            return m_dict.Values.SelectMany(o => o).Select(o => o.Value).Distinct();
+        }
+        #endregion
 
         #region Search()
         /// <summary>

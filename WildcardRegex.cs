@@ -16,38 +16,38 @@ namespace System.Collections.Specialized
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
 
-        public readonly string Format;
+        public readonly string WildcardFormat;
         public readonly SearchOption Option;
         
         /// <summary>?</summary>
-        private readonly char WildcardUnknown;
+        private readonly char m_wildcardUnknown;
         /// <summary>*</summary>
-        private readonly char WildcardAnything;
+        private readonly char m_wildcardAnything;
 
             
         private readonly bool m_resultMustMatchAtStart; // result/match must start at 0.
-        private readonly bool m_resultMustMatchAtEnd;   // result/match must end at comparand.Length.
+        private readonly bool m_resultMustMatchAtEnd;   // result/match must end at {start+length}.
         private readonly int m_totalCharacters;
         private readonly ConsecutiveParseSection[] m_sections; // if Length==0, means format = '*'
 
         #region constructors
-        /// <param name="format">The wildcard pattern. ex: '20??-01-01*'</param>
-        public WildcardRegex(string format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
-            if(string.IsNullOrEmpty(format))
-                throw new FormatException(nameof(format));
+        /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        public WildcardRegex(string wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+            if(string.IsNullOrEmpty(wildcard_format))
+                throw new FormatException(nameof(wildcard_format));
 
-            this.Format           = format;
-            this.Option           = option;
-            this.WildcardUnknown  = wildcard_unknown_character;
-            this.WildcardAnything = wildcard_anything_character;
+            this.WildcardFormat = wildcard_format;
+            this.Option         = option;
+            m_wildcardUnknown   = wildcard_unknown_character;
+            m_wildcardAnything  = wildcard_anything_character;
 
-            m_sections        = this.ParseSearchFormat(format);
+            m_sections        = this.ParseSearchFormat(wildcard_format);
             m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
 
             if(option == SearchOption.ExactMatch) {
                 // not sure if we should check if theres a non-? character before first * 
-                m_resultMustMatchAtStart = format[0] != this.WildcardAnything;
-                m_resultMustMatchAtEnd   = format[format.Length - 1] != this.WildcardAnything;
+                m_resultMustMatchAtStart = wildcard_format[0] != m_wildcardAnything;
+                m_resultMustMatchAtEnd   = wildcard_format[wildcard_format.Length - 1] != m_wildcardAnything;
             }
         }
         #endregion
@@ -85,28 +85,72 @@ namespace System.Collections.Specialized
         public (int start, int length) Match(string value, int startIndex, int length) {
             if(length < m_totalCharacters)
                 return (startIndex, -1);
+            // special case if format = '*'
+            if(m_sections.Length == 0)
+                return (startIndex, 0);
 
-            // special case: reverse processing
-            // technically can't even be done currently
-            if(m_resultMustMatchAtEnd && !m_resultMustMatchAtStart)
-                return this.RareReverseMatch(value, startIndex, length);
+            int index          = startIndex;
+            int originalLength = length;
+            int sectionIndex   = 0;
+            int firstIndex     = -1; // first match
+            int lastIndex      = -1; // last match end pos
 
-            int end = startIndex - length;
-            int nextStartIndex = startIndex + 1;
-            int sectionIndex = 0;
-            while(length > 0) {
-                // nextStartIndex = index of first match
-                startIndex = nextStartIndex;
+            if(m_resultMustMatchAtStart) {
+                var section = m_sections[0];
+                index      += section.WildcardUnknownBefore;
+                if(!this.StringEqualWithUnknownCharacters(value, index, this.WildcardFormat, section.Start, section.Length))
+                    return (startIndex, -1);
+                index  += section.WildcardUnknownAfter;
+                length -= section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+
+                if(m_resultMustMatchAtEnd && m_sections.Length == 1)
+                    return length == 0 ? (startIndex, originalLength) : (startIndex, -1);
+                
+                firstIndex   = 0;
+                sectionIndex = 1;
+            }
+
+            if(m_resultMustMatchAtEnd) {
+                var section = m_sections[m_sections.Length - 1];
+                int pos     = startIndex + originalLength - section.WildcardUnknownAfter - section.Length;
+                if(pos - section.WildcardUnknownBefore < index || !this.StringEqualWithUnknownCharacters(value, pos, this.WildcardFormat, section.Start, section.Length))
+                    return (startIndex, -1);
+                lastIndex = startIndex + originalLength;
+                length   -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
+            }
+
+            int last        = -1;
+            int lastSection = m_sections.Length - (m_resultMustMatchAtEnd ? 1 : 0);
+            
+            while(sectionIndex < lastSection && length > 0) {
                 var section = m_sections[sectionIndex];
                 if(section.Length > 0) {
-                    value.IndexOf(this.Format, section.Start, section.Length, StringComparison.Ordinal);
+                    last = this.StringIndexOfWithUnknownCharacters(value, index, length, in section);
+                    if(last < 0)
+                        return (startIndex, -1);
+                    if(sectionIndex <= 1 && firstIndex < 0)
+                        firstIndex = last;
+                    var new_index = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
+                    length       -= new_index - index;
+                    index         = new_index;
                 } else {
                     // case where format='??'  or  'aa*?'
-
+                    last    = index;
+                    index  += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                    length -= section.WildcardUnknownBefore + section.WildcardUnknownAfter;
                 }
+                sectionIndex++;
             }
-        }
-        private (int start, int length) RareReverseMatch(string value, int startIndex, int length)) {
+
+            if(sectionIndex != lastSection || length < 0)
+                return (startIndex, -1);
+
+            if(!m_resultMustMatchAtEnd) {
+                var section = m_sections[m_sections.Length - 1];
+                lastIndex = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
+            }
+
+            return (firstIndex, lastIndex - firstIndex);
         }
         #endregion
         #region Matches()
@@ -151,17 +195,17 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region ToRegex()
-        public string ToRegex(RegexFormat encoding = RegexFormat.DotNet) {
-            int capacity = this.Format.Length;
+        #region static ToRegex()
+        public string ToRegex(RegexFormat regex_format = RegexFormat.DotNet) {
+            int capacity = this.WildcardFormat.Length;
             if(capacity <= 4096)
                 capacity *= 2;
             else {
                 // fast approximate count - not meant to be an exact count
                 capacity += 2;
-                for(int i = 0; i < this.Format.Length; i++) {
-                    var c = this.Format[i];
-                    if(c == this.WildcardAnything)
+                for(int i = 0; i < this.WildcardFormat.Length; i++) {
+                    var c = this.WildcardFormat[i];
+                    if(c == m_wildcardAnything)
                         capacity += 2;
                     else if(!IsAlphaNumeric(c))
                         capacity++;
@@ -170,7 +214,7 @@ namespace System.Collections.Specialized
 
             var sb = new StringBuilder(capacity);
 
-            if(encoding == RegexFormat.SQL)
+            if(regex_format == RegexFormat.SQL)
                 sb.Append('\'');
             if(m_resultMustMatchAtStart)
                 sb.Append('^');
@@ -189,11 +233,11 @@ namespace System.Collections.Specialized
                     sb.Append('.');
 
                 for(int i = 0; i < section.Length; i++) {
-                    var c = this.Format[section.Start + i];
+                    var c = this.WildcardFormat[section.Start + i];
 
-                    if(c == this.WildcardUnknown)
+                    if(c == m_wildcardUnknown)
                         sb.Append('.');
-                    else if(encoding == RegexFormat.SQL && c == '\'')
+                    else if(regex_format == RegexFormat.SQL && c == '\'')
                         sb.Append("''");
                     else {
                         if(!IsAlphaNumeric(c))
@@ -208,7 +252,7 @@ namespace System.Collections.Specialized
 
             if(m_resultMustMatchAtEnd)
                 sb.Append('$');
-            if(encoding == RegexFormat.SQL)
+            if(regex_format == RegexFormat.SQL)
                 sb.Append('\'');
 
             return sb.ToString();
@@ -217,6 +261,11 @@ namespace System.Collections.Specialized
                 //char.IsLetterOrDigit(c)
                 return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
             }
+        }
+        /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        public static string ToRegex(string wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING, RegexFormat regex_format = RegexFormat.DotNet) {
+            return new WildcardRegex(wildcard_format, option, wildcard_unknown_character, wildcard_anything_character)
+                .ToRegex(regex_format);
         }
         #endregion
 
@@ -231,13 +280,13 @@ namespace System.Collections.Specialized
                 var section = sections[i];
                 
                 // TrimStart(this.WildcardUnknown)
-                while(section.Length > 0 && format[section.Start] == this.WildcardUnknown) {
+                while(section.Length > 0 && format[section.Start] == m_wildcardUnknown) {
                     section.Length--;
                     section.Start++;
                     section.WildcardUnknownBefore++;
                 }
                 // TrimEnd(this.WildcardUnknown)
-                while(section.Length > 0 && format[section.Start + section.Length - 1] == this.WildcardUnknown) {
+                while(section.Length > 0 && format[section.Start + section.Length - 1] == m_wildcardUnknown) {
                     section.Length--;
                     section.WildcardUnknownAfter++;
                 }
@@ -269,7 +318,43 @@ namespace System.Collections.Specialized
             var res = new ConsecutiveParseSection[sections.Count];
             for(int i = 0; i < res.Length; i++) {
                 var section = sections[i];
-                res[i] = new ConsecutiveParseSection(section.Start, section.Length, section.WildcardUnknownBefore, section.WildcardUnknownAfter);
+
+                // find longest stretch of non-WildcardUnknown characters
+                // could also look at the stretch with the most repeated characters, which should speed up the search
+                var best_sub_section = SplitPosition(format, section.Start, section.Length, m_wildcardUnknown)
+                    .Select(o => {
+                        int duplicates   = 0;
+                        int consecutives = 0;
+                        // very common case: the entire section does not contain any ?, which means we have only one section
+                        if(o.length != section.Length){
+                            var visitedChars = new HashSet<char>(o.length);
+                            char prev = '\0';
+                            for(int j = 0; j < o.length; j++) {
+                                var c = format[o.start + j];
+                                if(!visitedChars.Add(c))
+                                    duplicates++;
+                                if(j > 0 && c == prev)
+                                    consecutives++;
+                                prev = c;
+                            }
+                            duplicates -= consecutives;
+                        }
+                        return new { o.start, o.length, duplicates, consecutives };
+                    })
+                    // trying to figure out if searching '00' over '12345' is better
+                    .OrderByDescending(o => (o.consecutives * 2 + 1) * (o.duplicates * 1.5 + 1)) // * o.length
+                    .ThenByDescending(o => o.consecutives)
+                    .ThenByDescending(o => o.duplicates)
+                    .ThenByDescending(o => o.length)
+                    .First();
+
+                res[i] = new ConsecutiveParseSection(
+                    section.Start, 
+                    section.Length, 
+                    section.WildcardUnknownBefore, 
+                    section.WildcardUnknownAfter, 
+                    format.Substring(best_sub_section.start, best_sub_section.length), //format.Substring(section.Start, section.Length),
+                    best_sub_section.start);
             }
             return res;
         }
@@ -292,7 +377,7 @@ namespace System.Collections.Specialized
                 var c = format[i];
                 len++;
 
-                if(c == this.WildcardAnything) {
+                if(c == m_wildcardAnything) {
                     if(len > 1)
                         yield return (start, len - 1);
 
@@ -302,6 +387,88 @@ namespace System.Collections.Specialized
             }
             if(len > 0)
                 yield return (start, len);
+        }
+        #endregion
+
+        #region private StringEqualWithUnknownCharacters()
+        /// <summary>
+        ///     Returns true if the strings are equal, assuming search may contain WildcardUnknown '?'.
+        ///     Search may not contain any WildcardAnything '*'.
+        /// </summary>
+        private bool StringEqualWithUnknownCharacters(string source, int sourceIndex, string search, int searchIndex, int count) {
+            // ideally this would be a string.Equals() for faster speed, but there is no overload to specify start/length
+            //string.CompareOrdinal(value, index, section.Search, 0, section.Length);
+
+            for(int i = 0; i < count; i++) {
+                var d = search[searchIndex + i];
+
+                if(d != this.m_wildcardUnknown && source[sourceIndex + i] != d)
+                    return false;
+            }
+            return true;
+        }
+        #endregion
+        #region private StringIndexOfWithUnknownCharacters()
+        /// <summary>
+        ///     Returns the index of section, assuming the section may contain WildcardUnknown '?'.
+        ///     Search may not contain any WildcardAnything '*'.
+        /// </summary>
+        private int StringIndexOfWithUnknownCharacters(string source, int index, int length, in ConsecutiveParseSection section) {
+            int charsBeforeSearch = section.WildcardUnknownBefore + section.SearchIndex;
+            int charsAfterSearch  = section.Length - section.Search.Length - section.SearchIndex;
+            
+            index          += charsBeforeSearch;
+            length         -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownAfter;
+            var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+
+            while(true) {
+                //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
+                int pos = compareInfo.IndexOf(
+                    source,
+                    section.Search,
+                    index,
+                    length,
+                    System.Globalization.CompareOptions.Ordinal);
+                if(pos < 0)
+                    return -1;
+
+                bool startMatches = !section.ContainsCharsBeforeSearchIndex || this.StringEqualWithUnknownCharacters(source, pos - section.SearchIndex, this.WildcardFormat, section.Start, section.SearchIndex);
+                if(!startMatches) {
+                    var diff = (pos + 1) - index;
+                    index  += diff;
+                    length -= diff;
+                    continue;
+                }
+                bool endMatches = !section.ContainsCharsAfterSearchIndex || this.StringEqualWithUnknownCharacters(source, pos + section.Search.Length, this.WildcardFormat, section.Start + section.SearchIndex + section.Search.Length, charsAfterSearch);
+                if(!endMatches) {
+                    var diff = (pos + 1) - index;
+                    index  += diff;
+                    length -= diff;
+                    continue;
+                }
+
+                return pos - section.SearchIndex - section.WildcardUnknownBefore;
+            }
+        }
+        #endregion
+        #region private SplitPosition()
+        /// <summary>
+        ///     Same as string.Split(), but for returns positions instead.
+        ///     ex: "abcde".SplitPosition(1, 4, new []{'b'}) = {(2,3)}
+        /// </summary>
+        private IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
+            int index = 0;
+            int start = startIndex;
+            int max   = startIndex + length;
+            for(int i = startIndex; i < max; i++) {
+                var c = source[i];
+                if(c == separator) {
+                    yield return (start, index - start);
+                    start = index + 1;
+                }
+                index++;
+            }
+            yield return (start, index - start);
         }
         #endregion
 
@@ -335,12 +502,20 @@ namespace System.Collections.Specialized
             public readonly int Length;
             public readonly int WildcardUnknownBefore; // how many WILDCARD_UNKNOWN are at the start of the section.
             public readonly int WildcardUnknownAfter;  // how many WILDCARD_UNKNOWN are at the end of the section.
+            public readonly string Search;             // the optimal stretch of characters without WILDCARD_UNKNOWN to search for (takes into account length and # consecutive/repeated chars)
+            public readonly int SearchIndex;           // the index starting from this.Start
+            public readonly bool ContainsCharsBeforeSearchIndex;
+            public readonly bool ContainsCharsAfterSearchIndex;
 
-            public ConsecutiveParseSection(int start, int length, int wildcardBefore, int wildcardAfter) {
-                this.Start                 = start;
-                this.Length                = length;
-                this.WildcardUnknownBefore = wildcardBefore;
-                this.WildcardUnknownAfter  = wildcardAfter;
+            public ConsecutiveParseSection(int start, int length, int wildcardBefore, int wildcardAfter, string search, int searchIndex) {
+                this.Start                          = start;
+                this.Length                         = length;
+                this.WildcardUnknownBefore          = wildcardBefore;
+                this.WildcardUnknownAfter           = wildcardAfter;
+                this.Search                         = search;
+                this.SearchIndex                    = searchIndex;
+                this.ContainsCharsBeforeSearchIndex = searchIndex > 0;
+                this.ContainsCharsAfterSearchIndex  = searchIndex + search.Length < length;
             }
         }
     }
