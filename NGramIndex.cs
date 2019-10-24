@@ -237,45 +237,26 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="format_including_wildcards">The user search format, which may include the wildcard characters.</param>
         public IEnumerable<string> Search(string format_including_wildcards, SearchOption match = SearchOption.ExactMatch) {
-            // main algorithm
-            // since everything needs to be matched, and since we get an O(1) count() when requesting a specific ngram
-            // we basically search for the ngram with the least amount of count(), as that will filter the most results.
-            // the ngram check is so fast that if we have for example 'abc?123', rather than search for 'abc' and '123' and cross-filter (/intersection)
-            // instead we request every variation of 'abc[WildcardUnknownAlphabet]123'
+            // algorithm explanation:
             //
-            // note that this can be coded multiple ways;  DEFG*123
-            //    simplest = request('DEFG', '123').OrderBy(o => o.Count).First().SelectMany(o => o.Results).Where(o => regex.Match(o))
-            //    best for huge amount of match = request('DEFG', '123').OrderBy(o => o.Count).Intersection()
+            // tldr; look at SearchSection(), repeat the same concept but across sections() matches
             //
-            // where this gets tricky is when you get   D?FG?I*123
-            //                                          ------ ---
-            //                                            ^     ^
-            //                               section 1 ---/     |
-            //                               section 2 ---------/
-            // section 1 = 'D?FG?I'
-            // this will get requested as 'D?FG' and 'FG?I' (ie: ? will be replaced with WildcardUnknownAlphabet)
-            // so basically were looking for the least amount of results from all of theses for that section
-            // no matter which search (within section) yielded the least results, we compare the remainder to make sure theres a 'full match' of that section
-            // for example, request('D[a-z0-9]FG', 'FG[a-z0-9]I').OrderBy(o => o.Count).First() = {'DxFG', Results = {DxFG, DxFGxxx, 000DxFG, 000DxFGaI}}
-            // for each result, we make sure that the subsection is matched properly, meaning only '000DxFGaI' would get accepted amongst the 'DxFG' ngrams
-            //
-            // every section is filtered as described above, and then an intersection() is done across the section results
+            // format='*123***456?78?9*'     sections = { "123", "456?78?9" }
             // 
-            // 2 possible algorithms here once this is done;
-            //    regex.match(intersected_results)
-            //    make sure that all intersected section results dont overlap each other and that they are of proper sequencing. 
-            //       the big downside of this approach is that its complex to code, and that each section can have multiple matches for the same result
-            //       ex: searchformat='ll*ll' in 'hell.llllo' 
-            //       so you need to take into account that intersection() means you can have multiple results per sub-section and you need to compare all combinations
-            //       you can partially dodge the problem by processing the results in order, so you always pick the earliest found match past what was already matched
-            //       but the problem with this approach is that the early results within the search might have too many matches and be a poor filter comparatively to filtering out-of-order
+            // basically we search for sections {"123", "456?78?9"} and then do an intersection of results, 
+            // since all of them need to be found
             //
-            // ideally a mix of the 2 is done, but it isn't as obvious to code as it sounds
+            // Those searches do not focus on positioning being in-order, so we also need to manually verify at the end after intersecting
+            // otherwise '45667889  123' would match all 2 sections, but wouldnt make sense with the search format
             //
-            // another proxy alternative, instead of trying all subsection combinations to find the one with the least results, 
-            // you can request the longest subsection stretch instead as it should tend to be the one with the least results
-            // problem is, sometimes longest subsection could be just '000' and you indexed a bunch of '000000000000' which gives a big distribution of '000' ngram, which means its bad
-            // it doesnt make sense to do this here since its O(1) and runs in memory, but if this is to be recoded to be partially in memory, this could be a consideration
+            // since lookup() is O(1) on any of those, we prioritize least amount of results for intersection
+            // ie: '123'=200 results, '456?78?9'=4000 results
+            // so we process in that order
+            // 
+            // now there is no hard requirement to do intersection amongst multiple section searches, since we can always check preceding/following chars
+            // as such, we balance the filtering by using the 2 approaches
+            // keep in mind that the check for preceding/following chars must always happen whether you use intersection filtering or not
+            
 
             var parsed = this.ParseSearchFormat(format_including_wildcards, match);
 
@@ -286,19 +267,36 @@ namespace System.Collections.Specialized
                 .ThenBy(o => o.value.ResultMustMatchAtEnd ? 0 : 1)
                 .Select(o => o.index);
 
-            int epoch   = 0;
-            var results = new Dictionary<string, EpochContainer>();
+            int epoch              = 0;
+            int intersection_count = int.MaxValue / 4;
+            var results            = new Dictionary<string, EpochContainer>();
             foreach(var sectionIndex in orderedSectionsIndexes) {
                 var sectionResults = this.SearchSection(
                     parsed, 
                     sectionIndex, 
-                    original_string => epoch == 0 || (results.TryGetValue(original_string, out var epochContainer) && epochContainer.Epoch == epoch - 1));
+                    original_string => epoch == 0 || (results.TryGetValue(original_string, out var epochContainer) && epochContainer.Epoch == epoch - 1))
+                    .ToList();
+
+                // ie: we either keep filtering by doing intersections, or we just try and compare the whole section
+                // the rule of thumb here being that you can do roughly 4x dict compares in the time you verify the match (which will have to be done anyway)
+                // keep in mind the further searches we go through, the more results we will get, thus filtering little
+                // keep in mind we only care about the time savings, so this needs to filter a good portion of results
+                // you could take into account the section.SearchLength and how many characters comparisons are avoided potentially if you want to try a smarter rule
+                if(sectionResults.Count > intersection_count * 4)
+                    break;
 
                 // fast intersection
+                
                 if(epoch > 0) {
-                    foreach(var sectionResult in sectionResults)
-                        results[sectionResult].Epoch++;
+                    intersection_count = 0;
+                    foreach(var sectionResult in sectionResults) {
+                        if(results.TryGetValue(sectionResult, out var x) && x.Epoch == epoch - 1) {
+                            x.Epoch = epoch;
+                            intersection_count++;
+                        }
+                    }
                 } else {
+                    intersection_count = sectionResults.Count;
                     foreach(var sectionResult in sectionResults)
                         results.Add(sectionResult, new EpochContainer() { Epoch = 0 });
                 }
@@ -328,7 +326,42 @@ namespace System.Collections.Specialized
         #endregion
 
         #region private SearchSection()
+        /// <summary>
+        ///     Searches for the strings that match the section.
+        ///     ie: format='*123***456?78?9*'     sections = { "123", "456?78?9" }
+        /// </summary>
         private IEnumerable<string> SearchSection(ParsedFormat format, int sectionIndex, Predicate<string> filter) {
+            // algorithm explanation:
+            // format='*123***456?78?9*'     sections = { "123", "456?78?9" }
+            // section = "456?78?9"
+            // 
+            // basically we try and search for {'456', '78', '9'} and then do an intersection of results, 
+            // since all of them need to be found
+            //
+            // Those searches do not focus on positioning being in-order, so we also need to manually verify at the end after intersecting
+            // otherwise '789456' would match all 3 searches, but wouldnt make sense with the search format
+            //
+            // since lookup() is O(1) on any of those, we prioritize least amount of results for intersection
+            // ie: '456'=200 results, '78'=4000 results, '9'=100000 results
+            // so we process in that order
+            // 
+            // now there is no hard requirement to do intersection amongst multiple sub-section searches, since we can always check preceding/following chars
+            // as such, we balance the filtering by using the 2 approaches
+            // keep in mind that the check for preceding/following chars must always happen whether you use intersection filtering or not
+            //
+            // to make things more complicated, theres the case 
+            // MaxNGramLength=5 
+            // format='abcdeeefg?subsection*section2'
+            // section = 'abcdeeefg?subsection'
+            // 
+            // we want to search for {'abcde', 'bcdee', 'cdeee', 'deeef', 'eeefg'}
+            // this may seem redundant, but keep in mind the check for matches is O(1), and one combination might have a lot less results
+            //
+            // the alternative way to code this would be to use a RadixTree<string, List<NGram>> replacing Dictionary<string, List<NGram>>
+            // and simply use a directed search 
+            //var section_string = format.Format.Substring(section.SearchStart - section.WildcardUnknownBefore, section.WildcardUnknownBefore + section.SearchLength + section.WildcardUnknownAfter);
+            //var results_before_verify = new AdaptiveRadixTree<string, List<NGram>>().WildcardMatchValues(section_string, this.WildcardUnknown);
+
             var section = format.Sections[sectionIndex];
 
             var sub_searches = this.SplitPosition(format.Format, section.SearchStart, section.SearchLength, this.WildcardUnknown) 
@@ -338,6 +371,9 @@ namespace System.Collections.Specialized
                     m_dict.TryGetValue(format.Format.Substring(ngram.start, ngram.len), out var list);
                     return (ngram.start, list);
                 })
+                // avoid case where you get duplicated search patterns
+                .GroupBy(o => o.list)
+                .Select(o => o.First())
                 .OrderBy(o => o.list?.Count ?? 0)
                 .ToList();
 
@@ -395,6 +431,7 @@ namespace System.Collections.Specialized
                     // make sure that the section matches the search format
 
                     // check preceding characters
+                    // ex: 'zz*123?xxxxx' will check '123?' after 'xxxxx' match
                     var valid     = true;
                     int max2      = potential_match.SearchFormatIndex;
                     int readIndex = ngram.Start - (max2 - section.SearchStart);
@@ -412,6 +449,7 @@ namespace System.Collections.Specialized
                         continue;
 
                     // check following characters
+                    // ex: 'xxxxx?123??*zz' will check '?123??' after 'xxxxx' match
                     max2      = section.SearchStart + section.SearchLength;
                     readIndex = ngram.Start + ngram.Length;
 
