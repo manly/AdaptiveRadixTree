@@ -35,12 +35,8 @@ namespace System.Collections.Specialized
         public IEnumerable<string> Items {
             get {
                 foreach(var kvp in m_dict) {
-                    var len   = kvp.Key.Length;
-                    var max   = kvp.Value.Count;
-                    var items = kvp.Value.Permutations;
-
-                    for(int i = 0; i < max; i++) {
-                        var item = items[i];
+                    var len = kvp.Key.Length;
+                    foreach(var item in kvp.Value) {
                         if(item.Length != len)
                             break;
                         yield return item;
@@ -98,11 +94,8 @@ namespace System.Collections.Specialized
             CreateDeletePermutations(value, this.DeleteDistance, hash);
             foreach(var permutation in hash) {
                 if(m_dict.TryGetValue(permutation, out var node)) {
-                    var index = node.BinarySearch(value);
-                    if(index >= 0) {
+                    if(node.Remove(value))
                         found = true;
-                        node.RemoveAt(index);
-                    }
                 }
             }
             return found;
@@ -124,7 +117,7 @@ namespace System.Collections.Specialized
             if(!m_dict.TryGetValue(value, out var node))
                 return false;
                 
-            return node.BinarySearch(value) >= 0;
+            return node.Contains(value);
         }
         #endregion
 
@@ -158,10 +151,7 @@ namespace System.Collections.Specialized
                 if(!m_dict.TryGetValue(permutation, out var node))
                     continue;
 
-                int max = node.Count;
-                for(int i = 0; i < max; i++) {
-                    var originalString = node.Permutations[i];
-
+                foreach(var originalString in node) {
                     if(!visited_results.Add(originalString))
                         continue;
 
@@ -288,11 +278,83 @@ namespace System.Collections.Specialized
         #endregion
 
         #region private class Node
-        private sealed class Node {
-            
-            // todo: should probably replace Permutations by AvlTree[] or BTree[] for massive speedup of add()/delete()
+        /// <summary>
+        ///     Since this can be either really small or really big, and that we may have many in memory, 
+        ///     this adapts to the current amount of item.
+        /// </summary>
+        private sealed class Node : IEnumerable<string> {
+            private const int SWITCH_TO_BTREE_THRESHOLD = 256;
 
-            public string[] Permutations = new string[4]; // ordered by "Length(distance),OriginalString"
+            private ArrayNode m_arrayNode = new ArrayNode();   // ordered by "Length(distance),OriginalString"
+            private BTree<string> m_btree = null;              // ordered by "Length(distance),OriginalString"
+
+            /// <summary>
+            ///     O(log n)
+            /// </summary>
+            public void Add(string originalString) {
+                if(m_arrayNode != null) {
+                    if(m_arrayNode.Count < SWITCH_TO_BTREE_THRESHOLD) {
+                        m_arrayNode.Add(originalString);
+                        return;
+                    } else {
+                        var arrayNode = m_arrayNode;
+                        m_arrayNode   = null;
+                        m_btree       = new BTree<string>(new ItemComparer(), SWITCH_TO_BTREE_THRESHOLD);
+                        
+                        m_btree.AddRangeOrdered(arrayNode);
+                    }
+                }
+
+                m_btree.Add(originalString);
+            }
+            /// <summary>
+            ///     O(log n)
+            /// </summary>
+            public bool Remove(string originalString) {
+                if(m_arrayNode != null)
+                    return m_arrayNode.Remove(originalString);
+                else
+                    return m_btree.Remove(originalString);
+            }
+            /// <summary>
+            ///     O(log n)
+            /// </summary>
+            public bool Contains(string originalString) {
+                if(m_arrayNode != null)
+                    return m_arrayNode.Contains(originalString);
+                else
+                    return m_btree.ContainsKey(originalString);
+            }
+            public void TrimExcess() {
+                if(m_arrayNode != null)
+                    m_arrayNode.TrimExcess();
+                else
+                    m_btree.Optimize();
+            }
+            
+            public IEnumerator<string> GetEnumerator() {
+                if(m_arrayNode != null)
+                    return m_arrayNode.GetEnumerator();
+                else
+                    return m_btree.Keys.GetEnumerator();
+            }
+            IEnumerator IEnumerable.GetEnumerator() {
+                return this.GetEnumerator();
+            }
+            public override string ToString() {
+                return (m_arrayNode?.Count ?? m_btree.Count).ToString();
+            }
+            private sealed class ItemComparer : IComparer<string> {
+                public int Compare(string x, string y) {
+                    var diff = x.Length - y.Length;
+                    if(diff == 0)
+                        diff = string.CompareOrdinal(x, y);
+                    return diff;
+                }
+            }
+        }
+        private sealed class ArrayNode : IEnumerable<string> {
+            private string[] Permutations = new string[4]; // ordered by "Length(distance),OriginalString"
             public int Count;
 
             /// <summary>
@@ -320,15 +382,25 @@ namespace System.Collections.Specialized
             ///     O(log n) binary search 
             ///     O(n/2)   remove
             /// </summary>
-            public void RemoveAt(int index) {
+            public bool Remove(string originalString) {
+                var index = this.BinarySearch(originalString);
+                if(index < 0)
+                    return false;
                 Array.Copy(this.Permutations, index + 1, this.Permutations, index, this.Count - index - 1);
                 this.Count--;
+                return true;
+            }
+            /// <summary>
+            ///     O(log n)
+            /// </summary>
+            public bool Contains(string originalString) {
+                return this.BinarySearch(originalString) >= 0;
             }
             public void TrimExcess() {
                 // already checks for length==count
                 Array.Resize(ref this.Permutations, this.Count);
             }
-            public int BinarySearch(string originalString) {
+            private int BinarySearch(string originalString) {
                 int min = 0;
                 int max = this.Count - 1;
 
@@ -348,6 +420,15 @@ namespace System.Collections.Specialized
                 }
 
                 return ~min;
+            }
+            
+            public IEnumerator<string> GetEnumerator() {
+                int max = this.Count;
+                for(int i = 0; i < max; i++)
+                    yield return this.Permutations[i];
+            }
+            IEnumerator IEnumerable.GetEnumerator() {
+                return this.GetEnumerator();
             }
             public override string ToString() {
                 return this.Count.ToString();
