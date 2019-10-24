@@ -746,16 +746,16 @@ namespace System.Collections.Specialized
         }
         #endregion
     
-        // PartialMatch()
-        #region PartialMatch()
+        // WildcardMatch()
+        #region WildcardMatch()
         /// <summary>
         ///     O(k)    (k = # of characters, + wildcards creating sub-branches running in O(k_remaining))
         ///     
         ///     Search with wildcards.
         ///     The wildcards are only for single character replacements.
         /// </summary>
-        public IEnumerable<TKey> PartialMatch(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
-            var bitArray = ParsePartialMatchFormat(pattern, wildcard, match);
+        public IEnumerable<TKey> WildcardMatch(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
+            var bitArray = ParseWildcardMatchFormat(pattern, wildcard, match);
             if(bitArray == null) {
                 foreach(var item in this.Keys)
                     yield return item;
@@ -774,7 +774,7 @@ namespace System.Collections.Specialized
             foreach(var item in this.RegExpMatchImplementation(bitArray, searchOptions, filterOptions))
                 yield return item.GetKey(this);
         }
-        private static BitArray ParsePartialMatchFormat(string pattern, char wildcard, SearchOption match) {
+        private static BitArray ParseWildcardMatchFormat(string pattern, char wildcard, SearchOption match) {
             if(match == SearchOption.StartsWith) {
                 pattern = pattern.TrimEnd(wildcard);
                     
@@ -802,15 +802,15 @@ namespace System.Collections.Specialized
             return bitArray;
         }
         #endregion
-        #region PartialMatchValues()
+        #region WildcardMatchValues()
         /// <summary>
         ///     O(k)    (k = # of characters, + wildcards creating sub-branches running in O(k_remaining))
         ///     
         ///     Search with wildcards.
         ///     The wildcards are only for single character replacements.
         /// </summary>
-        public IEnumerable<TValue> PartialMatchValues(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
-            var bitArray = ParsePartialMatchFormat(pattern, wildcard, match);
+        public IEnumerable<TValue> WildcardMatchValues(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
+            var bitArray = ParseWildcardMatchFormat(pattern, wildcard, match);
             if(bitArray == null) {
                 foreach(var item in this.Values)
                     yield return item;
@@ -830,14 +830,14 @@ namespace System.Collections.Specialized
                 yield return item.GetValue(this);
         }
         #endregion
-        #region PartialMatchItems()
+        #region WildcardMatchItems()
         /// <summary>
         ///     O(k)    (k = # of characters, + wildcards creating sub-branches running in O(k_remaining))
         ///     Search with wildcards.
         ///     The wildcards are only for single character replacements.
         /// </summary>
-        public IEnumerable<KeyValuePair<TKey, TValue>> PartialMatchItems(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
-            var bitArray = ParsePartialMatchFormat(pattern, wildcard, match);
+        public IEnumerable<KeyValuePair<TKey, TValue>> WildcardMatchItems(string pattern, char wildcard, SearchOption match = SearchOption.ExactMatch) {
+            var bitArray = ParseWildcardMatchFormat(pattern, wildcard, match);
             if(bitArray == null) {
                 foreach(var item in this.Items)
                     yield return item;
