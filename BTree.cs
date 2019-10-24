@@ -483,7 +483,7 @@ namespace System.Collections.Specialized
             this.Count = 0;
         }
         #endregion
- 
+
         #region TryGetValue()
         /// <summary>
         ///    O(log n)
@@ -861,6 +861,77 @@ namespace System.Collections.Specialized
                     throw new ArgumentException($"{this.GetType().Name} can only add items that are > btree.Maximum (ie: {item.Key} > {m_maximum}).", nameof(item));
                 else
                     throw new ArgumentException($"Duplicate key ({item.Key}).", nameof(item));
+            }
+        }
+        #endregion
+        #region Optimize()
+        /// <summary>
+        ///     O(n)
+        ///     Fills the nodes to 100% capacity where possible.
+        ///     This will break all iterators currently in use.
+        /// </summary>
+        public void Optimize() {
+            // technically, could be <=2, but this ensures the balance is left-most regardless by rebalancing even on 2 nodes
+            if(m_tree.Count <= 1)
+                return;
+
+            var totalItemCount = this.Count;
+
+            int index = 0;
+            var nodes = new Node[m_tree.Count];
+            foreach(var node in m_tree.Values)
+                nodes[index++] = node;
+            m_tree.Clear();
+            
+            int writeIndex = 0;
+            var writeNode  = nodes[writeIndex];
+
+            for(int readIndex = 1; readIndex < nodes.Length; readIndex++) {
+                var readNode      = nodes[readIndex];
+                int readRemaining = readNode.Count;
+                int readPos       = 0;
+
+                while(readRemaining > 0) {
+                    var copyCount = Math.Min(m_itemsPerNode - writeNode.Count, readRemaining);
+
+                    if(copyCount > 0) {
+                        // if the arrays+indices are the same, then it will do nothing anyway
+                        Array.Copy(readNode.Items, readPos, writeNode.Items, writeNode.Count, copyCount);
+                        writeNode.Count += copyCount;
+                        readPos         += copyCount;
+                        readRemaining   -= copyCount;
+                    }
+
+                    if(writeNode.Count == m_itemsPerNode) {
+                        writeNode = nodes[++writeIndex];
+
+                        // case example [100% fill first node, 80% fill second node]
+                        // this makes sure that you basically do readIndex++
+                        if(writeIndex == readIndex && readPos == 0)
+                            break;
+                    }
+                }
+            }
+
+            // just to be safe and avoid leaks, we clear the arrays
+            Array.Clear(writeNode.Items, writeNode.Count, m_itemsPerNode - writeNode.Count);
+            // technically not needed
+            //for(int i = writeIndex + 1; i < nodes.Length; i++) {
+            //    var node = nodes[i];
+            //    Array.Clear(node.Items, 0, node.Count);
+            //    node.Count = 0;
+            //}
+
+            // dont rely on current writeIndex value, since it could be one higher than what we actually wrote to
+            writeIndex = totalItemCount / m_itemsPerNode + (totalItemCount % m_itemsPerNode != 0 ? 1 : 0);
+
+            // rebuild tree
+            for(int i = 0; i < writeIndex; i++) {
+                var node = nodes[i];
+                // shouldnt be possible, but just in case
+                if(node.Count <= 0)
+                    continue;
+                m_tree.Add(node.Items[0].Key, node);
             }
         }
         #endregion
@@ -1992,6 +2063,77 @@ namespace System.Collections.Specialized
                     throw new ArgumentException($"{this.GetType().Name} can only add items that are > btree.Maximum (ie: {key} > {m_maximum}).", nameof(key));
                 else
                     throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
+            }
+        }
+        #endregion
+        #region Optimize()
+        /// <summary>
+        ///     O(n)
+        ///     Fills the nodes to 100% capacity where possible.
+        ///     This will break all iterators currently in use.
+        /// </summary>
+        public void Optimize() {
+            // technically, could be <=2, but this ensures the balance is left-most regardless by rebalancing even on 2 nodes
+            if(m_tree.Count <= 1)
+                return;
+
+            var totalItemCount = this.Count;
+
+            int index = 0;
+            var nodes = new Node[m_tree.Count];
+            foreach(var node in m_tree.Values)
+                nodes[index++] = node;
+            m_tree.Clear();
+            
+            int writeIndex = 0;
+            var writeNode  = nodes[writeIndex];
+
+            for(int readIndex = 1; readIndex < nodes.Length; readIndex++) {
+                var readNode      = nodes[readIndex];
+                int readRemaining = readNode.Count;
+                int readPos       = 0;
+
+                while(readRemaining > 0) {
+                    var copyCount = Math.Min(m_itemsPerNode - writeNode.Count, readRemaining);
+
+                    if(copyCount > 0) {
+                        // if the arrays+indices are the same, then it will do nothing anyway
+                        Array.Copy(readNode.Items, readPos, writeNode.Items, writeNode.Count, copyCount);
+                        writeNode.Count += copyCount;
+                        readPos         += copyCount;
+                        readRemaining   -= copyCount;
+                    }
+
+                    if(writeNode.Count == m_itemsPerNode) {
+                        writeNode = nodes[++writeIndex];
+
+                        // case example [100% fill first node, 80% fill second node]
+                        // this makes sure that you basically do readIndex++
+                        if(writeIndex == readIndex && readPos == 0)
+                            break;
+                    }
+                }
+            }
+
+            // just to be safe and avoid leaks, we clear the arrays
+            Array.Clear(writeNode.Items, writeNode.Count, m_itemsPerNode - writeNode.Count);
+            // technically not needed
+            //for(int i = writeIndex + 1; i < nodes.Length; i++) {
+            //    var node = nodes[i];
+            //    Array.Clear(node.Items, 0, node.Count);
+            //    node.Count = 0;
+            //}
+
+            // dont rely on current writeIndex value, since it could be one higher than what we actually wrote to
+            writeIndex = totalItemCount / m_itemsPerNode + (totalItemCount % m_itemsPerNode != 0 ? 1 : 0);
+
+            // rebuild tree
+            for(int i = 0; i < writeIndex; i++) {
+                var node = nodes[i];
+                // shouldnt be possible, but just in case
+                if(node.Count <= 0)
+                    continue;
+                m_tree.Add(node.Items[0], node);
             }
         }
         #endregion
