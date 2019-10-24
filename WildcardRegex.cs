@@ -83,6 +83,14 @@ namespace System.Collections.Specialized
         ///     Returns length = -1 if not found.
         /// </summary>
         public (int start, int length) Match(string value, int startIndex, int length) {
+            // algorithm explanation
+            // format = '123*456*?678'
+            // sections = {123, 456, 678}
+            // first makes sure the string starts with '123' (if beginswith)
+            // then makes sure the string ends with '?678' (if endswith)
+            // then make sure every other section from section 1+ are found in order and ends before the last one
+            // if any section is not found, then there is no match
+
             if(length < m_totalCharacters)
                 return (startIndex, -1);
             // special case if format = '*'
