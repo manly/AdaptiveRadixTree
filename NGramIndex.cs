@@ -304,9 +304,18 @@ namespace System.Collections.Specialized
                 epoch++;
             }
 
+            WildcardRegex.SearchOption option;
+            switch(match) {
+                case SearchOption.ExactMatch: option = WildcardRegex.SearchOption.ExactMatch; break;
+                case SearchOption.Partial:    option = WildcardRegex.SearchOption.Partial; break;
+                case SearchOption.StartsWith: option = WildcardRegex.SearchOption.StartsWith; break;
+                case SearchOption.EndsWith:   option = WildcardRegex.SearchOption.EndsWith; break;
+                default: throw new NotImplementedException();
+            }
+
             var regex = new WildcardRegex(
                 format_including_wildcards, 
-                match == SearchOption.ExactMatch ? WildcardRegex.SearchOption.ExactMatch : WildcardRegex.SearchOption.Partial, 
+                option, 
                 this.WildcardUnknown, 
                 this.WildcardAnything);
             //new System.Text.RegularExpressions.Regex(regex.ToRegex());
@@ -543,10 +552,10 @@ namespace System.Collections.Specialized
                 sections[i].MinCharsAfter += next.SearchLength + next.MinCharsBefore + next.MinCharsAfter;
             }
 
-            if(match == SearchOption.ExactMatch) {
-                sections[0].ResultMustMatchAtStart                = format[0] != this.WildcardAnything;
+            if(match == SearchOption.ExactMatch || match == SearchOption.StartsWith)
+                sections[0].ResultMustMatchAtStart = format[0] != this.WildcardAnything;
+            if(match == SearchOption.ExactMatch || match == SearchOption.EndsWith)
                 sections[sections.Count - 1].ResultMustMatchAtEnd = format[format.Length - 1] != this.WildcardAnything;
-            }
 
             // merge '??' section with prev
             // ex: 'abc*??*456' -> 'abc??*456'
@@ -767,6 +776,14 @@ namespace System.Collections.Specialized
             ///     equivalent to "value LIKE '%searchstring%'"
             /// </summary>
             Partial,
+            /// <summary>
+            ///     equivalent to "value LIKE 'searchstring%'"
+            /// </summary>
+            StartsWith,
+            /// <summary>
+            ///     equivalent to "value LIKE '%searchstring'"
+            /// </summary>
+            EndsWith,
         }
         private sealed class NGram {
             public readonly string Value;
