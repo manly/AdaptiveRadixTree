@@ -449,7 +449,7 @@ namespace System.Collections.Specialized
             length         -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownAfter;
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
 
-            while(true) {
+            while(length > 0) {
                 //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
                 int pos = compareInfo.IndexOf(
                     source,
@@ -477,6 +477,8 @@ namespace System.Collections.Specialized
 
                 return pos - section.SearchIndex - section.WildcardUnknownBefore;
             }
+
+            return -1;
         }
         #endregion
         #region private static SplitPosition()
