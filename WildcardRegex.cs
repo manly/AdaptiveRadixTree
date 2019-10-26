@@ -11,6 +11,8 @@ namespace System.Collections.Specialized
     /// <summary>
     ///     Simplified wildcard search comparer.
     ///     Works like a regex, but with a wildcard syntax (ie: ?* characters).
+    ///     Uses non-greedy matching for '*' wildcard.
+    ///     At least 3x faster than using a compiled System.Text.RegularExpressions.Regex.
     /// </summary>
     public sealed class WildcardRegex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
@@ -21,7 +23,7 @@ namespace System.Collections.Specialized
         
         /// <summary>?</summary>
         private readonly char m_wildcardUnknown;
-        /// <summary>*</summary>
+        /// <summary>*, Assumes non-greedy matching (least characters)</summary>
         private readonly char m_wildcardAnything;
 
             
@@ -32,6 +34,7 @@ namespace System.Collections.Specialized
 
         #region constructors
         /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
         public WildcardRegex(string wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             if(string.IsNullOrEmpty(wildcard_format))
                 throw new FormatException(nameof(wildcard_format));
@@ -53,13 +56,13 @@ namespace System.Collections.Specialized
 
         #region IsMatch()
         public bool IsMatch(string value) {
-            return this.Match(value, 0, value.Length).length >= 0;
+            return this.Match(value, 0, value.Length).Length >= 0;
         }
         public bool IsMatch(string value, int startIndex) {
-            return this.Match(value, startIndex, value.Length - startIndex).length >= 0;
+            return this.Match(value, startIndex, value.Length - startIndex).Length >= 0;
         }
         public bool IsMatch(string value, int startIndex, int length) {
-            return this.Match(value, startIndex, length).length >= 0;
+            return this.Match(value, startIndex, length).Length >= 0;
         }
         #endregion
         #region Match()
@@ -67,21 +70,21 @@ namespace System.Collections.Specialized
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int start, int length) Match(string value) {
+        public (int Index, int Length) Match(string value) {
             return this.Match(value, 0, value.Length);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int start, int length) Match(string value, int startIndex) {
+        public (int Index, int Length) Match(string value, int startIndex) {
             return this.Match(value, startIndex, value.Length - startIndex);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int start, int length) Match(string value, int startIndex, int length) {
+        public (int Index, int Length) Match(string value, int startIndex, int length) {
             // algorithm explanation
             // format = '123*456*?678'
             // sections = {123, 456, 678}
@@ -107,8 +110,8 @@ namespace System.Collections.Specialized
                 index      += section.WildcardUnknownBefore;
                 if(!this.StringEqualWithUnknownCharacters(value, index, this.WildcardFormat, section.Start, section.Length))
                     return (startIndex, -1);
-                index  += section.WildcardUnknownAfter;
-                length -= section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                index  += section.Length + section.WildcardUnknownAfter;
+                length -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
 
                 if(m_resultMustMatchAtEnd && m_sections.Length == 1)
                     return length == 0 ? (startIndex, originalLength) : (startIndex, -1);
@@ -154,7 +157,7 @@ namespace System.Collections.Specialized
 
             if(!m_resultMustMatchAtEnd) {
                 var section = m_sections[m_sections.Length - 1];
-                lastIndex = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
+                lastIndex   = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
 
             return (firstIndex, lastIndex - firstIndex);
@@ -165,21 +168,21 @@ namespace System.Collections.Specialized
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int start, int length)> Matches(string value) {
+        public IEnumerable<(int Index, int Length)> Matches(string value) {
             return this.Matches(value, 0, value.Length);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int start, int length)> Matches(string value, int startIndex) {
+        public IEnumerable<(int Index, int Length)> Matches(string value, int startIndex) {
             return this.Matches(value, startIndex, value.Length - startIndex);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int start, int length)> Matches(string value, int startIndex, int length) {
+        public IEnumerable<(int Index, int Length)> Matches(string value, int startIndex, int length) {
             // special case, if format = '*', then return only one match instead of infinity match
             if(m_sections.Length == 0) {
                 yield return (startIndex, 0);
@@ -190,12 +193,12 @@ namespace System.Collections.Specialized
             while(true) {
                 var res = this.Match(value, startIndex, length);
 
-                if(res.length >= 0) {
+                if(res.Length >= 0) {
                     yield return res;
                     if(m_resultMustMatchAtStart || m_resultMustMatchAtEnd)
                         yield break;
                     // dont allow overlapping results
-                    startIndex = res.start + res.length;
+                    startIndex = res.Index + res.Length;
                     length     = end - startIndex;
                 } else
                     yield break;
@@ -228,13 +231,13 @@ namespace System.Collections.Specialized
 
             // special case: means the format = '*'
             if(m_sections.Length == 0)
-                sb.Append(".*");
+                sb.Append(".*?"); // ? for non-greedy matching
 
             for(int j = 0; j < m_sections.Length; j++) {
                 var section = m_sections[j];
 
                 if(j > 0)
-                    sb.Append(".*");
+                    sb.Append(".*?"); // ? for non-greedy matching
 
                 for(int i = 0; i < section.WildcardUnknownBefore; i++)
                     sb.Append('.');
@@ -269,10 +272,28 @@ namespace System.Collections.Specialized
                 return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
             }
         }
+        /// <summary>
+        ///     Converts to a RegularExpression.
+        ///     Typically it will run at least 3x slower than this implementation.
+        /// </summary>
+        public System.Text.RegularExpressions.Regex ToRegex(System.Text.RegularExpressions.RegexOptions regex_options) {
+            return new Text.RegularExpressions.Regex(this.ToRegex(RegexFormat.DotNet), regex_options);
+        }
         /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
         public static string ToRegex(string wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING, RegexFormat regex_format = RegexFormat.DotNet) {
             return new WildcardRegex(wildcard_format, option, wildcard_unknown_character, wildcard_anything_character)
                 .ToRegex(regex_format);
+        }
+        /// <summary>
+        ///     Converts to a RegularExpression.
+        ///     Typically it will run at least 3x slower than this implementation.
+        /// </summary>
+        /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
+        public static System.Text.RegularExpressions.Regex ToRegex(string wildcard_format, System.Text.RegularExpressions.RegexOptions regex_options, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+            return new WildcardRegex(wildcard_format, option, wildcard_unknown_character, wildcard_anything_character)
+                .ToRegex(regex_options);
         }
         #endregion
 
@@ -361,7 +382,7 @@ namespace System.Collections.Specialized
                     section.WildcardUnknownBefore, 
                     section.WildcardUnknownAfter, 
                     format.Substring(best_sub_section.start, best_sub_section.length), //format.Substring(section.Start, section.Length),
-                    best_sub_section.start);
+                    best_sub_section.start - section.Start);
             }
             return res;
         }
