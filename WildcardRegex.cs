@@ -45,7 +45,6 @@ namespace System.Collections.Specialized
             m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
 
             if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
-                // not sure if we should check if theres a non-? character before first * 
                 m_resultMustMatchAtStart = wildcard_format[0] != m_wildcardAnything;
             if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
                 m_resultMustMatchAtEnd   = wildcard_format[wildcard_format.Length - 1] != m_wildcardAnything;
