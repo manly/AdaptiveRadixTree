@@ -1,4 +1,8 @@
-﻿using System;
+﻿// removing this define allows any string length, but also means 4 more bytes of storage for every single ngram, which may amount of huge numbers.
+// since strings arent even expected to be above 128 characters or so (due to massive space needed), this option lets you optimize some space.
+#define RESTRICT_MAX_STRING_LENGTH_TO_65535
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -31,7 +35,7 @@ namespace System.Collections.Specialized
         public int Count { get; private set; }
 
         #region constructors
-        /// <param name="minNGramLength">Inclusive.</param>
+        /// <param name="minNGramLength">Inclusive. Avoid too low values, as that will slow down matching.</param>
         /// <param name="maxNGramLength">Inclusive.</param>
         public NGramIndex(int minNGramLength, int maxNGramLength, DuplicateHandling duplicates = DuplicateHandling.DuplicatesAllowed, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             if(minNGramLength < 2) // while 1 is valid, it would be a massive slowdown
@@ -60,6 +64,10 @@ namespace System.Collections.Specialized
                 throw new ArgumentNullException(nameof(value));
             if(value.Length == 0)
                 throw new ArgumentException(nameof(value));
+#if RESTRICT_MAX_STRING_LENGTH_TO_65535
+            if(value.Length > ushort.MaxValue)
+                throw new ArgumentException($"The string \"{value}\" must be Length <= {ushort.MaxValue}. This is an intentional performance optimisation, as long strings with a large spectrum of ngram sizes would eat up too much memory. If this limit needs to be bypassed, then simply undefine RESTRICT_MAX_STRING_LENGTH_TO_65535.", nameof(value));
+#endif
 
             using(var enumerator = this.GenerateNGram(value.Length).GetEnumerator()) {
                 if(this.Duplicates == DuplicateHandling.NoDuplicates) {
@@ -230,6 +238,15 @@ namespace System.Collections.Specialized
             return m_dict.Values.SelectMany(o => o).Select(o => o.Value).Distinct();
         }
         #endregion
+        #region TrimExcess()
+        /// <summary>
+        ///     Removes the excess storage used by lists.
+        /// </summary>
+        public void TrimExcess() {
+            foreach(var item in m_dict.Values)
+                item.TrimExcess();
+        }
+        #endregion
 
         #region Search()
         /// <summary>
@@ -334,6 +351,87 @@ namespace System.Collections.Specialized
         }
         #endregion
 
+        #region DebugDump()
+        public string DebugDump(bool include_ngrams = false) {
+            var sb = new StringBuilder();
+
+            var ngram_breakdown = new long[this.MaxNGramLength + 1];
+            var ngram_unique_breakdown = new long[this.MaxNGramLength + 1];
+            var excess_unique_breakdown = new long[this.MaxNGramLength + 1]; // excess capacity
+            foreach(var item in m_dict) {
+                ngram_breakdown[item.Key.Length] += item.Value.Count;
+                ngram_unique_breakdown[item.Key.Length]++;
+                excess_unique_breakdown[item.Key.Length] += item.Value.Capacity - item.Value.Count;
+            }
+            var ngram_count = ngram_breakdown.Sum();
+            var ngram_unique_count = m_dict.Count; //ngram_unique_breakdown.Sum();
+            var excess_count = excess_unique_breakdown.Sum();
+
+            var value_breakdown = new Dictionary<int, long>();
+            foreach(var item in this.GetItems()) {
+                if(value_breakdown.TryGetValue(item.Length, out var count))
+                    count++;
+                value_breakdown[item.Length] = count;
+            }
+
+            var total_value_chars = value_breakdown.Sum(o => o.Key * o.Value);
+            var total_ngram_unique_chars = ngram_unique_breakdown.Select((o, i) => (o, i)).Sum(o => o.i * o.o); //ngram_breakdown.Select((o, i) => (o, i)).Sum(o => o.i * o.o);
+
+            sb.AppendLine($"Count() = {this.Count}, ngrams = {ngram_count} / {ngram_unique_count} uniques");
+            sb.AppendLine($"Min n-gram length = {this.MinNGramLength}");
+            sb.AppendLine($"Max n-gram length = {this.MaxNGramLength}");
+            sb.AppendLine($"Excess capacity   = {excess_count}");
+
+            sb.AppendLine();
+            sb.AppendLine($"n-grams breakdown  (count={ngram_count}, --- chars dont make sense in non-unique context)");
+            sb.AppendLine("=============================");
+            for(int i = 0; i < ngram_breakdown.Length; i++) {
+                var item = ngram_breakdown[i];
+                if(item == 0)
+                    continue;
+                sb.AppendLine($"[{i} length] {((double)item / ngram_count).ToString("P")}  {item}");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine($"n-grams breakdown UNIQUES ONLY  (count={ngram_unique_count} uniques only, {total_ngram_unique_chars} chars uniques only)");
+            sb.AppendLine("=============================");
+            for(int i = 0; i < ngram_unique_breakdown.Length; i++) {
+                var item_unique = ngram_unique_breakdown[i];
+                if(item_unique == 0)
+                    continue;
+                sb.AppendLine($"[{i} length] {((double)item_unique / ngram_unique_count).ToString("P")}  {item_unique} uniques only  ({item_unique * i} chars)");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine($"n-grams EXCESS capacity breakdown  (count={excess_count}, will not resize under capacity 4)");
+            sb.AppendLine("=============================");
+            for(int i = 0; i < excess_unique_breakdown.Length; i++) {
+                var item = excess_unique_breakdown[i];
+                if(item == 0)
+                    continue;
+                sb.AppendLine($"[{i} length] {((double)item / excess_count).ToString("P")}  {item}");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine($"value breakdown  (count={this.Count}, {total_value_chars} chars)");
+            sb.AppendLine("=============================");
+            foreach(var item in value_breakdown.OrderBy(o => o.Key)) {
+                sb.AppendLine($"[{item.Key} length] {((double)item.Value / this.Count).ToString("P")}  {item.Value}   ({item.Key * item.Value} bytes)");
+            }
+    
+            if(include_ngrams) {
+                sb.AppendLine();
+                sb.AppendLine("n-grams");
+                sb.AppendLine("=============================");
+                foreach(var item in m_dict.OrderByDescending(o => o.Value.Count)) {
+                    sb.AppendLine($"[{item.Key}] {((double)item.Value.Count / ngram_count).ToString("P")}  {item.Value.Count}");
+                }
+            }
+    
+            return sb.ToString();
+        }
+        #endregion
+
         #region private SearchSection()
         /// <summary>
         ///     Searches for the strings that match the section.
@@ -415,6 +513,7 @@ namespace System.Collections.Specialized
                         x.Epoch = epoch;
                         intersection_count++;
                         //x.NGrams.Add(item);
+                        // x.SearchFormatIndex = Math.Min(x.SearchFormatIndex, item.SearchFormatIndex);
                     }
                 }
                 epoch++;
@@ -444,7 +543,9 @@ namespace System.Collections.Specialized
                     var valid     = true;
                     int max2      = potential_match.SearchFormatIndex;
                     int readIndex = ngram.Start - (max2 - section.SearchStart);
-
+                    if(readIndex < 0)
+                        continue;
+                    
                     for(int j = section.SearchStart; j < max2; j++) {
                         var searchFormatChar = format.Format[j];
                         var c                = original_string[readIndex++];
@@ -461,6 +562,8 @@ namespace System.Collections.Specialized
                     // ex: 'xxxxx?123??*zz' will check '?123??' after 'xxxxx' match
                     max2      = section.SearchStart + section.SearchLength;
                     readIndex = ngram.Start + ngram.Length;
+                    if(readIndex < 0)
+                        continue;
 
                     for(int j = potential_match.SearchFormatIndex + ngram.Length; j < max2; j++) {
                         var searchFormatChar = format.Format[j];
@@ -660,6 +763,7 @@ namespace System.Collections.Specialized
 
 
         // maybe replace dict by radix/btree and use btree.startswith()
+        // or maybe try with StringBuilder() instead of List<NGram> for faster building
 
         ///// <summary>
         /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
@@ -728,12 +832,8 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="length">The string.Length you wish to decompose.</param>
         private IEnumerable<InternalNGram> GenerateNGram(int length) {
-            int max = this.MaxNGramLength;
-            if(max > length)
-                max = length;
-            
             // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
-            for(int n = max; n >= this.MinNGramLength; n--) {
+            for(int n = Math.Min(length, this.MaxNGramLength); n >= this.MinNGramLength; n--) {
                 int count = length - n;
                 for(int i = 0; i < count; i++)
                     yield return new InternalNGram(i, n);
@@ -750,9 +850,7 @@ namespace System.Collections.Specialized
         #endregion
         #region private GenerateFirstNGram()
         private bool GenerateFirstNGram(int length, out InternalNGram result) {
-            int max = this.MaxNGramLength;
-            if(max > length)
-                max = length;
+            int max = Math.Min(length, this.MaxNGramLength);
 
             // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
             if(max >= this.MinNGramLength) {
@@ -785,13 +883,25 @@ namespace System.Collections.Specialized
         }
         private sealed class NGram {
             public readonly string Value;
+
+#if RESTRICT_MAX_STRING_LENGTH_TO_65535
+            public readonly ushort Start;   // to save a lot of space
+            public readonly ushort Length;  // to save a lot of space
+#else
             public readonly int Start;
             public readonly int Length;
+#endif
 
             public NGram(string value, int start, int length) {
                 this.Value  = value;
+
+#if RESTRICT_MAX_STRING_LENGTH_TO_65535
+                this.Start  = unchecked((ushort)start);
+                this.Length = unchecked((ushort)length);
+#else
                 this.Start  = start;
                 this.Length = length;
+#endif
             }
         }
         public enum DuplicateHandling {
