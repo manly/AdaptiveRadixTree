@@ -283,7 +283,7 @@ namespace System.Collections.Specialized
                 .Select(o => new ParsingSection(){ Start = o.start, Length = o.len })
                 .ToList();
 
-            for(int i = 0; i < m_sections.Length; i++) {
+            for(int i = 0; i < sections.Count; i++) {
                 var section = sections[i];
                 
                 // TrimStart(this.WildcardUnknown)
@@ -458,24 +458,22 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region private SplitPosition()
+        #region private static SplitPosition()
         /// <summary>
         ///     Same as string.Split(), but for returns positions instead.
         ///     ex: "abcde".SplitPosition(1, 4, new []{'b'}) = {(2,3)}
         /// </summary>
-        private IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
-            int index = 0;
+        private static IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
             int start = startIndex;
             int max   = startIndex + length;
-            for(int i = startIndex; i < max; i++) {
-                var c = source[i];
-                if(c == separator) {
-                    yield return (start, index - start);
-                    start = index + 1;
+            int i     = startIndex;
+            for(; i < max; i++) {
+                if(source[i] == separator) {
+                    yield return (start, i - start);
+                    start = i + 1;
                 }
-                index++;
             }
-            yield return (start, index - start);
+            yield return (start, i - start);
         }
         #endregion
 

@@ -373,7 +373,7 @@ namespace System.Collections.Specialized
 
             var section = format.Sections[sectionIndex];
 
-            var sub_searches = this.SplitPosition(format.Format, section.SearchStart, section.SearchLength, this.WildcardUnknown) 
+            var sub_searches = SplitPosition(format.Format, section.SearchStart, section.SearchLength, this.WildcardUnknown) 
                 .Where(o => o.length >= this.MinNGramLength)
                 .SelectMany(o => this.MaxNGrams(o.start, o.length))
                 .Select(ngram => {
@@ -497,24 +497,22 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region private SplitPosition()
+        #region private static SplitPosition()
         /// <summary>
         ///     Same as string.Split(), but for returns positions instead.
         ///     ex: "abcde".SplitPosition(1, 4, new []{'b'}) = {(2,3)}
         /// </summary>
-        private IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
-            int index = 0;
+        private static IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
             int start = startIndex;
             int max   = startIndex + length;
-            for(int i = startIndex; i < max; i++) {
-                var c = source[i];
-                if(c == separator) {
-                    yield return (start, index - start);
-                    start = index + 1;
+            int i     = startIndex;
+            for(; i < max; i++) {
+                if(source[i] == separator) {
+                    yield return (start, i - start);
+                    start = i + 1;
                 }
-                index++;
             }
-            yield return (start, index - start);
+            yield return (start, i - start);
         }
         #endregion
 
