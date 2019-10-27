@@ -413,6 +413,7 @@ namespace System.Collections.Specialized
         #region this[]
         /// <summary>
         ///    O(k)    (k = # of characters)
+        ///    use this.SetValueUnsafe() if you care mostly about speed.
         ///    
         ///    Throws KeyNotFoundException.
         ///    Throws ArgumentException on empty key.
@@ -425,26 +426,7 @@ namespace System.Collections.Specialized
                 return value;
             }
             set {
-                var path               = this.TryGetPath(in key, false, true);
-                var key_already_exists = !this.TryAddItem(path, in key, in value);
-    
-                if(key_already_exists) {
-                    // if the leaf exists, make a new leaf, point to it, and unalloc old leaf
-                    var last = path.Trail[path.Trail.Count - 1];
-    
-                    var valueBuffer = m_valueBuffer;
-                    m_valueEncoder(value, valueBuffer);
-                        
-                    path.ReadPathEntireKey(this, path.EncodedSearchKey);
-    
-                    var remainingEncodedKey = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, path.EncodedSearchKey.Length - (last.PartialKeyLength - 1), last.PartialKeyLength - 1);
-                    var address             = this.CreateLeafNode(in remainingEncodedKey, valueBuffer);
-                    WriteNodePointer(m_buffer, 0, address);
-                    this.Stream.Position = last.ParentPointerAddress;
-                    this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
-                    this.Free(last.Address, CalculateLeafNodeSize(last.PartialKeyLength, last.ValueLength));
-                    this.LongCount++;
-                }
+                this.SetValue(in key, in value, false);
             }
         }
         #endregion
@@ -598,7 +580,119 @@ namespace System.Collections.Specialized
             return EqualityComparer<TValue>.Default.Equals(value, read_value);
         }
         #endregion
+
+        #region SetValue()
+        /// <summary>
+        ///    O(k)    (k = # of characters)
+        ///    use this.SetValueUnsafe() if you care mostly about speed.
+        ///    
+        ///    Throws KeyNotFoundException.
+        ///    Throws ArgumentException on empty key.
+        /// </summary>
+        [MethodImpl(AggressiveInlining)]
+        public void SetValue(in TKey key, in TValue value) {
+            this.SetValue(in key, in value, false);
+        }
+        /// <summary>
+        ///    O(k)    (k = # of characters)
+        ///    
+        ///    Throws KeyNotFoundException.
+        ///    Throws ArgumentException on empty key.
+        ///    
+        ///    Same as this[key] = value, except that this will run faster as it overwrites the value directly without re-creating the node 
+        ///    (when possible, ie: anytime the value storage is smaller or of equal size).
+        ///     
+        ///    This method is intended for update-heavy scenarios where non-transactional writes are acceptable 
+        ///    (ie: possible loss of data integrity in case of crashes).
+        /// </summary>
+        [MethodImpl(AggressiveInlining)]
+        private void SetValue(in TKey key, in TValue value, bool allow_in_place_write) {
+            var path               = this.TryGetPath(in key, false, true);
+            var key_already_exists = !this.TryAddItem(path, in key, in value);
     
+            if(key_already_exists) {
+                // if the leaf exists, make a new leaf, point to it, and unalloc old leaf
+                var last = path.Trail[path.Trail.Count - 1];
+    
+                var valueBuffer = m_valueBuffer;
+                m_valueEncoder(value, valueBuffer);
+
+                // if(path.LastBuffer != null) it means were guaranteed that its content is the start
+                // of the leaf node. More than likely, it is the entire leaf node
+                // since trygetpath() makes no attempt at reading the value of the leaf node, its possible the 
+                // full leaf node wasnt read intentionally -- only enough to cover all the node start including the 
+                // entire partial key
+                // technically we could try and handle the cases where the partial key doesnt fit within the buffer (ie: path.LastBuffer==null),
+                // but this would be rather complicated to do for a case that should be extremely rare
+                if(allow_in_place_write && valueBuffer.Length <= last.ValueLength && path.LastBuffer != null) {
+                    this.SetValueInPlaceRare(path, last, valueBuffer);
+                } else {
+                    path.ReadPathEntireKey(this, path.EncodedSearchKey);
+
+                    var remainingEncodedKey = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, path.EncodedSearchKey.Length - (last.PartialKeyLength - 1), last.PartialKeyLength - 1);
+                    var address             = this.CreateLeafNode(in remainingEncodedKey, valueBuffer);
+                    WriteNodePointer(m_buffer, 0, address);
+                    this.Stream.Position = last.ParentPointerAddress;
+                    this.Stream.Write(m_buffer, 0, NODE_POINTER_BYTE_SIZE);
+                    this.Free(last.Address, CalculateLeafNodeSize(last.PartialKeyLength, last.ValueLength));
+                }
+            }
+        }
+        private void SetValueInPlaceRare(Path path, NodeData last, Buffer valueBuffer) {
+            // if we can replace the value directly, then we do so
+            var value_length_encoded_size          = CalculateVarUInt64Length(unchecked((ulong)valueBuffer.Length));
+            var original_value_length_encoded_size = CalculateVarUInt64Length(unchecked((ulong)last.ValueLength));
+            int index                              = 1 + CalculateVarUInt64Length(unchecked((ulong)last.PartialKeyLength));
+
+            WriteVarUInt64(path.LastBuffer, ref index, unchecked((ulong)valueBuffer.Length));
+
+            if(value_length_encoded_size != original_value_length_encoded_size) {
+                // if we need to down-shift the partial key
+                var bytes_to_downshift = original_value_length_encoded_size - value_length_encoded_size;
+                BlockCopy(path.LastBuffer, index + bytes_to_downshift, path.LastBuffer, index, last.PartialKeyLength);
+            }
+
+            // fill buffer with encoded value
+            index += last.PartialKeyLength;
+            int copyable = Math.Min(valueBuffer.Length, path.LastBuffer.Length - index);
+            BlockCopy(valueBuffer.Content, 0, path.LastBuffer, index, copyable);
+            index += copyable;
+
+            this.Stream.Position = last.Address;
+            this.Stream.Write(path.LastBuffer, 0, index);
+
+            // then write remaining encoded value
+            if(valueBuffer.Length > copyable) {
+                this.Stream.Position = last.Address + index; // redundant
+                this.Stream.Write(valueBuffer.Content, copyable, valueBuffer.Length - copyable);
+            }
+
+            // see if any memory needs to be freed
+            var prev_leaf_node_size = CalculateLeafNodeSize(last.PartialKeyLength, last.ValueLength);
+            var leaf_node_size      = CalculateLeafNodeSize(last.PartialKeyLength, valueBuffer.Length);
+            if(prev_leaf_node_size > leaf_node_size)
+                this.Free(last.Address + leaf_node_size, prev_leaf_node_size - leaf_node_size);
+        }
+        #endregion
+        #region SetValueUnsafe()
+        /// <summary>
+        ///    O(k)    (k = # of characters)
+        ///    
+        ///    Throws KeyNotFoundException.
+        ///    Throws ArgumentException on empty key.
+        ///    
+        ///    Same as this[key] = value, except that this will run faster as it overwrites the value directly without re-creating the node 
+        ///    (when possible, ie: anytime the value storage is smaller or of equal size).
+        ///     
+        ///    This method is intended for update-heavy scenarios where non-transactional writes are acceptable 
+        ///    (ie: possible loss of data integrity in case of crashes).
+        /// </summary>
+        [MethodImpl(AggressiveInlining)]
+        public void SetValueUnsafe(in TKey key, in TValue value) {
+            this.SetValue(in key, in value, true);
+        }
+        #endregion
+
         // StartsWith()
         #region StartsWith()
         /// <summary>
