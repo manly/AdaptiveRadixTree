@@ -13,7 +13,8 @@ using System.Runtime.InteropServices;
 namespace System.Collections.Specialized
 {
     /// <summary>
-    ///     Allows n-gram indexing, used typically for O(1) sub-string searches.
+    ///     Multi n-gram indexer, used typically for O(1) sub-string searches.
+    ///     Provides indexed wildcard searching functionality.
     ///     ie: [abcd] => {abcd, abc, bcd, ab, bc, cd, a, b, c, d}
     /// </summary>
     public sealed class NGramIndex {
@@ -321,21 +322,7 @@ namespace System.Collections.Specialized
                 epoch++;
             }
 
-            WildcardRegex.SearchOption option;
-            switch(match) {
-                case SearchOption.ExactMatch: option = WildcardRegex.SearchOption.ExactMatch; break;
-                case SearchOption.Partial:    option = WildcardRegex.SearchOption.Partial; break;
-                case SearchOption.StartsWith: option = WildcardRegex.SearchOption.StartsWith; break;
-                case SearchOption.EndsWith:   option = WildcardRegex.SearchOption.EndsWith; break;
-                default: throw new NotImplementedException();
-            }
-
-            var regex = new WildcardRegex(
-                format_including_wildcards, 
-                option, 
-                this.WildcardUnknown, 
-                this.WildcardAnything);
-            //new System.Text.RegularExpressions.Regex(regex.ToRegex());
+            var regex = this.BuildRegex(format_including_wildcards, match);
 
             var intersection = results
                 .Where(o => o.Value.Epoch == epoch - 1)
@@ -416,7 +403,7 @@ namespace System.Collections.Specialized
             sb.AppendLine($"value breakdown  (count={this.Count}, {total_value_chars} chars)");
             sb.AppendLine("=============================");
             foreach(var item in value_breakdown.OrderBy(o => o.Key)) {
-                sb.AppendLine($"[{item.Key} length] {((double)item.Value / this.Count).ToString("P")}  {item.Value}   ({item.Key * item.Value} bytes)");
+                sb.AppendLine($"[{item.Key} length] {((double)item.Value / this.Count).ToString("P")}  {item.Value}   ({item.Key * item.Value} chars)");
             }
     
             if(include_ngrams) {
@@ -429,6 +416,25 @@ namespace System.Collections.Specialized
             }
     
             return sb.ToString();
+        }
+        #endregion
+        #region DebugTest()
+        /// <summary>
+        ///     Returns the list of missing matches.
+        ///     Returns null if success.
+        /// </summary>
+        public string DebugTest(string format_including_wildcards, SearchOption match = SearchOption.ExactMatch) {
+            var regex = this.BuildRegex(format_including_wildcards, match);
+
+            // keep in mind: this.Search() will already filter all results to make sure they pass the same regex
+            // consequently, there can only be missing matches
+            var missing = this.GetItems()
+                .Where(o => regex.IsMatch(o))
+                .Except(this.Search(format_including_wildcards, match))
+                .OrderBy(o => o);
+
+            var res = string.Join(Environment.NewLine, missing);
+            return string.IsNullOrEmpty(res) ? null : res;
         }
         #endregion
 
@@ -478,8 +484,8 @@ namespace System.Collections.Specialized
                     m_dict.TryGetValue(format.Format.Substring(ngram.start, ngram.len), out var list);
                     return (ngram.start, list);
                 })
-                // avoid case where you get duplicated search patterns
-                .GroupBy(o => o.list)
+                // avoid case where you get duplicated search patterns (ex: maxngramlength=2, search='qqq' => 'qq' & 'qq')
+                .GroupBy(o => o.list) // ie: referenceequals()
                 .Select(o => o.First())
                 .OrderBy(o => o.list?.Count ?? 0)
                 .ToList();
@@ -488,8 +494,11 @@ namespace System.Collections.Specialized
                 yield break;
 
             var searchFormatIndex = sub_searches[0].start;
-            var dict = sub_searches[0].list
-                .Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value))
+            var filtered          = format.Sections.Count == 1 && section.ResultMustMatchAtStart && section.ResultMustMatchAtEnd ?
+                sub_searches[0].list.Where(o => o.Value.Length == format.TotalCharacters && filter(o.Value)) :
+                sub_searches[0].list.Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value));
+
+            var dict = filtered
                 .GroupBy(o => o.Value)
                 .ToDictionary(o => o.Key, o => new Matches(){ SearchFormatIndex = searchFormatIndex, NGrams = o.ToList(), Epoch = -1 });
                 
@@ -531,7 +540,7 @@ namespace System.Collections.Specialized
                         continue;
                     if(original_string.Length - (ngram.Start + ngram.Length) < section.MinCharsAfter)
                         continue;
-                    if(section.ResultMustMatchAtStart && ngram.Start != 0)
+                    if(section.ResultMustMatchAtStart && ngram.Start - potential_match.SearchFormatIndex != 0)
                         continue;
                     if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length != original_string.Length)
                         continue;
@@ -562,8 +571,6 @@ namespace System.Collections.Specialized
                     // ex: 'xxxxx?123??*zz' will check '?123??' after 'xxxxx' match
                     max2      = section.SearchStart + section.SearchLength;
                     readIndex = ngram.Start + ngram.Length;
-                    if(readIndex < 0)
-                        continue;
 
                     for(int j = potential_match.SearchFormatIndex + ngram.Length; j < max2; j++) {
                         var searchFormatChar = format.Format[j];
@@ -616,6 +623,25 @@ namespace System.Collections.Specialized
                 }
             }
             yield return (start, i - start);
+        }
+        #endregion
+        #region private BuildRegex()
+        private WildcardRegex BuildRegex(string format_including_wildcards, SearchOption match) {
+            WildcardRegex.SearchOption option;
+            switch(match) {
+                case SearchOption.ExactMatch: option = WildcardRegex.SearchOption.ExactMatch; break;
+                case SearchOption.Partial:    option = WildcardRegex.SearchOption.Partial; break;
+                case SearchOption.StartsWith: option = WildcardRegex.SearchOption.StartsWith; break;
+                case SearchOption.EndsWith:   option = WildcardRegex.SearchOption.EndsWith; break;
+                default: throw new NotImplementedException();
+            }
+
+            return new WildcardRegex(
+                format_including_wildcards, 
+                option, 
+                this.WildcardUnknown, 
+                this.WildcardAnything);
+                //.ToRegex(System.Text.RegularExpressions.RegexOptions.None)
         }
         #endregion
 
@@ -764,6 +790,8 @@ namespace System.Collections.Specialized
 
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
+        // maybe get a list of all added values < minngramlength ?
+        // remove ngram.length as it is redundant
 
         ///// <summary>
         /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
@@ -835,7 +863,7 @@ namespace System.Collections.Specialized
             // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
             for(int n = Math.Min(length, this.MaxNGramLength); n >= this.MinNGramLength; n--) {
                 int count = length - n;
-                for(int i = 0; i < count; i++)
+                for(int i = 0; i <= count; i++)
                     yield return new InternalNGram(i, n);
             }
         }
@@ -903,6 +931,8 @@ namespace System.Collections.Specialized
                 this.Length = length;
 #endif
             }
+
+            public override string ToString() => $"[{this.Value.Substring(this.Start, this.Length)}] {this.Value}  ({{{this.Start},{this.Length}}})";
         }
         public enum DuplicateHandling {
             NoDuplicates,

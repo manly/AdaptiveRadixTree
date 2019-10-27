@@ -672,6 +672,9 @@ namespace System.Collections.Specialized
             var leaf_node_size      = CalculateLeafNodeSize(last.PartialKeyLength, valueBuffer.Length);
             if(prev_leaf_node_size > leaf_node_size)
                 this.Free(last.Address + leaf_node_size, prev_leaf_node_size - leaf_node_size);
+
+            // shouldnt be possible, but make sure the entire key was read
+            System.Diagnostics.Debug.Assert(path.LastRead >= prev_leaf_node_size - last.ValueLength);
         }
         #endregion
         #region SetValueUnsafe()
