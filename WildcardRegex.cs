@@ -30,7 +30,8 @@ namespace System.Collections.Specialized
         private readonly bool m_resultMustMatchAtStart; // result/match must start at 0.
         private readonly bool m_resultMustMatchAtEnd;   // result/match must end at {start+length}.
         private readonly int m_totalCharacters;
-        private readonly ConsecutiveParseSection[] m_sections; // if Length==0, means format = '*'
+        private readonly ConsecutiveParseSection[] m_sections; 
+        private readonly bool m_isMatchAll;             // if(Length==0 && true) format = '*', if(Length==0 && false) format = ''
 
         #region constructors
         /// <param name="regex_wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
@@ -44,13 +45,22 @@ namespace System.Collections.Specialized
             m_wildcardUnknown        = wildcard_unknown_character;
             m_wildcardAnything       = wildcard_anything_character;
 
-            m_sections        = this.ParseSearchFormat(regex_wildcard_format);
-            m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
+            if(!string.IsNullOrEmpty(regex_wildcard_format)) {
+                m_sections        = this.ParseSearchFormat(regex_wildcard_format);
+                m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
+                m_isMatchAll      = true; // only applies if section.Length==0, which would mean format='*'
 
-            if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
-                m_resultMustMatchAtStart = regex_wildcard_format[0] != m_wildcardAnything;
-            if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
-                m_resultMustMatchAtEnd   = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
+                if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
+                    m_resultMustMatchAtStart = regex_wildcard_format[0] != m_wildcardAnything;
+                if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
+                    m_resultMustMatchAtEnd = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
+            } else {
+                m_sections               = new ConsecutiveParseSection[0];
+                m_totalCharacters        = 0;
+                m_isMatchAll             = false;
+                m_resultMustMatchAtStart = false;
+                m_resultMustMatchAtEnd   = false;
+            }
         }
         #endregion
 
@@ -95,9 +105,9 @@ namespace System.Collections.Specialized
 
             if(length < m_totalCharacters)
                 return (startIndex, -1);
-            // special case if format = '*'
+            // special case if format = '*' or ''
             if(m_sections.Length == 0)
-                return (startIndex, 0);
+                return (startIndex, m_isMatchAll ? 0 : -1);
 
             int index          = startIndex;
             int originalLength = length;
@@ -183,9 +193,11 @@ namespace System.Collections.Specialized
         ///     Returns length = -1 if not found.
         /// </summary>
         public IEnumerable<(int Index, int Length)> Matches(string value, int startIndex, int length) {
-            // special case, if format = '*', then return only one match instead of infinity match
+            // special case, if format = '*' or ''
             if(m_sections.Length == 0) {
-                yield return (startIndex, 0);
+                if(m_isMatchAll)
+                    // if format='*' return only one match instead of infinity match
+                    yield return (startIndex, 0);
                 yield break;
             }
 
@@ -206,6 +218,13 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region static ToRegex()
+        public enum RegexFormat {
+            DotNet,
+            /// <summary>
+            ///     The string to be passed in sql, ie: "where searchcolumn ~ value"
+            /// </summary>
+            SQL,
+        }
         public string ToRegex(RegexFormat regex_format = RegexFormat.DotNet) {
             int capacity = this.RegexWildcardFormat.Length;
             if(capacity <= 4096)
@@ -230,7 +249,7 @@ namespace System.Collections.Specialized
                 sb.Append('^');
 
             // special case: means the format = '*'
-            if(m_sections.Length == 0)
+            if(m_sections.Length == 0 && m_isMatchAll)
                 sb.Append(".*?"); // ? for non-greedy matching
 
             for(int j = 0; j < m_sections.Length; j++) {
@@ -528,14 +547,8 @@ namespace System.Collections.Specialized
             /// </summary>
             EndsWith,
         }
-        public enum RegexFormat {
-            DotNet,
-            /// <summary>
-            ///     The string to be passed in sql, ie: "where searchcolumn ~ value"
-            /// </summary>
-            SQL,
-        }
 
+        #region private readonly struct ConsecutiveParseSection
         /// <summary>
         ///     Represents a section of consecutive characters without any WILDCARD_ANYTHING in it.
         ///     This may include multiple WILDCARD_UNKNOWN.
@@ -561,5 +574,6 @@ namespace System.Collections.Specialized
                 this.ContainsCharsAfterSearchIndex  = searchIndex + search.Length < length;
             }
         }
+        #endregion
     }
 }
