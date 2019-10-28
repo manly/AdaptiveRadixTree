@@ -1,15 +1,11 @@
-﻿// removing this define allows any string length, but also means 4 more bytes of storage for every single ngram, which may amount of huge numbers.
-// since strings arent even expected to be above 128 characters or so (due to massive space needed), this option lets you optimize some space.
-#define RESTRICT_MAX_STRING_LENGTH_TO_65535
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
-
+ 
+ 
 namespace System.Collections.Specialized
 {
     /// <summary>
@@ -20,92 +16,94 @@ namespace System.Collections.Specialized
     public sealed class NGramIndex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
-
-        private readonly Dictionary<string, List<NGram>> m_dict = new Dictionary<string, List<NGram>>();
-
+ 
+        private readonly Dictionary<string, List<NGram>> m_dict  = new Dictionary<string, List<NGram>>();
+ 
+        // need the list of all items, since search may contain no consecutive sequence >= minngramlength, in which case we still need to perform a search
+        // also need a list of all items without any index
+        private readonly HashSet<string> m_items           = new HashSet<string>(); // all items >= minngramlength
+        private readonly HashSet<string> m_itemsNotIndexed = new HashSet<string>(); // all items < minngramlength
+ 
         /// <summary>
         ///     Avoid too low values, as that will slow down matching.
         /// </summary>
         public readonly int MinNGramLength; // inclusive
         public readonly int MaxNGramLength; // inclusive
-        public readonly DuplicateHandling Duplicates;
         /// <summary>?</summary>
         private readonly char WildcardUnknown;
         /// <summary>*</summary>
         private readonly char WildcardAnything;
         public int Count { get; private set; }
-
+ 
         #region constructors
         /// <param name="minNGramLength">Inclusive. Avoid too low values, as that will slow down matching.</param>
         /// <param name="maxNGramLength">Inclusive.</param>
-        public NGramIndex(int minNGramLength, int maxNGramLength, DuplicateHandling duplicates = DuplicateHandling.DuplicatesAllowed, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+        public NGramIndex(int minNGramLength, int maxNGramLength, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             if(minNGramLength < 2) // while 1 is valid, it would be a massive slowdown
                 throw new ArgumentOutOfRangeException(nameof(minNGramLength));
             if(maxNGramLength < minNGramLength)
                 throw new ArgumentOutOfRangeException(nameof(maxNGramLength));
-
-            this.MinNGramLength          = minNGramLength;
-            this.MaxNGramLength          = maxNGramLength;
-            this.Duplicates              = duplicates;
-            this.WildcardUnknown         = wildcard_unknown_character;
-            this.WildcardAnything        = wildcard_anything_character;
+ 
+            this.MinNGramLength   = minNGramLength;
+            this.MaxNGramLength   = maxNGramLength;
+            this.WildcardUnknown  = wildcard_unknown_character;
+            this.WildcardAnything = wildcard_anything_character;
         }
         #endregion
-
+ 
+        #region Items
+        /// <summary>
+        ///     O(n)
+        ///     Returns all items, but not in insertion order.
+        /// </summary>
+        public IEnumerable<string> Items {
+            get {
+                foreach(var item in m_itemsNotIndexed)
+                    yield return item;
+                foreach(var item in m_items)
+                    yield return item;
+            }
+        }
+        #endregion
+ 
         #region Add()
         /// <summary>
         ///     Average: O(k)    k = value.Length
-        ///     Slightly slower if AllowDuplicates==false.
+        ///     Returns true if success.
+        ///     Returns false if value already exists.
         ///     
         ///     Throws ArgumentNullException on null value.
-        ///     Throws ArgumentException on empty/duplicate value.
+        ///     Throws ArgumentException on empty value.
         /// </summary>
-        public void Add(string value) {
+        public bool Add(string value) {
             if(value == null)
                 throw new ArgumentNullException(nameof(value));
             if(value.Length == 0)
                 throw new ArgumentException(nameof(value));
-#if RESTRICT_MAX_STRING_LENGTH_TO_65535
-            if(value.Length > ushort.MaxValue)
-                throw new ArgumentException($"The string \"{value}\" must be Length <= {ushort.MaxValue}. This is an intentional performance optimisation, as long strings with a large spectrum of ngram sizes would eat up too much memory. If this limit needs to be bypassed, then simply undefine RESTRICT_MAX_STRING_LENGTH_TO_65535.", nameof(value));
-#endif
 
-            using(var enumerator = this.GenerateNGram(value.Length).GetEnumerator()) {
-                if(this.Duplicates == DuplicateHandling.NoDuplicates) {
-                    if(!enumerator.MoveNext())
-                        return;
-
-                    var ngram        = enumerator.Current;
+            if(value.Length >= this.MinNGramLength) {
+                if(!m_items.Add(value))
+                    //throw new ArgumentException($"The value ({value}) already exists.", nameof(value));
+                    return false;
+ 
+                foreach(var ngram in this.GenerateNGram(value.Length)) {
                     var ngram_string = value.Substring(ngram.Start, ngram.Length);
-
-                    if(!m_dict.TryGetValue(ngram_string, out var list)) {
-                        list = new List<NGram> {
-                        new NGram(value, ngram.Start, ngram.Length)
-                    };
-                        m_dict.Add(ngram_string, list);
-                    } else {
-                        // check if the value exists
-                        for(int i = 0; i < list.Count; i++) {
-                            if(list[i].Value == value)
-                                throw new ArgumentException($"The value ({value}) already exists.", nameof(value));
-                        }
-                        list.Add(new NGram(value, ngram.Start, ngram.Length));
-                    }
-                }
-
-                while(enumerator.MoveNext()) {
-                    var ngram        = enumerator.Current;
-                    var ngram_string = value.Substring(ngram.Start, ngram.Length);
-
+ 
                     if(!m_dict.TryGetValue(ngram_string, out var list)) {
                         list = new List<NGram>();
                         m_dict.Add(ngram_string, list);
                     }
-
-                    list.Add(new NGram(value, ngram.Start, ngram.Length));
+ 
+                    list.Add(new NGram(value, ngram.Start));
                 }
+            } else {
+                if(!m_itemsNotIndexed.Add(value))
+                    //throw new ArgumentException($"The value ({value}) already exists.", nameof(value));
+                    return false;
             }
+
             this.Count++;
+            return true;
         }
         #endregion
         #region AddRange()
@@ -117,62 +115,42 @@ namespace System.Collections.Specialized
         #region Remove()
         /// <summary>
         ///     Throws ArgumentNullException on null value.
-        ///     Throws ArgumentException on empty/duplicate value.
+        ///     Throws ArgumentException on empty value.
         /// </summary>
         public bool Remove(string value) {
             if(value == null)
                 throw new ArgumentNullException(nameof(value));
             if(value.Length == 0)
                 throw new ArgumentException(nameof(value));
-
-            // avoid expensive string comparison
-            string reference = null;
-            using(var enumerator = this.GenerateNGram(value.Length).GetEnumerator()) {
-                if(!enumerator.MoveNext())
+ 
+            if(value.Length >= this.MinNGramLength) {
+                if(!m_items.Remove(value))
                     return false;
 
-                // try find the first item so as to get the actual reference to the original string
-                // this allows significant speedup in string comparison for all future compares
-                var ngram        = enumerator.Current;
-                var ngram_string = value.Substring(ngram.Start, ngram.Length);
+                // avoid expensive string comparison
+                string reference = null;
 
-                if(!m_dict.TryGetValue(ngram_string, out var list))
-                    return false;
-
-                int index  = 0;
-                bool found = false;
-                while(index < list.Count) {
-                    var item = list[index];
-                    if(item.Value != value)
-                        index++;
-                    else {
-                        found = true;
-                        reference = item.Value;
-                        if(list.Count != 1)
-                            list.RemoveAt(index);
-                        else
-                            m_dict.Remove(ngram_string);
-                        break;
-                    }
-                }
-                if(!found)
-                    return false;
-
-                while(enumerator.MoveNext()) {
-                    ngram = enumerator.Current;
-                    ngram_string = value.Substring(ngram.Start, ngram.Length);
-
-                    if(!m_dict.TryGetValue(ngram_string, out list))
+                using(var enumerator = this.GenerateNGram(value.Length).GetEnumerator()) {
+                    if(!enumerator.MoveNext())
                         return false;
-
-                    index = 0;
+ 
+                    // try find the first item so as to get the actual reference to the original string
+                    // this allows significant speedup in string comparison for all future compares
+                    var ngram        = enumerator.Current;
+                    var ngram_string = value.Substring(ngram.Start, ngram.Length);
+ 
+                    if(!m_dict.TryGetValue(ngram_string, out var list))
+                        return false;
+ 
+                    int index  = 0;
+                    bool found = false;
                     while(index < list.Count) {
                         var item = list[index];
-                        // now that we have the original reference, all string comparisons can be avoided
-                        // this is where most of the performance was lost
-                        if(object.ReferenceEquals(item.Value, reference)) //if(item.Value != value)
+                        if(item.Value != value)
                             index++;
                         else {
+                            found = true;
+                            reference = item.Value;
                             if(list.Count != 1)
                                 list.RemoveAt(index);
                             else
@@ -180,8 +158,38 @@ namespace System.Collections.Specialized
                             break;
                         }
                     }
+                    if(!found)
+                        return false;
+ 
+                    while(enumerator.MoveNext()) {
+                        ngram        = enumerator.Current;
+                        ngram_string = value.Substring(ngram.Start, ngram.Length);
+ 
+                        if(!m_dict.TryGetValue(ngram_string, out list))
+                            return false;
+ 
+                        index = 0;
+                        while(index < list.Count) {
+                            var item = list[index];
+                            // now that we have the original reference, all string comparisons can be avoided
+                            // this is where most of the performance was lost
+                            if(object.ReferenceEquals(item.Value, reference)) //if(item.Value != value)
+                                index++;
+                            else {
+                                if(list.Count != 1)
+                                    list.RemoveAt(index);
+                                else
+                                    m_dict.Remove(ngram_string);
+                                break;
+                            }
+                        }
+                    }
                 }
+            } else {
+                if(!m_itemsNotIndexed.Remove(value))
+                    return false;
             }
+             
             this.Count--;
             return true;
         }
@@ -198,45 +206,28 @@ namespace System.Collections.Specialized
         /// </summary>
         public void Clear() {
             m_dict.Clear();
+            m_items.Clear();
+            m_itemsNotIndexed.Clear();
             this.Count = 0;
         }
         #endregion
-        #region ContainsFullValue()
+        #region Contains()
         /// <summary>
         ///     Returns true if value was previously added.
         ///     
         ///     Throws ArgumentNullException on null value.
-        ///     Throws ArgumentException on empty/duplicate value.
+        ///     Throws ArgumentException on empty value.
         /// </summary>
-        public bool ContainsFullValue(string value) {
+        public bool Contains(string value) {
             if(value == null)
                 throw new ArgumentNullException(nameof(value));
             if(value.Length == 0)
                 throw new ArgumentException(nameof(value));
-
-            if(!this.GenerateFirstNGram(value.Length, out var ngram))
-                return false;
-                
-            var ngram_string = value.Substring(ngram.Start, ngram.Length);
-
-            if(m_dict.TryGetValue(ngram_string, out var list)) {
-                for(int i = 0; i < list.Count; i++) {
-                    if(list[i].Value == value)
-                        return true;
-                }
-            }
-
-            return false;
-        }
-        #endregion
-        #region GetItems()
-        /// <summary>
-        ///     O(n)
-        ///     Returns the added items.
-        ///     This is really inefficient and meant really only for debugging.
-        /// </summary>
-        public IEnumerable<string> GetItems() {
-            return m_dict.Values.SelectMany(o => o).Select(o => o.Value).Distinct();
+ 
+            if(value.Length >= this.MinNGramLength)
+                return m_items.Contains(value);
+            else
+                return m_itemsNotIndexed.Contains(value);
         }
         #endregion
         #region TrimExcess()
@@ -248,7 +239,7 @@ namespace System.Collections.Specialized
                 item.TrimExcess();
         }
         #endregion
-
+ 
         #region Search()
         /// <summary>
         ///     Searches for the given format which may include wildcard characters.
@@ -274,27 +265,46 @@ namespace System.Collections.Specialized
             // now there is no hard requirement to do intersection amongst multiple section searches, since we can always check preceding/following chars
             // as such, we balance the filtering by using the 2 approaches
             // keep in mind that the check for preceding/following chars must always happen whether you use intersection filtering or not
-            
-
+             
             var parsed = this.ParseSearchFormat(format_including_wildcards, match);
+            var regex  = this.BuildRegex(format_including_wildcards, match);
 
+            if(parsed.TotalCharacters < this.MinNGramLength) {
+                // non-indexed search; bruteforce all potential matches
+                foreach(var item in m_itemsNotIndexed) {
+                    if(regex.IsMatch(item))
+                        yield return item;
+                }
+
+                yield break;
+            } else if(parsed.MaxSearchableNGramLength < this.MinNGramLength) {
+                // if no search can be done on indexed data, then we need to manually check all items
+                // non-indexed search; bruteforce all potential matches
+                foreach(var item in m_items) {
+                    if(regex.IsMatch(item))
+                        yield return item;
+                }
+
+                yield break;
+            }
+ 
             var orderedSectionsIndexes = parsed.Sections
                 .Select((value, index) => (value, index))
                 .OrderByDescending(o => o.value.SearchLength)
                 .ThenBy(o => o.value.ResultMustMatchAtStart ? 0 : 1)
                 .ThenBy(o => o.value.ResultMustMatchAtEnd ? 0 : 1)
                 .Select(o => o.index);
-
-            int epoch              = 0;
-            int intersection_count = int.MaxValue / 4;
-            var results            = new Dictionary<string, EpochContainer>();
+ 
+            int epoch               = 0;
+            long intersection_count = int.MaxValue;
+            var results             = new Dictionary<string, EpochContainer>();
             foreach(var sectionIndex in orderedSectionsIndexes) {
                 var sectionResults = this.SearchSection(
                     parsed, 
                     sectionIndex, 
                     original_string => epoch == 0 || (results.TryGetValue(original_string, out var epochContainer) && epochContainer.Epoch == epoch - 1))
                     .ToList();
-
+ 
                 // ie: we either keep filtering by doing intersections, or we just try and compare the whole section
                 // the rule of thumb here being that you can do roughly 4x dict compares in the time you verify the match (which will have to be done anyway)
                 // keep in mind the further searches we go through, the more results we will get, thus filtering little
@@ -302,9 +312,9 @@ namespace System.Collections.Specialized
                 // you could take into account the section.SearchLength and how many characters comparisons are avoided potentially if you want to try a smarter rule
                 if(sectionResults.Count > intersection_count * 4)
                     break;
-
+ 
                 // fast intersection
-                
+                 
                 if(epoch > 0) {
                     intersection_count = 0;
                     foreach(var sectionResult in sectionResults) {
@@ -318,16 +328,14 @@ namespace System.Collections.Specialized
                     foreach(var sectionResult in sectionResults)
                         results.Add(sectionResult, new EpochContainer() { Epoch = 0 });
                 }
-                
+                 
                 epoch++;
             }
-
-            var regex = this.BuildRegex(format_including_wildcards, match);
-
+ 
             var intersection = results
                 .Where(o => o.Value.Epoch == epoch - 1)
                 .Select(o => o.Key);
-
+ 
             foreach(var intersect in intersection) {
                 if(regex.IsMatch(intersect))
                     yield return intersect;
@@ -337,11 +345,11 @@ namespace System.Collections.Specialized
             public int Epoch;
         }
         #endregion
-
+ 
         #region DebugDump()
         public string DebugDump(bool include_ngrams = false) {
             var sb = new StringBuilder();
-
+ 
             var ngram_breakdown = new long[this.MaxNGramLength + 1];
             var ngram_unique_breakdown = new long[this.MaxNGramLength + 1];
             var excess_unique_breakdown = new long[this.MaxNGramLength + 1]; // excess capacity
@@ -353,22 +361,22 @@ namespace System.Collections.Specialized
             var ngram_count = ngram_breakdown.Sum();
             var ngram_unique_count = m_dict.Count; //ngram_unique_breakdown.Sum();
             var excess_count = excess_unique_breakdown.Sum();
-
+ 
             var value_breakdown = new Dictionary<int, long>();
-            foreach(var item in this.GetItems()) {
+            foreach(var item in this.Items) {
                 if(value_breakdown.TryGetValue(item.Length, out var count))
                     count++;
                 value_breakdown[item.Length] = count;
             }
-
+ 
             var total_value_chars = value_breakdown.Sum(o => o.Key * o.Value);
             var total_ngram_unique_chars = ngram_unique_breakdown.Select((o, i) => (o, i)).Sum(o => o.i * o.o); //ngram_breakdown.Select((o, i) => (o, i)).Sum(o => o.i * o.o);
-
+ 
             sb.AppendLine($"Count() = {this.Count}, ngrams = {ngram_count} / {ngram_unique_count} uniques");
             sb.AppendLine($"Min n-gram length = {this.MinNGramLength}");
             sb.AppendLine($"Max n-gram length = {this.MaxNGramLength}");
             sb.AppendLine($"Excess capacity   = {excess_count}");
-
+ 
             sb.AppendLine();
             sb.AppendLine($"n-grams breakdown  (count={ngram_count}, --- chars dont make sense in non-unique context)");
             sb.AppendLine("=============================");
@@ -378,7 +386,7 @@ namespace System.Collections.Specialized
                     continue;
                 sb.AppendLine($"[{i} length] {((double)item / ngram_count).ToString("P")}  {item}");
             }
-
+ 
             sb.AppendLine();
             sb.AppendLine($"n-grams breakdown UNIQUES ONLY  (count={ngram_unique_count} uniques only, {total_ngram_unique_chars} chars uniques only)");
             sb.AppendLine("=============================");
@@ -388,7 +396,7 @@ namespace System.Collections.Specialized
                     continue;
                 sb.AppendLine($"[{i} length] {((double)item_unique / ngram_unique_count).ToString("P")}  {item_unique} uniques only  ({item_unique * i} chars)");
             }
-
+ 
             sb.AppendLine();
             sb.AppendLine($"n-grams EXCESS capacity breakdown  (count={excess_count}, will not resize under capacity 4)");
             sb.AppendLine("=============================");
@@ -398,14 +406,14 @@ namespace System.Collections.Specialized
                     continue;
                 sb.AppendLine($"[{i} length] {((double)item / excess_count).ToString("P")}  {item}");
             }
-
+ 
             sb.AppendLine();
             sb.AppendLine($"value breakdown  (count={this.Count}, {total_value_chars} chars)");
             sb.AppendLine("=============================");
             foreach(var item in value_breakdown.OrderBy(o => o.Key)) {
                 sb.AppendLine($"[{item.Key} length] {((double)item.Value / this.Count).ToString("P")}  {item.Value}   ({item.Key * item.Value} chars)");
             }
-    
+     
             if(include_ngrams) {
                 sb.AppendLine();
                 sb.AppendLine("n-grams");
@@ -414,7 +422,7 @@ namespace System.Collections.Specialized
                     sb.AppendLine($"[{item.Key}] {((double)item.Value.Count / ngram_count).ToString("P")}  {item.Value.Count}");
                 }
             }
-    
+     
             return sb.ToString();
         }
         #endregion
@@ -427,47 +435,47 @@ namespace System.Collections.Specialized
             const int MAX_NGRAM = 3;
             const int ITEMS_PER_GROUP = 1000;
             const int ITEM_COUNT = 100000;
-
+ 
             var random        = new Random(unchecked((int)seed));
             var ngramindex    = new NGramIndex(MIN_NGRAM, MAX_NGRAM);
             var shuffed_items = Enumerable.Range(0, ITEM_COUNT)
                 .Select(o => o.ToString())
                 .OrderBy(o => random.NextDouble()) // very bad shuffle
                 .ToArray();
-
+ 
             for(int group = 0; group < ITEM_COUNT; group += ITEMS_PER_GROUP) {
                 var items = Enumerable.Range(group, ITEMS_PER_GROUP)
                     .Where(o => random.NextDouble() <= coverage)
                     .Select(o => shuffed_items[o])
                     .OrderBy(o => o) // for easier debugging
                     .ToArray();
-                
+                 
                 ngramindex.Clear();
                 ngramindex.AddRange(items);
-
+ 
                 // exact match
                 foreach(var item in items)
                     if(item.Length >= MIN_NGRAM && ngramindex.Search(item).Count() != 1)
                         Break();
-
+ 
                 // starts with
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM; i < item.Length; i++)
                         Compare(items, item.Substring(0, i), SearchOption.StartsWith);
                 }
-
+ 
                 // ends with
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM; i < item.Length; i++)
                         Compare(items, item.Substring(item.Length - i - 1, i), SearchOption.EndsWith);
                 }
-
+ 
                 // contains
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM; i < item.Length; i++)
                         Compare(items, item.Substring(0, i), SearchOption.Partial);
                 }
-
+ 
                 // contains with one ?
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM + 1; i < item.Length; i++) {
@@ -478,7 +486,7 @@ namespace System.Collections.Specialized
                             var size_after  = i - j - 1;
                             if(size_before < MIN_NGRAM || size_after < MIN_NGRAM)
                                 continue;
-
+ 
                             var c = key[j];
                             key[j] = '?';
                             Compare(items, new string(key), SearchOption.Partial);
@@ -487,7 +495,7 @@ namespace System.Collections.Specialized
                     }
                 }
             }
-
+ 
             void Compare(string[] items, string format, SearchOption option) {
                 var regex = ngramindex.BuildRegex(format, option);
                 var res   = new HashSet<string>(ngramindex.Search(format, option));
@@ -501,7 +509,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+ 
         #region private SearchSection()
         /// <summary>
         ///     Searches for the strings that match the section.
@@ -538,9 +546,9 @@ namespace System.Collections.Specialized
             // and simply use a directed search 
             //var section_string = format.Format.Substring(section.SearchStart - section.WildcardUnknownBefore, section.WildcardUnknownBefore + section.SearchLength + section.WildcardUnknownAfter);
             //var results_before_verify = new AdaptiveRadixTree<string, List<NGram>>().WildcardMatchValues(section_string, this.WildcardUnknown);
-
+ 
             var section = format.Sections[sectionIndex];
-
+ 
             var sub_searches = SplitPosition(format.Format, section.SearchStart, section.SearchLength, this.WildcardUnknown) 
                 .Where(o => o.length >= this.MinNGramLength)
                 .SelectMany(o => this.MaxNGrams(o.start, o.length))
@@ -553,25 +561,25 @@ namespace System.Collections.Specialized
                 .Select(o => o.First())
                 .OrderBy(o => o.list?.Count ?? 0)
                 .ToList();
-
+ 
             if(sub_searches.Count == 0 || sub_searches[0].list == null)
                 yield break;
-
+ 
             var searchFormatIndex = sub_searches[0].start;
             var filtered          = format.Sections.Count == 1 && section.ResultMustMatchAtStart && section.ResultMustMatchAtEnd ?
                 sub_searches[0].list.Where(o => o.Value.Length == format.TotalCharacters && filter(o.Value)) :
                 sub_searches[0].list.Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value));
-
+ 
             var dict = filtered
                 .GroupBy(o => o.Value)
                 .ToDictionary(o => o.Key, o => new Matches(){ SearchFormatIndex = searchFormatIndex, NGrams = o.ToList(), Epoch = -1 });
-                
+                 
             // then do the intersection between those
             int epoch = 0;
             int intersection_count = dict.Count;
             for(int i = 1; i < sub_searches.Count; i++) {
                 var sub_search = sub_searches[i];
-
+ 
                 // ie: we either keep filtering by doing intersections, or we just try and compare the whole section
                 // the rule of thumb here being that you can do roughly 4x dict compares in the time you verify the match (which will have to be done anyway)
                 // keep in mind the further searches we go through, the more results we will get, thus filtering little
@@ -579,7 +587,7 @@ namespace System.Collections.Specialized
                 // you could take into account the section.SearchLength and how many characters comparisons are avoided potentially if you want to try a smarter rule
                 if(sub_search.list.Count > intersection_count * 4)
                     break;
-
+ 
                 intersection_count = 0;
                 foreach(var item in sub_search.list) {
                     if(dict.TryGetValue(item.Value, out var x) && x.Epoch == epoch - 1) {
@@ -591,39 +599,41 @@ namespace System.Collections.Specialized
                 }
                 epoch++;
             }
-
+ 
             // from the intersected results, make sure at least one ngram per Dict.KeyValuePair passes the format
-            var intersection = dict.Values.Where(v => v.Epoch == epoch - 1);
-            foreach(var potential_match in intersection) {
-                int max = potential_match.NGrams.Count;
+            var intersection = dict.Where(v => v.Value.Epoch == epoch - 1);
+            foreach(var intersect in intersection) {
+                var potential_match = intersect.Value;
+                int max             = potential_match.NGrams.Count;
                 for(int i = 0; i < max; i++) {
                     var ngram           = potential_match.NGrams[i];
+                    var ngramLength     = intersect.Key.Length; //ngram.Length;
                     var original_string = potential_match.Value;
-
+ 
                     if(ngram.Start < section.MinCharsBefore)
                         continue;
-                    if(original_string.Length - (ngram.Start + ngram.Length) < section.MinCharsAfter)
+                    if(original_string.Length - (ngram.Start + ngramLength) < section.MinCharsAfter)
                         continue;
-                    
+                     
                     // check for cases where maxngramlength=3, Add('999') Search('*1999*') ngram='999'
                     var remaining_chars_before = ngram.Start;
                     var expected_chars_before  = potential_match.SearchFormatIndex - section.SearchStart + section.WildcardUnknownBefore;
                     if(remaining_chars_before < expected_chars_before)
                         continue;
-
+ 
                     // check for cases where maxngramlength=3, Add('99173') Search('*1731*') ngram='173'
-                    var remaining_chars_after = original_string.Length - (ngram.Start + ngram.Length);
-                    var expected_chars_after  = section.SearchLength - ngram.Length - (potential_match.SearchFormatIndex - section.SearchStart) + section.WildcardUnknownAfter;
+                    var remaining_chars_after = original_string.Length - (ngram.Start + ngramLength);
+                    var expected_chars_after  = section.SearchLength - ngramLength - (potential_match.SearchFormatIndex - section.SearchStart) + section.WildcardUnknownAfter;
                     if(remaining_chars_after < expected_chars_after)
                         continue;
-
+ 
                     if(section.ResultMustMatchAtStart && remaining_chars_before != expected_chars_before)
                         continue;
-                    if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length + expected_chars_after != original_string.Length)
+                    if(section.ResultMustMatchAtEnd && ngram.Start + ngramLength + expected_chars_after != original_string.Length)
                         continue;
-
+ 
                     // make sure that the section matches the search format
-
+ 
                     // check preceding characters
                     // ex: 'zz*123?xxxxx' will check '123?' after 'xxxxx' match
                     var valid     = true;
@@ -631,11 +641,11 @@ namespace System.Collections.Specialized
                     int readIndex = ngram.Start - (max2 - section.SearchStart);
                     if(readIndex < 0)
                         continue;
-                    
+                     
                     for(int j = section.SearchStart; j < max2; j++) {
                         var searchFormatChar = format.Format[j];
                         var c                = original_string[readIndex++];
-
+ 
                         if(searchFormatChar != this.WildcardUnknown && c != searchFormatChar) {
                             valid = false;
                             break;
@@ -643,16 +653,16 @@ namespace System.Collections.Specialized
                     }
                     if(!valid)
                         continue;
-
+ 
                     // check following characters
                     // ex: 'xxxxx?123??*zz' will check '?123??' after 'xxxxx' match
                     max2      = section.SearchStart + section.SearchLength;
-                    readIndex = ngram.Start + ngram.Length;
-
-                    for(int j = potential_match.SearchFormatIndex + ngram.Length; j < max2; j++) {
+                    readIndex = ngram.Start + ngramLength;
+ 
+                    for(int j = potential_match.SearchFormatIndex + ngramLength; j < max2; j++) {
                         var searchFormatChar = format.Format[j];
                         var c                = original_string[readIndex++];
-
+ 
                         if(searchFormatChar != this.WildcardUnknown && c != searchFormatChar) {
                             valid = false;
                             break;
@@ -660,7 +670,7 @@ namespace System.Collections.Specialized
                     }
                     if(!valid)
                         continue;
-
+ 
                     // as soon as one match is found within ngram, no need to check further
                     yield return original_string;
                     break;
@@ -712,7 +722,7 @@ namespace System.Collections.Specialized
                 case SearchOption.EndsWith:   option = WildcardRegex.SearchOption.EndsWith; break;
                 default: throw new NotImplementedException();
             }
-
+ 
             return new WildcardRegex(
                 format_including_wildcards, 
                 option, 
@@ -721,17 +731,17 @@ namespace System.Collections.Specialized
                 //.ToRegex(System.Text.RegularExpressions.RegexOptions.None)
         }
         #endregion
-
+ 
         #region private ParseSearchFormat()
         private ParsedFormat ParseSearchFormat(string format, SearchOption match = SearchOption.ExactMatch) {
             var sections = ParseSearchFormatSections(format)
                 .Where(o => o.len > 0) // avoids empty sections in cases such as 'aa**aa', '*aa' and 'aa*'
                 .Select(o => new ConsecutiveParseSection(){ SearchStart = o.start, SearchLength = o.len })
                 .ToList();
-
+ 
             for(int i = 0; i < sections.Count; i++) {
                 var section = sections[i];
-                
+                 
                 // TrimStart(this.WildcardUnknown)
                 while(section.SearchLength > 0 && format[section.SearchStart] == this.WildcardUnknown) {
                     section.SearchLength--;
@@ -745,7 +755,7 @@ namespace System.Collections.Specialized
                     section.WildcardUnknownAfter++;
                     section.MinCharsAfter++;
                 }
-
+ 
                 if(i > 0) {
                     var prev = sections[i - 1];
                     section.MinCharsBefore += prev.SearchLength + prev.MinCharsBefore + prev.MinCharsAfter;
@@ -755,12 +765,12 @@ namespace System.Collections.Specialized
                 var next = sections[i + 1];
                 sections[i].MinCharsAfter += next.SearchLength + next.MinCharsBefore + next.MinCharsAfter;
             }
-
+ 
             if(match == SearchOption.ExactMatch || match == SearchOption.StartsWith)
                 sections[0].ResultMustMatchAtStart = format[0] != this.WildcardAnything;
             if(match == SearchOption.ExactMatch || match == SearchOption.EndsWith)
                 sections[sections.Count - 1].ResultMustMatchAtEnd = format[format.Length - 1] != this.WildcardAnything;
-
+ 
             // merge '??' section with prev
             // ex: 'abc*??*456' -> 'abc??*456'
             int index = 1;
@@ -769,7 +779,7 @@ namespace System.Collections.Specialized
                 if(section.SearchLength == 0 && !section.ResultMustMatchAtStart && !section.ResultMustMatchAtEnd && (section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0)) {
                     sections[index - 1].WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
                     sections.RemoveAt(index);
-                } else 
+                } else
                     index++;
             }
             // move ['??' at section start] to [previous section end] for faster parse
@@ -784,10 +794,29 @@ namespace System.Collections.Specialized
                 index++;
             }
 
+            int max_search = 0;
+            for(int i = 0; i < sections.Count; i++) {
+                var section = sections[i];
+                if(section.SearchLength <= max_search)
+                    continue;
+                int count = 0;
+                for(int j = 0; j < section.SearchLength; j++) {
+                    var c = format[section.SearchStart + j];
+                    if(c != this.WildcardUnknown)
+                        count++;
+                    else {
+                        max_search = Math.Max(max_search, count);
+                        count = 0;
+                    }
+                }
+                max_search = Math.Max(max_search, count);
+            }
+
             return new ParsedFormat() {
-                Format          = format,
-                Sections        = sections,
-                TotalCharacters = sections[0].SearchLength + sections[0].MinCharsBefore + sections[0].MinCharsAfter,
+                Format                   = format,
+                Sections                 = sections,
+                TotalCharacters          = sections[0].SearchLength + sections[0].MinCharsBefore + sections[0].MinCharsAfter,
+                MaxSearchableNGramLength = max_search,
             };
         }
         /// <summary>
@@ -796,15 +825,15 @@ namespace System.Collections.Specialized
         private IEnumerable<(int start, int len)> ParseSearchFormatSections(string format) {
             int start = 0;
             int len   = 0;
-
+ 
             for(int i = 0; i < format.Length; i++) {
                 var c = format[i];
                 len++;
-
+ 
                 if(c == this.WildcardAnything) {
                     if(len > 1)
                         yield return (start, len - 1);
-
+ 
                     start = i + 1;
                     len   = 0;
                 }
@@ -817,6 +846,13 @@ namespace System.Collections.Specialized
             ///     Unmodified user-specified search format.
             /// </summary>
             public string Format;
+            /// <summary>
+            ///     The longest length of consecutive characters that arent {?, *}.
+            /// </summary>
+            public int MaxSearchableNGramLength;
+            /// <summary>
+            ///     Total number of characters to match, including ?s but excluding *s.
+            /// </summary>
             public int TotalCharacters;
             public List<ConsecutiveParseSection> Sections;
         }
@@ -863,13 +899,11 @@ namespace System.Collections.Specialized
             public bool ResultMustMatchAtEnd;
         }
         #endregion
-
-
+ 
+ 
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
-        // maybe get a list of all added values < minngramlength ? *****************************************************************
-        // remove ngram.length as it is redundant **********************************************************************************
-
+ 
         ///// <summary>
         /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
         /////     Does not take into account min/max ngram settings on purpose.
@@ -893,8 +927,8 @@ namespace System.Collections.Specialized
         //        
         //    }
         //}
-
-
+ 
+ 
             //CREATE INDEX titles_trigrams_gin_idx ON titles USING GIN(trigrams_vector(title));
             // SELECT COUNT(*) FROM titles WHERE trigrams_vector(title) @@ trigrams_query('adventures');
             //CREATE OR REPLACE FUNCTION trigrams_array(word text)
@@ -926,7 +960,7 @@ namespace System.Collections.Specialized
             //AS $$
             //        SELECT array_to_string(trigrams_array($1), ' & ')::tsquery;
             //$$;
-
+ 
         #region private GenerateNGrams()
         /// <summary>
         ///     Decomposes the input into all n-gram variations.
@@ -956,7 +990,7 @@ namespace System.Collections.Specialized
         #region private GenerateFirstNGram()
         private bool GenerateFirstNGram(int length, out InternalNGram result) {
             int max = Math.Min(length, this.MaxNGramLength);
-
+ 
             // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
             if(max >= this.MinNGramLength) {
                 result = new InternalNGram(0, max);
@@ -967,7 +1001,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
+ 
         public enum SearchOption {
             /// <summary>
             ///     equivalent to "value = 'searchstring'"
@@ -989,35 +1023,14 @@ namespace System.Collections.Specialized
         }
         private sealed class NGram {
             public readonly string Value;
-
-#if RESTRICT_MAX_STRING_LENGTH_TO_65535
-            public readonly ushort Start;   // to save a lot of space
-            public readonly ushort Length;  // to save a lot of space
-#else
             public readonly int Start;
-            public readonly int Length;
-#endif
-
-            public NGram(string value, int start, int length) {
+ 
+            public NGram(string value, int start) {
                 this.Value  = value;
-
-#if RESTRICT_MAX_STRING_LENGTH_TO_65535
-                this.Start  = unchecked((ushort)start);
-                this.Length = unchecked((ushort)length);
-#else
                 this.Start  = start;
-                this.Length = length;
-#endif
             }
-
-            public override string ToString() => $"[{this.Value.Substring(this.Start, this.Length)}] {this.Value}  ({{{this.Start},{this.Length}}})";
-        }
-        public enum DuplicateHandling {
-            NoDuplicates,
-            /// <summary>
-            ///     Faster Add() due to no checks.
-            /// </summary>
-            DuplicatesAllowed,
+ 
+            public override string ToString() => $"[{this.Value.Substring(this.Start)}] {this.Value}  ({{{this.Start}}})";
         }
     }
 }
