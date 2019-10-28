@@ -540,9 +540,9 @@ namespace System.Collections.Specialized
                         continue;
                     if(original_string.Length - (ngram.Start + ngram.Length) < section.MinCharsAfter)
                         continue;
-                    if(section.ResultMustMatchAtStart && ngram.Start - potential_match.SearchFormatIndex != 0)
+                    if(section.ResultMustMatchAtStart && ngram.Start != potential_match.SearchFormatIndex)
                         continue;
-                    if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length != original_string.Length)
+                    if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length + (section.SearchLength - ngram.Length - (potential_match.SearchFormatIndex - section.SearchStart)) + section.WildcardUnknownAfter != original_string.Length)
                         continue;
 
                     // make sure that the section matches the search format
