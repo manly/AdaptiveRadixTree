@@ -585,9 +585,22 @@ namespace System.Collections.Specialized
                         continue;
                     if(original_string.Length - (ngram.Start + ngram.Length) < section.MinCharsAfter)
                         continue;
-                    if(section.ResultMustMatchAtStart && ngram.Start != potential_match.SearchFormatIndex)
+                    
+                    // check for cases where maxngramlength=3, Add('999') Search('*1999*') ngram='999'
+                    var remaining_chars_before = ngram.Start;
+                    var expected_chars_before  = potential_match.SearchFormatIndex - section.SearchStart + section.WildcardUnknownBefore;
+                    if(remaining_chars_before < expected_chars_before)
                         continue;
-                    if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length + (section.SearchLength - ngram.Length - (potential_match.SearchFormatIndex - section.SearchStart)) + section.WildcardUnknownAfter != original_string.Length)
+
+                    // check for cases where maxngramlength=3, Add('99173') Search('*1731*') ngram='173'
+                    var remaining_chars_after = original_string.Length - (ngram.Start + ngram.Length);
+                    var expected_chars_after  = section.SearchLength - ngram.Length - (potential_match.SearchFormatIndex - section.SearchStart) + section.WildcardUnknownAfter;
+                    if(remaining_chars_after < expected_chars_after)
+                        continue;
+
+                    if(section.ResultMustMatchAtStart && remaining_chars_before != expected_chars_before)
+                        continue;
+                    if(section.ResultMustMatchAtEnd && ngram.Start + ngram.Length + expected_chars_after != original_string.Length)
                         continue;
 
                     // make sure that the section matches the search format
@@ -835,8 +848,8 @@ namespace System.Collections.Specialized
 
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
-        // maybe get a list of all added values < minngramlength ?
-        // remove ngram.length as it is redundant
+        // maybe get a list of all added values < minngramlength ? *****************************************************************
+        // remove ngram.length as it is redundant **********************************************************************************
 
         ///// <summary>
         /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
