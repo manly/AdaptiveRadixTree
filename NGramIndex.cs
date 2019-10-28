@@ -422,7 +422,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     Bruteforces trying to find cases that do not work.
         /// </summary>
-        internal static void DebugBruteforceFindErrors(double coverage = 0.05, uint seed = 0xBADC0FFE) {
+        internal static void DebugBruteforceFindErrors(double coverage = 0.25, uint seed = 0xBADC0FFE) {
             const int MIN_NGRAM = 2;
             const int MAX_NGRAM = 3;
             const int ITEMS_PER_GROUP = 1000;
@@ -466,6 +466,25 @@ namespace System.Collections.Specialized
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM; i < item.Length; i++)
                         Compare(items, item.Substring(0, i), SearchOption.Partial);
+                }
+
+                // contains with one ?
+                foreach(var item in items) {
+                    for(int i = MIN_NGRAM + 1; i < item.Length; i++) {
+                        var key = item.Substring(0, i).ToCharArray();
+                        for(int j = 0; j < i; j++) {
+                            // need at least one consecutive stretch of MIN_NGRAM length
+                            var size_before = j;
+                            var size_after  = i - j - 1;
+                            if(size_before < MIN_NGRAM || size_after < MIN_NGRAM)
+                                continue;
+
+                            var c = key[j];
+                            key[j] = '?';
+                            Compare(items, new string(key), SearchOption.Partial);
+                            key[j] = c;
+                        }
+                    }
                 }
             }
 
