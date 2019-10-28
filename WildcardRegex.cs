@@ -18,7 +18,7 @@ namespace System.Collections.Specialized
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
 
-        public readonly string WildcardFormat;
+        public readonly string RegexWildcardFormat;
         public readonly SearchOption Option;
         
         /// <summary>?</summary>
@@ -33,24 +33,24 @@ namespace System.Collections.Specialized
         private readonly ConsecutiveParseSection[] m_sections; // if Length==0, means format = '*'
 
         #region constructors
-        /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
+        /// <param name="regex_wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
         /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
-        public WildcardRegex(string wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
-            if(string.IsNullOrEmpty(wildcard_format))
-                throw new FormatException(nameof(wildcard_format));
+        public WildcardRegex(string regex_wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+            if(string.IsNullOrEmpty(regex_wildcard_format))
+                throw new FormatException(nameof(regex_wildcard_format));
 
-            this.WildcardFormat = wildcard_format;
-            this.Option         = option;
-            m_wildcardUnknown   = wildcard_unknown_character;
-            m_wildcardAnything  = wildcard_anything_character;
+            this.RegexWildcardFormat = regex_wildcard_format;
+            this.Option              = option;
+            m_wildcardUnknown        = wildcard_unknown_character;
+            m_wildcardAnything       = wildcard_anything_character;
 
-            m_sections        = this.ParseSearchFormat(wildcard_format);
+            m_sections        = this.ParseSearchFormat(regex_wildcard_format);
             m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
 
             if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
-                m_resultMustMatchAtStart = wildcard_format[0] != m_wildcardAnything;
+                m_resultMustMatchAtStart = regex_wildcard_format[0] != m_wildcardAnything;
             if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
-                m_resultMustMatchAtEnd   = wildcard_format[wildcard_format.Length - 1] != m_wildcardAnything;
+                m_resultMustMatchAtEnd   = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
         }
         #endregion
 
@@ -108,7 +108,7 @@ namespace System.Collections.Specialized
             if(m_resultMustMatchAtStart) {
                 var section = m_sections[0];
                 index      += section.WildcardUnknownBefore;
-                if(!this.StringEqualWithUnknownCharacters(value, index, this.WildcardFormat, section.Start, section.Length))
+                if(!this.StringEqualWithUnknownCharacters(value, index, this.RegexWildcardFormat, section.Start, section.Length))
                     return (startIndex, -1);
                 index  += section.Length + section.WildcardUnknownAfter;
                 length -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
@@ -123,7 +123,7 @@ namespace System.Collections.Specialized
             if(m_resultMustMatchAtEnd) {
                 var section = m_sections[m_sections.Length - 1];
                 int pos     = startIndex + originalLength - section.WildcardUnknownAfter - section.Length;
-                if(pos - section.WildcardUnknownBefore < index || !this.StringEqualWithUnknownCharacters(value, pos, this.WildcardFormat, section.Start, section.Length))
+                if(pos - section.WildcardUnknownBefore < index || !this.StringEqualWithUnknownCharacters(value, pos, this.RegexWildcardFormat, section.Start, section.Length))
                     return (startIndex, -1);
                 lastIndex = startIndex + originalLength;
                 length   -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
@@ -207,14 +207,14 @@ namespace System.Collections.Specialized
         #endregion
         #region static ToRegex()
         public string ToRegex(RegexFormat regex_format = RegexFormat.DotNet) {
-            int capacity = this.WildcardFormat.Length;
+            int capacity = this.RegexWildcardFormat.Length;
             if(capacity <= 4096)
                 capacity *= 2;
             else {
                 // fast approximate count - not meant to be an exact count
                 capacity += 2;
-                for(int i = 0; i < this.WildcardFormat.Length; i++) {
-                    var c = this.WildcardFormat[i];
+                for(int i = 0; i < this.RegexWildcardFormat.Length; i++) {
+                    var c = this.RegexWildcardFormat[i];
                     if(c == m_wildcardAnything)
                         capacity += 2;
                     else if(!IsAlphaNumeric(c))
@@ -243,7 +243,7 @@ namespace System.Collections.Specialized
                     sb.Append('.');
 
                 for(int i = 0; i < section.Length; i++) {
-                    var c = this.WildcardFormat[section.Start + i];
+                    var c = this.RegexWildcardFormat[section.Start + i];
 
                     if(c == m_wildcardUnknown)
                         sb.Append('.');
@@ -294,6 +294,12 @@ namespace System.Collections.Specialized
         public static System.Text.RegularExpressions.Regex ToRegex(string wildcard_format, System.Text.RegularExpressions.RegexOptions regex_options, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             return new WildcardRegex(wildcard_format, option, wildcard_unknown_character, wildcard_anything_character)
                 .ToRegex(regex_options);
+        }
+        #endregion
+
+        #region ToString()
+        public override string ToString() {
+            return $"{this.RegexWildcardFormat} - {this.Option.ToString()}";
         }
         #endregion
 
@@ -460,14 +466,14 @@ namespace System.Collections.Specialized
                 if(pos < 0)
                     return -1;
 
-                bool startMatches = !section.ContainsCharsBeforeSearchIndex || this.StringEqualWithUnknownCharacters(source, pos - section.SearchIndex, this.WildcardFormat, section.Start, section.SearchIndex);
+                bool startMatches = !section.ContainsCharsBeforeSearchIndex || this.StringEqualWithUnknownCharacters(source, pos - section.SearchIndex, this.RegexWildcardFormat, section.Start, section.SearchIndex);
                 if(!startMatches) {
                     var diff = (pos + 1) - index;
                     index  += diff;
                     length -= diff;
                     continue;
                 }
-                bool endMatches = !section.ContainsCharsAfterSearchIndex || this.StringEqualWithUnknownCharacters(source, pos + section.Search.Length, this.WildcardFormat, section.Start + section.SearchIndex + section.Search.Length, charsAfterSearch);
+                bool endMatches = !section.ContainsCharsAfterSearchIndex || this.StringEqualWithUnknownCharacters(source, pos + section.Search.Length, this.RegexWildcardFormat, section.Start + section.SearchIndex + section.Search.Length, charsAfterSearch);
                 if(!endMatches) {
                     var diff = (pos + 1) - index;
                     index  += diff;
@@ -510,6 +516,7 @@ namespace System.Collections.Specialized
             ExactMatch,
             /// <summary>
             ///     equivalent to "value LIKE '%searchstring%'"
+            ///     ie: contains(value)
             /// </summary>
             Partial,
             /// <summary>

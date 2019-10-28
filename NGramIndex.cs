@@ -418,23 +418,68 @@ namespace System.Collections.Specialized
             return sb.ToString();
         }
         #endregion
-        #region DebugTest()
+        #region internal static DebugBruteforceFindErrors()
         /// <summary>
-        ///     Returns the list of missing matches.
-        ///     Returns null if success.
+        ///     Bruteforces trying to find cases that do not work.
         /// </summary>
-        public string DebugTest(string format_including_wildcards, SearchOption match = SearchOption.ExactMatch) {
-            var regex = this.BuildRegex(format_including_wildcards, match);
+        internal static void DebugBruteforceFindErrors(double coverage = 0.05, uint seed = 0xBADC0FFE) {
+            const int MIN_NGRAM = 2;
+            const int MAX_NGRAM = 3;
+            const int ITEMS_PER_GROUP = 1000;
+            const int ITEM_COUNT = 100000;
 
-            // keep in mind: this.Search() will already filter all results to make sure they pass the same regex
-            // consequently, there can only be missing matches
-            var missing = this.GetItems()
-                .Where(o => regex.IsMatch(o))
-                .Except(this.Search(format_including_wildcards, match))
-                .OrderBy(o => o);
+            var random        = new Random(unchecked((int)seed));
+            var ngramindex    = new NGramIndex(MIN_NGRAM, MAX_NGRAM);
+            var shuffed_items = Enumerable.Range(0, ITEM_COUNT)
+                .Select(o => o.ToString())
+                .OrderBy(o => random.NextDouble()) // very bad shuffle
+                .ToArray();
 
-            var res = string.Join(Environment.NewLine, missing);
-            return string.IsNullOrEmpty(res) ? null : res;
+            for(int group = 0; group < ITEM_COUNT; group += ITEMS_PER_GROUP) {
+                var items = Enumerable.Range(group, ITEMS_PER_GROUP)
+                    .Where(o => random.NextDouble() <= coverage)
+                    .Select(o => shuffed_items[o])
+                    .OrderBy(o => o) // for easier debugging
+                    .ToArray();
+                
+                ngramindex.Clear();
+                ngramindex.AddRange(items);
+
+                // exact match
+                foreach(var item in items)
+                    if(item.Length >= MIN_NGRAM && ngramindex.Search(item).Count() != 1)
+                        Break();
+
+                // starts with
+                foreach(var item in items) {
+                    for(int i = MIN_NGRAM; i < item.Length; i++)
+                        Compare(items, item.Substring(0, i), SearchOption.StartsWith);
+                }
+
+                // ends with
+                foreach(var item in items) {
+                    for(int i = MIN_NGRAM; i < item.Length; i++)
+                        Compare(items, item.Substring(item.Length - i - 1, i), SearchOption.EndsWith);
+                }
+
+                // contains
+                foreach(var item in items) {
+                    for(int i = MIN_NGRAM; i < item.Length; i++)
+                        Compare(items, item.Substring(0, i), SearchOption.Partial);
+                }
+            }
+
+            void Compare(string[] items, string format, SearchOption option) {
+                var regex = ngramindex.BuildRegex(format, option);
+                var res   = new HashSet<string>(ngramindex.Search(format, option));
+                foreach(var item in items) {
+                    if(!res.Contains(item) && regex.IsMatch(item))
+                        Break();
+                }
+            }
+            void Break() {
+                System.Diagnostics.Debugger.Break();
+            }
         }
         #endregion
 
@@ -898,6 +943,7 @@ namespace System.Collections.Specialized
             ExactMatch,
             /// <summary>
             ///     equivalent to "value LIKE '%searchstring%'"
+            ///     ie: contains(value)
             /// </summary>
             Partial,
             /// <summary>
