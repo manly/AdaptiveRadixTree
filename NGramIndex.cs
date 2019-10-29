@@ -281,7 +281,17 @@ namespace System.Collections.Specialized
             // keep in mind that the check for preceding/following chars must always happen whether you use intersection filtering or not
              
             var parsed = this.ParseSearchFormat(format_including_wildcards, match);
-            var regex  = this.BuildRegex(format_including_wildcards, match);
+
+            // if searching without any wildcards
+            if(parsed.ExactMatchSearch) {
+                var hashtable = parsed.TotalCharacters >= this.MinNGramLength ? m_items : m_itemsNotIndexed;
+                if(hashtable.Contains(format_including_wildcards))
+                    yield return format_including_wildcards;
+                
+                yield break;
+            }
+
+            var regex = this.BuildRegex(format_including_wildcards, match);
 
             if(parsed.TotalCharacters < this.MinNGramLength) {
                 // non-indexed search; bruteforce all potential matches
@@ -826,12 +836,16 @@ namespace System.Collections.Specialized
                 max_search = Math.Max(max_search, count);
             }
 
-            return new ParsedFormat() {
+            var res = new ParsedFormat() {
                 Format                   = format,
                 Sections                 = sections,
                 TotalCharacters          = sections[0].SearchLength + sections[0].MinCharsBefore + sections[0].MinCharsAfter,
                 MaxSearchableNGramLength = max_search,
+                //ExactMatchSearch       = ,
             };
+            // && match == SearchOption.ExactMatch 
+            res.ExactMatchSearch = res.MaxSearchableNGramLength == res.TotalCharacters && sections.Count == 1 && sections[0].ResultMustMatchAtStart && sections[0].ResultMustMatchAtEnd;
+            return res;
         }
         /// <summary>
         ///     basically does format.Split(WildcardAnything)
@@ -869,6 +883,11 @@ namespace System.Collections.Specialized
             /// </summary>
             public int TotalCharacters;
             public List<ConsecutiveParseSection> Sections;
+            /// <summary>
+            ///     If true, means we are searching for an exact value with an ExactMatch and without any wildcards.
+            ///     ex: 'ABC123'
+            /// </summary>
+            public bool ExactMatchSearch;
         }
         /// <summary>
         ///     Represents a section of consecutive characters without any WILDCARD_ANYTHING in it.
@@ -913,7 +932,32 @@ namespace System.Collections.Specialized
             public bool ResultMustMatchAtEnd;
         }
         #endregion
- 
+        #region private GenerateNGrams()
+        /// <summary>
+        ///     Decomposes the input into all n-gram variations.
+        ///     ie: [abcd] => {abcd, abc, bcd, ab, bc, cd, a, b, c, d}
+        ///     
+        ///     This is typically used for efficient sub-string searching.
+        ///     Could also be used as an alternative to a Generalized Suffix Tree for string searching.
+        /// </summary>
+        /// <param name="length">The string.Length you wish to decompose.</param>
+        private IEnumerable<InternalNGram> GenerateNGram(int length) {
+            // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
+            for(int n = Math.Min(length, this.MaxNGramLength); n >= this.MinNGramLength; n--) {
+                int count = length - n;
+                for(int i = 0; i <= count; i++)
+                    yield return new InternalNGram(i, n);
+            }
+        }
+        private readonly struct InternalNGram {
+            public readonly int Start;
+            public readonly int Length;
+            public InternalNGram(int start, int length) {
+                this.Start  = start;
+                this.Length = length;
+            }
+        }
+        #endregion
  
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
@@ -950,46 +994,7 @@ namespace System.Collections.Specialized
             //        SELECT array_to_string(trigrams_array($1), ' & ')::tsquery;
             //$$;
  
-        #region private GenerateNGrams()
-        /// <summary>
-        ///     Decomposes the input into all n-gram variations.
-        ///     ie: [abcd] => {abcd, abc, bcd, ab, bc, cd, a, b, c, d}
-        ///     
-        ///     This is typically used for efficient sub-string searching.
-        ///     Could also be used as an alternative to a Generalized Suffix Tree for string searching.
-        /// </summary>
-        /// <param name="length">The string.Length you wish to decompose.</param>
-        private IEnumerable<InternalNGram> GenerateNGram(int length) {
-            // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
-            for(int n = Math.Min(length, this.MaxNGramLength); n >= this.MinNGramLength; n--) {
-                int count = length - n;
-                for(int i = 0; i <= count; i++)
-                    yield return new InternalNGram(i, n);
-            }
-        }
-        private readonly struct InternalNGram {
-            public readonly int Start;
-            public readonly int Length;
-            public InternalNGram(int start, int length) {
-                this.Start  = start;
-                this.Length = length;
-            }
-        }
-        #endregion
-        #region private GenerateFirstNGram()
-        private bool GenerateFirstNGram(int length, out InternalNGram result) {
-            int max = Math.Min(length, this.MaxNGramLength);
- 
-            // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
-            if(max >= this.MinNGramLength) {
-                result = new InternalNGram(0, max);
-                return true;
-            } else {
-                result = default;
-                return false;
-            }
-        }
-        #endregion
+        
 
         #region public enum SearchOption
         public enum SearchOption {

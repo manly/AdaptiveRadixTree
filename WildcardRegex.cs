@@ -35,7 +35,8 @@ namespace System.Collections.Specialized
         private readonly bool m_resultMustMatchAtEnd;   // result/match must end at {start+length}.
         private readonly int m_totalCharacters;
         private readonly ConsecutiveParseSection[] m_sections; 
-        private readonly bool m_isMatchAll;             // if(Length==0 && true) format = '*', if(Length==0 && false) format = ''
+        private readonly bool m_isMatchAll;             // if(m_sections.Length==0 && true) format = '*', if(m_sections.Length==0 && false) format = ''
+        private readonly bool m_noWildcards;            // if(m_sections.Length==1 && true) search has no wildcards (ie: run string.CompareOrdinal() instead)
 
         #region constructors
         /// <param name="regex_wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
@@ -58,12 +59,18 @@ namespace System.Collections.Specialized
                     m_resultMustMatchAtStart = regex_wildcard_format[0] != m_wildcardAnything;
                 if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
                     m_resultMustMatchAtEnd = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
+                
+                // if theres no wildcards
+                m_noWildcards = m_sections.Length == 1 && 
+                    m_resultMustMatchAtStart && 
+                    m_sections[0].SearchIndex + m_sections[0].Search.Length == m_sections[0].Length;
             } else {
                 m_sections               = new ConsecutiveParseSection[0];
                 m_totalCharacters        = 0;
                 m_isMatchAll             = false;
                 m_resultMustMatchAtStart = false;
                 m_resultMustMatchAtEnd   = false;
+                m_noWildcards            = false;
             }
         }
         #endregion
@@ -112,6 +119,9 @@ namespace System.Collections.Specialized
             // special case if format = '*' or ''
             if(m_sections.Length == 0)
                 return (startIndex, m_isMatchAll ? 0 : -1);
+            // special case: no wildcards, use quick comparison
+            if(m_noWildcards)
+                return this.StringEqualNoWildcards(value, startIndex, length);
 
             int index          = startIndex;
             int originalLength = length;
@@ -447,6 +457,28 @@ namespace System.Collections.Specialized
         }
         #endregion
 
+        #region private StringEqualNoWildcards()
+        /// <summary>
+        ///     Direct string.Equals()
+        /// </summary>
+        private (int Index, int Length) StringEqualNoWildcards(string value, int startIndex, int length) {
+            var search = m_sections[0].Search;
+            var diff   = length - search.Length;
+
+            if(diff < 0 || (m_resultMustMatchAtEnd && diff != 0))
+                return (startIndex, -1);
+
+            // ideally would use string.Equals(), but need start/len
+            int cmp = string.CompareOrdinal(
+                value,
+                startIndex,
+                search,
+                0,
+                search.Length);
+
+            return (startIndex, cmp != 0 ? -1 : search.Length);
+        }
+        #endregion
         #region private StringEqualWithUnknownCharacters()
         /// <summary>
         ///     Returns true if the strings are equal, assuming search may contain WildcardUnknown '?'.
@@ -552,18 +584,20 @@ namespace System.Collections.Specialized
         #endregion
         #region private readonly struct ConsecutiveParseSection
         /// <summary>
-        ///     Represents a section of consecutive characters without any WILDCARD_ANYTHING in it.
-        ///     This may include multiple WILDCARD_UNKNOWN.
+        ///     Represents a section of consecutive characters without any WILDCARD_ANYTHING * in it.
+        ///     This may include multiple WILDCARD_UNKNOWN ?.
         /// </summary>
         private readonly struct ConsecutiveParseSection {
-            public readonly int Start;
-            public readonly int Length;
-            public readonly int WildcardUnknownBefore; // how many WILDCARD_UNKNOWN are at the start of the section.
-            public readonly int WildcardUnknownAfter;  // how many WILDCARD_UNKNOWN are at the end of the section.
-            public readonly string Search;             // the optimal stretch of characters without WILDCARD_UNKNOWN to search for (takes into account length and # consecutive/repeated chars)
-            public readonly int SearchIndex;           // the index starting from this.Start
-            public readonly bool ContainsCharsBeforeSearchIndex;
-            public readonly bool ContainsCharsAfterSearchIndex;
+            // example:         search_format = '???ABC?1234?????*ZZ'
+            //          current parse section = '???ABC?1234?????'
+            public readonly int Start;                           // 3
+            public readonly int Length;                          // 8
+            public readonly int WildcardUnknownBefore;           // 3, how many WILDCARD_UNKNOWN ? precede the start of the section.
+            public readonly int WildcardUnknownAfter;            // 5, how many WILDCARD_UNKNOWN ? follow the end of the section.
+            public readonly string Search;                       // '1234', the optimal stretch of characters without WILDCARD_UNKNOWN ? to search for (takes into account length and # consecutive/repeated chars)
+            public readonly int SearchIndex;                     // 4, the index starting from this.Start
+            public readonly bool ContainsCharsBeforeSearchIndex; // true (true if theres any characters preceding '1234' and after the initial '???')
+            public readonly bool ContainsCharsAfterSearchIndex;  // false (true if theres any characters following '1234' and before the final '?????')
 
             public ConsecutiveParseSection(int start, int length, int wildcardBefore, int wildcardAfter, string search, int searchIndex) {
                 this.Start                          = start;
