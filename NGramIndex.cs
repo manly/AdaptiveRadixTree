@@ -13,6 +13,20 @@ namespace System.Collections.Specialized
     ///     Provides indexed wildcard searching functionality.
     ///     ie: [abcd] => {abcd, abc, bcd, ab, bc, cd, a, b, c, d}
     /// </summary>
+    /// <remarks>
+    ///     About min/max n-gram length selection
+    ///     -------------------------------------
+    ///     Most crucial is min-ngram-length value. 
+    ///     This value should be &lt;= the shortest consecutive stretch of specific characters.
+    ///     For example, if you expect most searches to be 'ABC?123' or 'ABC*123', then you'd want min-ngram-length &lt;= 3.
+    ///     If min-ngram-length is 4 in this example, then no index can be used.
+    ///     
+    ///     Max-ngram-length has no specific rule.
+    ///     If you want pure lookup performance, then use int.MaxValue.
+    ///     There is no gain to be had to use a value &gt; the longest consecutive stretch of specific characters to be searched for.
+    ///     But typically the only gain (from a higher value) is the specificity of how rare a longer n-gram is, thus leading to faster filtering 
+    ///     when searching for that specific value.
+    /// </remarks>
     public sealed class NGramIndex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
@@ -904,31 +918,6 @@ namespace System.Collections.Specialized
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
  
-        ///// <summary>
-        /////     Transforms '?123?456?789?' -> {'?123', '123?456', '456?789', '789?'}
-        /////     Does not take into account min/max ngram settings on purpose.
-        ///// </summary>
-        //private IEnumerable<(int start, int len, int wildcard)> ComputeSubSectionNGrams(ParsedFormat format, int sectionIndex) {
-        //    var section = format.Sections[sectionIndex];
-        //
-        //    int start = section.SearchStart - (section.WildcardUnknownBefore > 0 ? 1 : 0);
-        //    int len   = section.SearchLength + (section.WildcardUnknownBefore > 0 ? 1 : 0) + (section.WildcardUnknownAfter > 0 ? 1 : 0);
-        //
-        //    var wildcards = new List<int>();
-        //    for(int i = 0; i < len; i++) {
-        //        var c = format.Format[start + i];
-        //        if(c == this.WildcardUnknown)
-        //            wildcards.Add(i);
-        //    }
-        //
-        //    var max = wildcards.Count;
-        //    for(int i = 0; i < max; i++) {
-        //        var wildcard = wildcards[i];
-        //        
-        //    }
-        //}
- 
- 
             //CREATE INDEX titles_trigrams_gin_idx ON titles USING GIN(trigrams_vector(title));
             // SELECT COUNT(*) FROM titles WHERE trigrams_vector(title) @@ trigrams_query('adventures');
             //CREATE OR REPLACE FUNCTION trigrams_array(word text)
@@ -1001,7 +990,8 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
- 
+
+        #region public enum SearchOption
         public enum SearchOption {
             /// <summary>
             ///     equivalent to "value = 'searchstring'"
@@ -1021,6 +1011,8 @@ namespace System.Collections.Specialized
             /// </summary>
             EndsWith,
         }
+        #endregion
+        #region private sealed class NGram
         private sealed class NGram {
             public readonly string Value;
             public readonly int Start;
@@ -1032,5 +1024,6 @@ namespace System.Collections.Specialized
  
             public override string ToString() => $"[{this.Value.Substring(this.Start)}] {this.Value}  ({{{this.Start}}})";
         }
+        #endregion
     }
 }

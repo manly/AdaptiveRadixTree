@@ -14,6 +14,10 @@ namespace System.Collections.Specialized
     ///     Uses non-greedy matching for '*' wildcard.
     ///     At least 3x faster than using a compiled System.Text.RegularExpressions.Regex.
     /// </summary>
+    /// <remarks>
+    ///     If pure performance is needed, long search patterns could be replaced with a pre-computed Boyer-Moore string search,
+    ///     thus avoiding rebuilding the array. 
+    /// </remarks>
     public sealed class WildcardRegex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
@@ -525,9 +529,7 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-        // potential todo for long strings: boyer-moore string search algorithm with pre-processed searches
-        // problem is this wouldnt work well on short searches
-
+        #region public enum SearchOption
         public enum SearchOption {
             /// <summary>
             ///     equivalent to "value = 'searchstring'"
@@ -547,7 +549,7 @@ namespace System.Collections.Specialized
             /// </summary>
             EndsWith,
         }
-
+        #endregion
         #region private readonly struct ConsecutiveParseSection
         /// <summary>
         ///     Represents a section of consecutive characters without any WILDCARD_ANYTHING in it.
