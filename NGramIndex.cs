@@ -473,15 +473,18 @@ namespace System.Collections.Specialized
             Console.WriteLine($"total add time ({count} items): {bench}");
             Console.WriteLine();
 
+            var all_items = ngramindex.Items.ToArray();
 
             var random = new Random(unchecked((int)SEED));
             Bench("EXACT MATCH", 
                 SearchOption.ExactMatch, 
+                WildcardRegex.SearchOption.ExactMatch,
                 Enumerable.Range(0, int.MaxValue).Select(o => random.Next(count).ToString(culture)));
 
             random = new Random(unchecked((int)SEED));
             Bench("STARTS WITH", 
                 SearchOption.StartsWith, 
+                WildcardRegex.SearchOption.StartsWith,
                 Enumerable.Range(0, int.MaxValue)
                     .Select(o => random.Next(count).ToString(culture))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
@@ -489,6 +492,7 @@ namespace System.Collections.Specialized
             random = new Random(unchecked((int)SEED));
             Bench("ENDS WITH", 
                 SearchOption.EndsWith, 
+                WildcardRegex.SearchOption.EndsWith,
                 Enumerable.Range(0, int.MaxValue)
                     .Select(o => random.Next(count).ToString(culture))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(o.Length - k - 1, k))));
@@ -496,6 +500,7 @@ namespace System.Collections.Specialized
             random = new Random(unchecked((int)SEED));
             Bench("CONTAINS", 
                 SearchOption.Partial, 
+                WildcardRegex.SearchOption.Partial,
                 Enumerable.Range(0, int.MaxValue)
                     .Select(o => random.Next(count).ToString(culture))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
@@ -503,6 +508,7 @@ namespace System.Collections.Specialized
             random = new Random(unchecked((int)SEED));
             Bench("CONTAINS WITH ONE ?", 
                 SearchOption.Partial, 
+                WildcardRegex.SearchOption.Partial,
                 Enumerable.Range(0, int.MaxValue)
                     .Select(o => random.Next(count).ToString(culture))
                     .SelectMany(item => Enumerable.Range(MIN_NGRAM + 1, Math.Max(0, item.Length - MIN_NGRAM - 1)).Select(j => item.Substring(0, j).ToCharArray()))
@@ -518,7 +524,7 @@ namespace System.Collections.Specialized
                     }));
             
 
-            void Bench(string search_type, SearchOption searchOption, IEnumerable<string> generator) {
+            void Bench(string search_type, SearchOption option, WildcardRegex.SearchOption regex_option, IEnumerable<string> generator) {
                 Console.WriteLine($"{search_type} search...");
                 now = DateTime.UtcNow;
                 var enumerator = generator.GetEnumerator();
@@ -531,14 +537,37 @@ namespace System.Collections.Specialized
                         break;
                     }
                     var item = enumerator.Current;
-                    ngramindex.Search(item, searchOption).Count();
+                    ngramindex.Search(item, option).Count();
                     var elapsed = DateTime.UtcNow - now;
                     if(elapsed > TIME_PER_BENCH)
                         break;
                     total++;
                 }
-
                 Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec");
+
+                now = DateTime.UtcNow;
+                total = 0;
+                time = TIME_PER_BENCH;
+
+                while(true) {
+                    if(!enumerator.MoveNext()) {
+                        time = DateTime.UtcNow - now;
+                        break;
+                    }
+                    var item = enumerator.Current;
+                    var regex = new WildcardRegex(item, regex_option);
+                    for(int i = 0; i < all_items.Length; i++) {
+                        regex.IsMatch(all_items[i]);
+                        if((i % 100000 == 0) && (DateTime.UtcNow - now) > TIME_PER_BENCH)
+                            break;
+                    }
+                    var elapsed = DateTime.UtcNow - now;
+                    if(elapsed > TIME_PER_BENCH)
+                        break;
+                    total++;
+                }
+                Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec  (bruteforce)");
+
                 Console.WriteLine();
             }
         }
