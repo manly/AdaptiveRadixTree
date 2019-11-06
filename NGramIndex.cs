@@ -258,7 +258,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     Searches for the given format which may include wildcard characters.
         /// </summary>
-        /// <param name="format_including_wildcards">The user search format, which may include the wildcard characters.</param>
+        /// <param name="format_including_wildcards">The user search format, which may include wildcard characters.</param>
         public IEnumerable<string> Search(string format_including_wildcards, SearchOption match = SearchOption.ExactMatch) {
             // algorithm explanation:
             //
@@ -450,11 +450,104 @@ namespace System.Collections.Specialized
             return sb.ToString();
         }
         #endregion
-        #region internal static DebugBruteforceFindErrors()
+        #region static Benchmark()
+        public static void Benchmark(int count = 1000000) {
+            const int MIN_NGRAM = 3;
+            const int MAX_NGRAM = 5;
+            const uint SEED = 0xBADC0FFE;
+            var TIME_PER_BENCH = TimeSpan.FromSeconds(5);
+
+            Console.WriteLine($"building {nameof(NGramIndex)}({MIN_NGRAM}, {MAX_NGRAM}) with {count} items");
+            var culture    = System.Globalization.CultureInfo.InvariantCulture;
+            var ngramindex = new NGramIndex(MIN_NGRAM, MAX_NGRAM);
+
+            var now = DateTime.UtcNow;
+
+            for(int i = 0; i < count; i++) {
+                ngramindex.Add(i.ToString(culture));
+                if(i++ % 10000 == 0)
+                    Console.WriteLine($"[{i - 1}] adding {DateTime.UtcNow - now}");
+            }
+
+            var bench = DateTime.UtcNow - now;
+            Console.WriteLine($"total add time ({count} items): {bench}");
+            Console.WriteLine();
+
+
+            var random = new Random(unchecked((int)SEED));
+            Bench("EXACT MATCH", 
+                SearchOption.ExactMatch, 
+                Enumerable.Range(0, int.MaxValue).Select(o => random.Next(count).ToString(culture)));
+
+            random = new Random(unchecked((int)SEED));
+            Bench("STARTS WITH", 
+                SearchOption.StartsWith, 
+                Enumerable.Range(0, int.MaxValue)
+                    .Select(o => random.Next(count).ToString(culture))
+                    .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
+
+            random = new Random(unchecked((int)SEED));
+            Bench("ENDS WITH", 
+                SearchOption.EndsWith, 
+                Enumerable.Range(0, int.MaxValue)
+                    .Select(o => random.Next(count).ToString(culture))
+                    .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(o.Length - k - 1, k))));
+
+            random = new Random(unchecked((int)SEED));
+            Bench("CONTAINS", 
+                SearchOption.Partial, 
+                Enumerable.Range(0, int.MaxValue)
+                    .Select(o => random.Next(count).ToString(culture))
+                    .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
+
+            random = new Random(unchecked((int)SEED));
+            Bench("CONTAINS WITH ONE ?", 
+                SearchOption.Partial, 
+                Enumerable.Range(0, int.MaxValue)
+                    .Select(o => random.Next(count).ToString(culture))
+                    .SelectMany(item => Enumerable.Range(MIN_NGRAM + 1, Math.Max(0, item.Length - MIN_NGRAM - 1)).Select(j => item.Substring(0, j).ToCharArray()))
+                    .SelectMany(o => {
+                        var list = new List<string>();
+                        for(int i = 0; i < o.Length; i++) {
+                            var c = o[i];
+                            o[i] = '?';
+                            list.Add(new string(o));
+                            o[i] = c;
+                        }
+                        return list;
+                    }));
+            
+
+            void Bench(string search_type, SearchOption searchOption, IEnumerable<string> generator) {
+                Console.WriteLine($"{search_type} search...");
+                now = DateTime.UtcNow;
+                var enumerator = generator.GetEnumerator();
+                long total = 0;
+                var time = TIME_PER_BENCH;
+
+                while(true) {
+                    if(!enumerator.MoveNext()) {
+                        time = DateTime.UtcNow - now;
+                        break;
+                    }
+                    var item = enumerator.Current;
+                    ngramindex.Search(item, searchOption).Count();
+                    var elapsed = DateTime.UtcNow - now;
+                    if(elapsed > TIME_PER_BENCH)
+                        break;
+                    total++;
+                }
+
+                Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec");
+                Console.WriteLine();
+            }
+        }
+        #endregion
+        #region static DebugBruteforceFindErrors()
         /// <summary>
         ///     Bruteforces trying to find cases that do not work.
         /// </summary>
-        internal static void DebugBruteforceFindErrors(double coverage = 0.25, uint seed = 0xBADC0FFE) {
+        public static void DebugBruteforceFindErrors(double coverage = 0.25, uint seed = 0xBADC0FFE) {
             const int MIN_NGRAM = 2;
             const int MAX_NGRAM = 3;
             const int ITEMS_PER_GROUP = 1000;
