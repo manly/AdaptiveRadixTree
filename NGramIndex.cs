@@ -515,6 +515,12 @@ namespace System.Collections.Specialized
                     .SelectMany(o => {
                         var list = new List<string>();
                         for(int i = 0; i < o.Length; i++) {
+                            // need at least one consecutive stretch of MIN_NGRAM length
+                            var size_before = i;
+                            var size_after  = o.Length - i - 1;
+                            if(size_before < MIN_NGRAM && size_after < MIN_NGRAM)
+                                continue;
+
                             var c = o[i];
                             o[i] = '?';
                             list.Add(new string(o));
@@ -522,7 +528,6 @@ namespace System.Collections.Specialized
                         }
                         return list;
                     }));
-            
 
             void Bench(string search_type, SearchOption option, WildcardRegex.SearchOption regex_option, IEnumerable<string> generator) {
                 Console.WriteLine($"{search_type} search...");
@@ -544,10 +549,10 @@ namespace System.Collections.Specialized
                     total++;
                 }
                 Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec");
-
+                
                 now = DateTime.UtcNow;
                 total = 0;
-                time = TIME_PER_BENCH;
+                time = new TimeSpan(TIME_PER_BENCH.Ticks / 2);
 
                 while(true) {
                     if(!enumerator.MoveNext()) {
@@ -558,16 +563,39 @@ namespace System.Collections.Specialized
                     var regex = new WildcardRegex(item, regex_option);
                     for(int i = 0; i < all_items.Length; i++) {
                         regex.IsMatch(all_items[i]);
-                        if((i % 100000 == 0) && (DateTime.UtcNow - now) > TIME_PER_BENCH)
+                        if((i % 100000 == 0) && (DateTime.UtcNow - now) > new TimeSpan(TIME_PER_BENCH.Ticks / 2))
                             break;
                     }
                     var elapsed = DateTime.UtcNow - now;
-                    if(elapsed > TIME_PER_BENCH)
+                    if(elapsed > new TimeSpan(TIME_PER_BENCH.Ticks / 2))
                         break;
                     total++;
                 }
                 Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec  (bruteforce)");
 
+                now = DateTime.UtcNow;
+                total = 0;
+                time = new TimeSpan(TIME_PER_BENCH.Ticks / 2);
+
+                while(true) {
+                    if(!enumerator.MoveNext()) {
+                        time = DateTime.UtcNow - now;
+                        break;
+                    }
+                    var item = enumerator.Current;
+                    var regex = WildcardRegex.ToRegex(item, System.Text.RegularExpressions.RegexOptions.None, regex_option);
+                    for(int i = 0; i < all_items.Length; i++) {
+                        regex.IsMatch(all_items[i]);
+                        if((i % 100000 == 0) && (DateTime.UtcNow - now) > new TimeSpan(TIME_PER_BENCH.Ticks / 2))
+                            break;
+                    }
+                    var elapsed = DateTime.UtcNow - now;
+                    if(elapsed > new TimeSpan(TIME_PER_BENCH.Ticks / 2))
+                        break;
+                    total++;
+                }
+                Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec  (bruteforce .net regex)");
+                
                 Console.WriteLine();
             }
         }
@@ -630,7 +658,7 @@ namespace System.Collections.Specialized
                             // need at least one consecutive stretch of MIN_NGRAM length
                             var size_before = j;
                             var size_after  = i - j - 1;
-                            if(size_before < MIN_NGRAM || size_after < MIN_NGRAM)
+                            if(size_before < MIN_NGRAM && size_after < MIN_NGRAM)
                                 continue;
  
                             var c = key[j];
@@ -712,7 +740,7 @@ namespace System.Collections.Specialized
                 yield break;
  
             var searchFormatIndex = sub_searches[0].start;
-            var filtered          = format.Sections.Count == 1 && section.ResultMustMatchAtStart && section.ResultMustMatchAtEnd ?
+            var filtered          = format.Sections.Length == 1 && section.ResultMustMatchAtStart && section.ResultMustMatchAtEnd ?
                 sub_searches[0].list.Where(o => o.Value.Length == format.TotalCharacters && filter(o.Value)) :
                 sub_searches[0].list.Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value));
  
@@ -960,7 +988,7 @@ namespace System.Collections.Specialized
 
             var res = new ParsedFormat() {
                 Format                   = format,
-                Sections                 = sections,
+                Sections                 = sections.ToArray(),
                 TotalCharacters          = sections[0].SearchLength + sections[0].MinCharsBefore + sections[0].MinCharsAfter,
                 MaxSearchableNGramLength = max_search,
                 //ExactMatchSearch       = ,
@@ -1004,7 +1032,7 @@ namespace System.Collections.Specialized
             ///     Total number of characters to match, including ?s but excluding *s.
             /// </summary>
             public int TotalCharacters;
-            public List<ConsecutiveParseSection> Sections;
+            public ConsecutiveParseSection[] Sections;
             /// <summary>
             ///     If true, means we are searching for an exact value with an ExactMatch and without any wildcards.
             ///     ex: 'ABC123'

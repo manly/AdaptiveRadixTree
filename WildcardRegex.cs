@@ -310,6 +310,7 @@ namespace System.Collections.Specialized
         ///     Typically it will run at least 3x slower than this implementation.
         /// </summary>
         public System.Text.RegularExpressions.Regex ToRegex(System.Text.RegularExpressions.RegexOptions regex_options) {
+            // this will actually rewrite the regex to be more optimal
             return new Text.RegularExpressions.Regex(this.ToRegex(RegexFormat.DotNet), regex_options);
         }
         /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
@@ -325,8 +326,41 @@ namespace System.Collections.Specialized
         /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
         /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
         public static System.Text.RegularExpressions.Regex ToRegex(string wildcard_format, System.Text.RegularExpressions.RegexOptions regex_options, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+            // rewrites the regex to be more efficient, at the cost of using our own parser
             return new WildcardRegex(wildcard_format, option, wildcard_unknown_character, wildcard_anything_character)
                 .ToRegex(regex_options);
+
+
+            // if you just want a simple version that converts to a .net regex with no rewriting
+            //
+            //var sb = new StringBuilder(wildcard_format.Length * 2);
+            //
+            //if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
+            //    sb.Append('^');
+            //
+            //for(int i = 0; i < wildcard_format.Length; i++) {
+            //    var c = wildcard_format[i];
+            //
+            //    if(c == wildcard_unknown_character)
+            //        sb.Append('.');
+            //    else if(c == wildcard_anything_character)
+            //        sb.Append(".*?"); // ? for non-greedy matching
+            //    else {
+            //        if(!IsAlphaNumeric(c))
+            //            sb.Append('\\');
+            //        sb.Append(c);
+            //    }
+            //}
+            //
+            //if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
+            //    sb.Append('$');
+            //
+            //return new System.Text.RegularExpressions.Regex(sb.ToString());
+            //
+            //bool IsAlphaNumeric(char c) {
+            //    //char.IsLetterOrDigit(c)
+            //    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+            //}
         }
         #endregion
 
