@@ -464,7 +464,7 @@ namespace System.Collections.Specialized
             var now = DateTime.UtcNow;
 
             for(int i = 0; i < count; i++) {
-                ngramindex.Add(i.ToString(culture));
+                ngramindex.Add(GetStableHashCode(i));
                 if(i++ % 10000 == 0)
                     Console.WriteLine($"[{i - 1}] adding {DateTime.UtcNow - now}");
             }
@@ -479,14 +479,14 @@ namespace System.Collections.Specialized
             Bench("EXACT MATCH", 
                 SearchOption.ExactMatch, 
                 WildcardRegex.SearchOption.ExactMatch,
-                Enumerable.Range(0, int.MaxValue).Select(o => random.Next(count).ToString(culture)));
+                Enumerable.Range(0, int.MaxValue).Select(o => GetStableHashCode(random.Next(count))));
 
             random = new Random(unchecked((int)SEED));
             Bench("STARTS WITH", 
                 SearchOption.StartsWith, 
                 WildcardRegex.SearchOption.StartsWith,
                 Enumerable.Range(0, int.MaxValue)
-                    .Select(o => random.Next(count).ToString(culture))
+                    .Select(o => GetStableHashCode(random.Next(count)))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
 
             random = new Random(unchecked((int)SEED));
@@ -494,7 +494,7 @@ namespace System.Collections.Specialized
                 SearchOption.EndsWith, 
                 WildcardRegex.SearchOption.EndsWith,
                 Enumerable.Range(0, int.MaxValue)
-                    .Select(o => random.Next(count).ToString(culture))
+                    .Select(o => GetStableHashCode(random.Next(count)))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(o.Length - k - 1, k))));
 
             random = new Random(unchecked((int)SEED));
@@ -502,32 +502,34 @@ namespace System.Collections.Specialized
                 SearchOption.Partial, 
                 WildcardRegex.SearchOption.Partial,
                 Enumerable.Range(0, int.MaxValue)
-                    .Select(o => random.Next(count).ToString(culture))
+                    .Select(o => GetStableHashCode(random.Next(count)))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
 
-            random = new Random(unchecked((int)SEED));
-            Bench("CONTAINS WITH ONE ?", 
-                SearchOption.Partial, 
-                WildcardRegex.SearchOption.Partial,
-                Enumerable.Range(0, int.MaxValue)
-                    .Select(o => random.Next(count).ToString(culture))
-                    .SelectMany(item => Enumerable.Range(MIN_NGRAM + 1, Math.Max(0, item.Length - MIN_NGRAM - 1)).Select(j => item.Substring(0, j).ToCharArray()))
-                    .SelectMany(o => {
-                        var list = new List<string>();
-                        for(int i = 0; i < o.Length; i++) {
+            foreach(var wildcard in new[] { '?', '*' }) {
+                random = new Random(unchecked((int)SEED));
+                Bench($"CONTAINS WITH ONE {wildcard}",
+                    SearchOption.Partial,
+                    WildcardRegex.SearchOption.Partial,
+                    Enumerable.Range(0, int.MaxValue)
+                        .Select(o => GetStableHashCode(random.Next(count)))
+                        .SelectMany(item => Enumerable.Range(MIN_NGRAM + 1, Math.Max(0, item.Length - MIN_NGRAM - 1)).Select(j => item.Substring(0, j).ToCharArray()))
+                        .SelectMany(o => {
+                            var list = new List<string>();
+                            for(int i = 0; i < o.Length; i++) {
                             // need at least one consecutive stretch of MIN_NGRAM length
                             var size_before = i;
-                            var size_after  = o.Length - i - 1;
-                            if(size_before < MIN_NGRAM && size_after < MIN_NGRAM)
-                                continue;
+                                var size_after  = o.Length - i - 1;
+                                if(size_before < MIN_NGRAM && size_after < MIN_NGRAM)
+                                    continue;
 
-                            var c = o[i];
-                            o[i] = '?';
-                            list.Add(new string(o));
-                            o[i] = c;
-                        }
-                        return list;
-                    }));
+                                var c = o[i];
+                                o[i] = wildcard;
+                                list.Add(new string(o));
+                                o[i] = c;
+                            }
+                            return list;
+                        }));
+            }
 
             void Bench(string search_type, SearchOption option, WildcardRegex.SearchOption regex_option, IEnumerable<string> generator) {
                 Console.WriteLine($"{search_type} search...");
@@ -597,6 +599,25 @@ namespace System.Collections.Specialized
                 Console.WriteLine($"{total} {search_type} results ({time})     {total / time.TotalSeconds} / sec  (bruteforce .net regex)");
                 
                 Console.WriteLine();
+            }
+            /// <summary>
+            ///     FNV-1a (Fowler-Noll-Vo).
+            ///     https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+            /// </summary>
+            string GetStableHashCode(int value) {
+                unchecked {
+                    const uint PRIME        = 16777619;
+                    const uint OFFSET_BASIS = 2166136261;
+                    
+                    var val  = value.ToString("X", culture);
+                    var hash = OFFSET_BASIS;
+                    int len  = val.Length;
+                    for(int i = 0; i < len; i++) {
+                        hash ^= val[i];
+                        hash *= PRIME;
+                    }
+                    return ((int)hash).ToString("X", culture);
+                }
             }
         }
         #endregion

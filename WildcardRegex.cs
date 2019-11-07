@@ -12,7 +12,7 @@ namespace System.Collections.Specialized
     ///     Simplified wildcard search comparer.
     ///     Works like a regex, but with a wildcard syntax (ie: ?* characters).
     ///     Uses non-greedy matching for '*' wildcard.
-    ///     At least 3x faster than using a compiled System.Text.RegularExpressions.Regex.
+    ///     Usually 2x faster than using a compiled System.Text.RegularExpressions.Regex.
     /// </summary>
     /// <remarks>
     ///     If pure performance is needed, long search patterns could be replaced with a pre-computed Boyer-Moore string search,
