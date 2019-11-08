@@ -96,13 +96,13 @@ namespace System.Collections.Specialized
         // No node may contain "partial_length==0" except for the root node.
         #endregion
     
-        protected const int  MAX_PREFIX_LEN                = 8;  // the max number of key characters per non-leaf node.
-        protected const int  NODE_POINTER_BYTE_SIZE        = 5;  // increase this value if you need more than 1.1 TB
-        protected const byte LEAF_NODE_KEY_TERMINATOR      = 0;  // terminate keys of leafs with this value
-        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR     = LEAF_NODE_KEY_TERMINATOR == 0 ? 255 : 0;
-        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR2    = LEAF_NODE_KEY_TERMINATOR != 0 && LEAF_NODE_KEY_ESCAPE_CHAR != 0 ? 0 : (LEAF_NODE_KEY_TERMINATOR != 1 && LEAF_NODE_KEY_ESCAPE_CHAR != 1 ? 1 : 2); // terminator
-        protected const int  LEAF_NODE_PREFETCH_SIZE       = 64; // guesstimated, must be <= m_buffer.Length and >= MAX_VARINT64_ENCODED_SIZE * 2 + 1
-        protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32; // guesstimated, must be <= m_buffer.Length, includes only data
+        protected const int  MAX_PREFIX_LEN                = 8;   // the max number of key characters per non-leaf node.
+        protected const int  NODE_POINTER_BYTE_SIZE        = 5;   // increase this value if you need more than 1.1 TB
+        protected const byte LEAF_NODE_KEY_TERMINATOR      = 250; // terminate keys of leafs with this value, avoiding 0 and 255 due to common use in encoded keys
+        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR     = (LEAF_NODE_KEY_TERMINATOR + 1) % 256;
+        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR2    = (LEAF_NODE_KEY_TERMINATOR + 2) % 256; // terminator
+        protected const int  LEAF_NODE_PREFETCH_SIZE       = 64;  // guesstimated, must be <= m_buffer.Length and >= MAX_VARINT64_ENCODED_SIZE * 2 + 1
+        protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32;  // guesstimated, must be <= m_buffer.Length, includes only data
         protected const int  MAX_VARINT64_ENCODED_SIZE     = 9;
         protected const int  BUFFER_SIZE                   = 4096;
     
