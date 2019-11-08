@@ -5837,14 +5837,13 @@ namespace System.Collections.Specialized
             return null;
     
             void EncodeString(string key, Buffer res) {
-                var count  = Encoding.UTF8.GetByteCount(key);
+                var count  = Encoding.UTF8.GetMaxByteCount(key.Length); //Encoding.UTF8.GetByteCount(key);
                 res.EnsureCapacity(count);
                 res.Length = Encoding.UTF8.GetBytes(key, 0, key.Length, res.Content, 0);
                 // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
             }
             void EncodeChar(char key, Buffer res) {
                 var item   = new char[1] { (char)key };
-                var count  = Encoding.UTF8.GetByteCount(item);
                 res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
             }
             void EncodeInt8(sbyte key, Buffer res) {
@@ -6030,14 +6029,13 @@ namespace System.Collections.Specialized
     
             void EncodeString(object key, Buffer res) {
                 var item   = (string)key;
-                var count  = Encoding.UTF8.GetByteCount(item);
+                var count  = Encoding.UTF8.GetMaxByteCount(item.Length);//Encoding.UTF8.GetByteCount(item);
                 res.EnsureCapacity(count);
                 res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
                 // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
             }
             void EncodeChar(object key, Buffer res) {
                 var item   = new char[1] { (char)key };
-                var count  = Encoding.UTF8.GetByteCount(item);
                 res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
             }
             void EncodeInt8(object key, Buffer res) {
