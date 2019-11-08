@@ -1647,7 +1647,54 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-    
+
+        // GetLeafsInPath()
+        #region GetLeafsInPath()
+        /// <summary>
+        ///     O(k)    (k = # of characters)
+        ///     
+        ///     Returns the keys that are found along the path.
+        ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
+        ///     Throws ArgumentException on empty path.
+        /// </summary>
+        public IEnumerable<TKey> GetLeafsInPath(TKey path) {
+            foreach(var leaf in this.TryGetLeafs(path, false)) {
+                int length = leaf.length;
+                var key    = leaf.keyBuffer.GetPartialKeyWithoutWrite(this, ref length);
+                yield return key;
+            }
+        }
+        #endregion
+        #region GetLeafValuesInPath()
+        /// <summary>
+        ///     O(k)    (k = # of characters)
+        ///     
+        ///     Returns the keys that are found along the path.
+        ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
+        ///     Throws ArgumentException on empty path.
+        /// </summary>
+        public IEnumerable<TValue> GetLeafValuesInPath(TKey path) {
+            foreach(var leaf in this.TryGetLeafs(path, true))
+                yield return leaf.value;
+        }
+        #endregion
+        #region GetLeafItemsInPath()
+        /// <summary>
+        ///     O(k)    (k = # of characters)
+        ///     
+        ///     Returns the keys that are found along the path.
+        ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
+        ///     Throws ArgumentException on empty path.
+        /// </summary>
+        public IEnumerable<KeyValuePair<TKey, TValue>> GetLeafItemsInPath(TKey path) {
+            foreach(var leaf in this.TryGetLeafs(path, true)) {
+                int length = leaf.length;
+                var key    = leaf.keyBuffer.GetPartialKeyWithoutWrite(this, ref length);
+                yield return new KeyValuePair<TKey, TValue>(key, leaf.value);
+            }
+        }
+        #endregion
+
         #region Optimize()
         /// <summary>
         ///     Rebuilds the tree in a way that localizes branches to be stored nearby.
@@ -3326,13 +3373,126 @@ namespace System.Collections.Specialized
             return false;
         }
         #endregion
+        #region protected TryGetLeafs()
+        /// <summary>
+        ///    O(k)    (k = # of characters)
+        ///    
+        ///    Throws ArgumentException on empty key.
+        /// </summary>
+        protected IEnumerable<(int length, TValue value, Buffer keyBuffer)> TryGetLeafs(TKey key, bool fetchValue) {
+            var current = m_rootPointer;
+            if(current == 0)
+                yield break;
+    
+            int compareIndex = 0;
+            var keyBuffer    = m_keyBuffer;
+            m_keyEncoder(key, keyBuffer);
+    
+            if(keyBuffer.Length == 0)
+                throw new ArgumentException(nameof(key));
+    
+            EscapeLeafKeyTerminator(keyBuffer);
+
+            // stack of 2 items
+            long stack1    = 0;
+            long stack2    = 0;
+            int stackCount = 0;
+
+            Push(current);
+    
+            while(stackCount > 0) {
+                current = Pop();
+
+                this.Stream.Position = current;
+                var nodeType = (NodeType)this.Stream.ReadByte();
+                m_buffer[0]  = (byte)nodeType;
+    
+                // assume fetching data is faster than multiple calls
+                int readBytes = this.Stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
+    
+                if(nodeType == NodeType.Leaf) {
+                    int readIndex = 1;
+                    var success = CompareLeafKeyOrShorter(m_buffer, ref readIndex, ref readBytes, this.Stream, keyBuffer, compareIndex, fetchValue ? LEAF_NODE_VALUE_PREFETCH_SIZE : 0, out long value_length);
+                    if(success >= 0) {
+                        TValue value = default;
+                        if(fetchValue) {
+                            byte[] big_buffer = null;
+                            var temp          = ReadLeafValue(m_buffer, readIndex, readBytes, this.Stream, value_length, ref big_buffer, out _);
+                            value             = (TValue)m_valueDecoder(temp.buffer, temp.index, temp.len);
+                            //big_buffer      = null;
+                        }
+                        yield return (compareIndex + success, value, keyBuffer);
+                    }
+                    continue;
+                }
+    
+                if(!CompareNodeKey(m_buffer, keyBuffer, ref compareIndex))
+                    continue;
+    
+                byte num_children        = m_buffer[1];
+                var index                = CalculateKeysIndex(nodeType);
+                var currentKeyCharacters = compareIndex < keyBuffer.Length ? 
+                    new []{ keyBuffer.Content[compareIndex], LEAF_NODE_KEY_TERMINATOR } :
+                    new []{ LEAF_NODE_KEY_TERMINATOR };
+    
+                // system.numerics.vector requires vector.add(vector.bitwiseand(vector.equals(), [1,2,3,4,...])) and finally for(aggregatevector) to get the first value that isnt zero
+                // so basically, lack of cpu intrinsics makes vectors not worth it vs binarysearch
+    
+                if(nodeType == NodeType.Node4 || nodeType == NodeType.Node8) {
+                    foreach(var currentKeyCharacter in currentKeyCharacters) {
+                        // unrolling this loop or using binarysearch is slower
+                        for(int i = 0; i < num_children; i++) {
+                            if(m_buffer[index + i] == currentKeyCharacter) {
+                                current = ReadNodePointer(m_buffer, index + MaxChildCount(nodeType) + i * NODE_POINTER_BYTE_SIZE);
+                                Push(current);
+                                break;
+                            }
+                        }
+                    }
+                } else if(nodeType == NodeType.Node16 || nodeType == NodeType.Node32) {
+                    foreach(var currentKeyCharacter in currentKeyCharacters) {
+                        var i = BinarySearch(m_buffer, index, num_children, currentKeyCharacter);
+                        if(i < 0)
+                            continue;
+                        i -= index;
+                        current = ReadNodePointer(m_buffer, index + MaxChildCount(nodeType) + i * NODE_POINTER_BYTE_SIZE);
+                        Push(current);
+                    }
+                } else if(nodeType == NodeType.Node64 || nodeType == NodeType.Node128) {
+                    foreach(var currentKeyCharacter in currentKeyCharacters) {
+                        var i = m_buffer[index + currentKeyCharacter];
+                        if(i == 0)
+                            continue;
+                        i--;
+                        current = ReadNodePointer(m_buffer, index + 256 + i * NODE_POINTER_BYTE_SIZE);
+                        Push(current);
+                    }
+                } else { // nodeType == NodeType.Node256
+                    foreach(var currentKeyCharacter in currentKeyCharacters) {
+                        current = ReadNodePointer(m_buffer, index + currentKeyCharacter * NODE_POINTER_BYTE_SIZE);
+                        if(current != 0)
+                            Push(current);
+                    }
+                }
+            }
+
+            void Push(long value) {
+                if(stackCount++ == 0)
+                    stack1 = value;
+                else
+                    stack2 = value;
+            }
+            long Pop() {
+                return (--stackCount == 0) ? stack1 : stack2;
+            }
+        }
+        #endregion
     
         #region private CreateLeafNode()
         /// <summary>
         ///     Returns the address.
         /// </summary>
         /// <param name="remainingEncodedKey">Excludes LEAF_NODE_KEY_TERMINATOR</param>
-        [MethodImpl(AggressiveInlining)]
         private long CreateLeafNode(in ReadOnlySpan<byte> remainingEncodedKey, Buffer encodedValue, Func<long, long> custom_alloc = null) {
             // leaf
             // **************************************
@@ -3391,7 +3551,6 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareNodeKey()
-        [MethodImpl(AggressiveInlining)]
         private static bool CompareNodeKey(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
     
@@ -3416,7 +3575,6 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareNodeKey_LongestCommonPrefix()
-        [MethodImpl(AggressiveInlining)]
         private static byte CompareNodeKey_LongestCommonPrefix(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
     
@@ -3437,7 +3595,6 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareLeafKey()
-        [MethodImpl(AggressiveInlining)]
         private static bool CompareLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
             var partial_length = ReadVarInt64(buffer, ref bufferIndex);
             value_length       = ReadVarInt64(buffer, ref bufferIndex);
@@ -3476,8 +3633,52 @@ namespace System.Collections.Specialized
             return true;
         }
         #endregion
+        #region private static CompareLeafKeyOrShorter()
+        /// <summary>
+        ///     Returns the number of characters matched
+        ///     Returns -1 if no match.
+        /// </summary>
+        private static int CompareLeafKeyOrShorter(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
+            var partial_length = ReadVarInt64(buffer, ref bufferIndex);
+            value_length       = ReadVarInt64(buffer, ref bufferIndex);
+            if(partial_length > encodedKey.Length + 1 - compareIndex)
+                return -1;
+
+            var originalCompareIndex = compareIndex;
+    
+            // note: 
+            // buffer + partial_length     LEAF_NODE_KEY_TERMINATOR included
+            // encodedKey + compareIndex   LEAF_NODE_KEY_TERMINATOR *not* included
+    
+            while(partial_length > 0) {
+                if(bufferIndex == bufferRead) {
+                    bufferIndex = 0;
+                    bufferRead  = stream.Read(buffer, 0, unchecked((int)Math.Min(partial_length + value_prefetch, buffer.Length)));
+                }
+    
+                var processed = unchecked((int)Math.Min(partial_length, bufferRead - bufferIndex));
+
+                if(processed == partial_length || compareIndex + processed == encodedKey.Length + 1) {
+                    // avoid processing LEAF_NODE_KEY_TERMINATOR
+                    if(processed > 1 && !new ReadOnlySpan<byte>(encodedKey.Content, compareIndex, processed - 1).SequenceEqual(new ReadOnlySpan<byte>(buffer, bufferIndex, processed - 1)))
+                        return -1;
+                    // then do
+                    if(buffer[bufferIndex + processed - 1] != LEAF_NODE_KEY_TERMINATOR)
+                        return -1;
+                } else {
+                    if(!new ReadOnlySpan<byte>(encodedKey.Content, compareIndex, processed).SequenceEqual(new ReadOnlySpan<byte>(buffer, bufferIndex, processed)))
+                        return -1;
+                }
+    
+                partial_length -= processed;
+                compareIndex   += processed;
+                bufferIndex    += processed;
+            }
+    
+            return compareIndex - originalCompareIndex - 1;
+        }
+        #endregion
         #region private static CompareLeafKey_LongestCommonPrefix()
-        [MethodImpl(AggressiveInlining)]
         private static int CompareLeafKey_LongestCommonPrefix(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out int partial_length, out int value_length, out bool bufferChanged) {
             bufferChanged  = false;
             partial_length = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
@@ -3536,7 +3737,6 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static ReadLeafKey()
-        [MethodImpl(AggressiveInlining)]
         private static void ReadLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, int partial_length, ref byte[] key, ref int keySize, int value_prefetch) {
             // dont read terminal byte
     
@@ -3571,7 +3771,6 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static ReadLeafValue()
-        [MethodImpl(AggressiveInlining)]
         private static (byte[] buffer, int index, int len) ReadLeafValue(byte[] buffer, int bufferIndex, int bufferRead, Stream stream, long value_length, ref byte[] alternativeBuffer, out bool bufferChanged) {
             bufferChanged = false;
     
@@ -6386,11 +6585,26 @@ namespace System.Collections.Specialized
                 UnescapeLeafKeyTerminator(this.Content, 0, ref this.Length, ref length);
                 return (TKey)owner.m_keyDecoder(this.Content, 0, length);
             }
+            /// <summary>
+            ///     Returns the partial key without modifying the current class.
+            ///     This is inherently slower as data needs to be copied.
+            /// </summary>
+            internal TKey GetPartialKeyWithoutWrite(AdaptiveRadixTree<TKey, TValue> owner, ref int length) {
+                if(this.Content.Length - this.Length >= length) {
+                    BlockCopy(this.Content, 0, this.Content, this.Length, length);
+                    int maxLength = this.Length;
+                    UnescapeLeafKeyTerminator(this.Content, this.Length, ref maxLength, ref length);
+                    return (TKey)owner.m_keyDecoder(this.Content, this.Length, length);
+                } else {
+                    var temp = new byte[length];
+                    BlockCopy(this.Content, 0, temp, 0, length);
+                    int maxLength = length;
+                    UnescapeLeafKeyTerminator(temp, 0, ref maxLength, ref length);
+                    return (TKey)owner.m_keyDecoder(temp, 0, length);
+                }
+            }
             public TValue GetValue(AdaptiveRadixTree<TKey, TValue> owner) {
                 return (TValue)owner.m_valueDecoder(this.Content, 0, this.Length);
-            }
-            public KeyValuePair<TKey, TValue> GetItem(AdaptiveRadixTree<TKey, TValue> owner) {
-                return new KeyValuePair<TKey, TValue>(this.GetKey(owner), this.GetValue(owner));
             }
         }
         #endregion
