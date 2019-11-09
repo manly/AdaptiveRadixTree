@@ -30,13 +30,14 @@ namespace System.Collections.Specialized
         /// <summary>*, Assumes non-greedy matching (least characters)</summary>
         private readonly char m_wildcardAnything;
 
-            
+        
         private readonly bool m_resultMustMatchAtStart; // result/match must start at 0.
         private readonly bool m_resultMustMatchAtEnd;   // result/match must end at {start+length}.
         private readonly int m_totalCharacters;
         private readonly ConsecutiveParseSection[] m_sections; 
         private readonly bool m_isMatchAll;             // if(m_sections.Length==0 && true) format = '*', if(m_sections.Length==0 && false) format = ''
-        private readonly bool m_noWildcards;            // if(m_sections.Length==1 && true) search has no wildcards (ie: run string.CompareOrdinal() instead)
+        private readonly bool m_simpleEquals;           // if(m_sections.Length==1 && true) search has no wildcards (ie: run string.CompareOrdinal() instead)
+        private readonly bool m_simpleContains;         // if(m_sections.Length==1 && true) search is '*searchterms*' without any '?' (ie: this search can be done with just one indexof())
 
         #region constructors
         /// <param name="regex_wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
@@ -61,8 +62,15 @@ namespace System.Collections.Specialized
                     m_resultMustMatchAtEnd = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
                 
                 // if theres no wildcards
-                m_noWildcards = m_sections.Length == 1 && 
+                m_simpleEquals = m_sections.Length == 1 && 
                     m_resultMustMatchAtStart && 
+                    // check if theres no '?' within the section besides the initial/ending ?s
+                    m_sections[0].SearchIndex + m_sections[0].Search.Length == m_sections[0].Length;
+
+                m_simpleContains = m_sections.Length == 1 && 
+                    !m_resultMustMatchAtStart && 
+                    !m_resultMustMatchAtEnd &&
+                    // check if theres no '?' within the section besides the initial/ending ?s
                     m_sections[0].SearchIndex + m_sections[0].Search.Length == m_sections[0].Length;
             } else {
                 m_sections               = new ConsecutiveParseSection[0];
@@ -70,7 +78,8 @@ namespace System.Collections.Specialized
                 m_isMatchAll             = false;
                 m_resultMustMatchAtStart = false;
                 m_resultMustMatchAtEnd   = false;
-                m_noWildcards            = false;
+                m_simpleEquals            = false;
+                m_simpleContains         = false;
             }
         }
         #endregion
@@ -120,8 +129,11 @@ namespace System.Collections.Specialized
             if(m_sections.Length == 0)
                 return new Result(startIndex, m_isMatchAll ? 0 : -1);
             // special case: no wildcards, use quick comparison
-            if(m_noWildcards)
-                return this.StringEqualNoWildcards(value, startIndex, length);
+            if(m_simpleEquals)
+                return this.SimpleEquals(value, startIndex, length);
+            // special case: searching in a way that can be done with just one IndexOf()
+            if(m_simpleContains)
+                return this.SimpleContains(value, startIndex, length);
 
             int index          = startIndex;
             int originalLength = length;
@@ -366,6 +378,8 @@ namespace System.Collections.Specialized
 
         // todo: should have pre-built matchers for cases: exact match, partial match without ?/*, startswith with only ending ?, endswith with only starting ?
         // this should massively speed up those cases
+        // potential conceptual flaw: all matches must be greedy because searching *.exe for files should return abc.exe and not .exe
+        // unclear whether that means only return results expanded to include the end of string or not.
 
         #region ToString()
         public override string ToString() {
@@ -376,8 +390,8 @@ namespace System.Collections.Specialized
         #region private ParseSearchFormat()
         private ConsecutiveParseSection[] ParseSearchFormat(string format) {
             var sections = this.ParseSearchFormatSections(format)
-                .Where(o => o.len > 0) // avoids empty sections in cases such as 'aa**aa', '*aa' and 'aa*'
-                .Select(o => new ParsingSection(){ Start = o.start, Length = o.len })
+                .Where(o => o.Length > 0) // avoids empty sections in cases such as 'aa**aa', '*aa' and 'aa*'
+                .Select(o => new ParsingSection(){ Start = o.Index, Length = o.Length })
                 .ToList();
 
             for(int i = 0; i < sections.Count; i++) {
@@ -407,6 +421,8 @@ namespace System.Collections.Specialized
                 } else 
                     index++;
             }
+            // note: can't merge a starting '??' section with the following one, because the returned matches would be different
+
             // move ['??' at section start] to [previous section end] for faster parse
             // ex: 'abc?*??456' -> 'abc???*456'
             index = 1;
@@ -473,7 +489,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     basically does format.Split(WildcardAnything)
         /// </summary>
-        private IEnumerable<(int start, int len)> ParseSearchFormatSections(string format) {
+        private IEnumerable<SplitPositionResult> ParseSearchFormatSections(string format) {
             int start = 0;
             int len   = 0;
 
@@ -483,24 +499,34 @@ namespace System.Collections.Specialized
 
                 if(c == m_wildcardAnything) {
                     if(len > 1)
-                        yield return (start, len - 1);
+                        yield return new SplitPositionResult(start, len - 1);
 
                     start = i + 1;
                     len   = 0;
                 }
             }
             if(len > 0)
-                yield return (start, len);
+                yield return new SplitPositionResult(start, len);
+        }
+        private readonly struct SplitPositionResult {
+            public readonly int Index;
+            public readonly int Length;
+            public SplitPositionResult(int index, int length) {
+                this.Index  = index;
+                this.Length = length;
+            }
         }
         #endregion
 
-        #region private StringEqualNoWildcards()
+        #region private SimpleEquals()
         /// <summary>
         ///     Direct string.Equals()
         /// </summary>
-        private Result StringEqualNoWildcards(string value, int startIndex, int length) {
-            var search = m_sections[0].Search;
-            var diff   = length - search.Length;
+        private Result SimpleEquals(string value, int startIndex, int length) {
+            var section    = m_sections[0];
+            var search     = section.Search;
+            var extraChars = section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+            var diff       = length - search.Length - extraChars;
 
             if(diff < 0 || (m_resultMustMatchAtEnd && diff != 0))
                 return new Result(startIndex, -1);
@@ -508,12 +534,42 @@ namespace System.Collections.Specialized
             // ideally would use string.Equals(), but need start/len
             int cmp = string.CompareOrdinal(
                 value,
-                startIndex,
+                startIndex + section.WildcardUnknownBefore,
                 search,
                 0,
-                search.Length);
+                search.Length - section.WildcardUnknownAfter);
 
-            return new Result(startIndex, cmp != 0 ? -1 : search.Length);
+            return new Result(startIndex, cmp != 0 ? -1 : search.Length + extraChars);
+        }
+        #endregion
+        #region private SimpleContains()
+        /// <summary>
+        ///     Searching in a way that can be done with just one IndexOf()
+        ///     this may include patterns such as: '*??aaaaa?*??*' but not '*aaaa?bbb*'
+        /// </summary>
+        private Result SimpleContains(string value, int startIndex, int length) {
+            var section    = m_sections[0];
+            var search     = section.Search;
+            var extraChars = section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+            var diff       = length - search.Length - extraChars;
+
+            if(diff < 0)
+                return new Result(startIndex, -1);
+
+            var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+
+            //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
+            int pos = compareInfo.IndexOf(
+                value,
+                section.Search,
+                startIndex + section.WildcardUnknownBefore,
+                length - extraChars,
+                System.Globalization.CompareOptions.Ordinal);
+            
+            if(pos < 0)
+                return new Result(startIndex, -1);
+            else
+                return new Result(pos - section.WildcardUnknownBefore, search.Length + extraChars);
         }
         #endregion
         #region private StringEqualWithUnknownCharacters()
@@ -648,7 +704,6 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-
         public readonly struct Result {
             public readonly int Index;
             public readonly int Length;
