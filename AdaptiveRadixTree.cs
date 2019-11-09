@@ -3403,6 +3403,9 @@ namespace System.Collections.Specialized
             while(stackCount > 0) {
                 current = Pop();
 
+                if(current == 0)
+                    continue;
+
                 this.Stream.Position = current;
                 var nodeType = (NodeType)this.Stream.ReadByte();
                 m_buffer[0]  = (byte)nodeType;
@@ -3470,8 +3473,7 @@ namespace System.Collections.Specialized
                 } else { // nodeType == NodeType.Node256
                     foreach(var currentKeyCharacter in currentKeyCharacters) {
                         current = ReadNodePointer(m_buffer, index + currentKeyCharacter * NODE_POINTER_BYTE_SIZE);
-                        if(current != 0)
-                            Push(current);
+                        Push(current);
                     }
                 }
             }
