@@ -91,34 +91,34 @@ namespace System.Collections.Specialized
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int Index, int Length) Match(string value) {
+        public Result Match(string value) {
             return this.Match(value, 0, value.Length);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int Index, int Length) Match(string value, int startIndex) {
+        public Result Match(string value, int startIndex) {
             return this.Match(value, startIndex, value.Length - startIndex);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public (int Index, int Length) Match(string value, int startIndex, int length) {
+        public Result Match(string value, int startIndex, int length) {
             // algorithm explanation
             // format = '123*456*?678'
-            // sections = {123, 456, 678}
+            // sections = {123, 456, ?678}
             // first makes sure the string starts with '123' (if beginswith)
             // then makes sure the string ends with '?678' (if endswith)
             // then make sure every other section from section 1+ are found in order and ends before the last one
             // if any section is not found, then there is no match
 
             if(length < m_totalCharacters)
-                return (startIndex, -1);
+                return new Result(startIndex, -1);
             // special case if format = '*' or ''
             if(m_sections.Length == 0)
-                return (startIndex, m_isMatchAll ? 0 : -1);
+                return new Result(startIndex, m_isMatchAll ? 0 : -1);
             // special case: no wildcards, use quick comparison
             if(m_noWildcards)
                 return this.StringEqualNoWildcards(value, startIndex, length);
@@ -133,12 +133,12 @@ namespace System.Collections.Specialized
                 var section = m_sections[0];
                 index      += section.WildcardUnknownBefore;
                 if(!this.StringEqualWithUnknownCharacters(value, index, this.RegexWildcardFormat, section.Start, section.Length))
-                    return (startIndex, -1);
+                    return new Result(startIndex, -1);
                 index  += section.Length + section.WildcardUnknownAfter;
                 length -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
 
                 if(m_resultMustMatchAtEnd && m_sections.Length == 1)
-                    return length == 0 ? (startIndex, originalLength) : (startIndex, -1);
+                    return new Result(startIndex, length == 0 ? originalLength : -1);
                 
                 firstIndex   = 0;
                 sectionIndex = 1;
@@ -148,7 +148,7 @@ namespace System.Collections.Specialized
                 var section = m_sections[m_sections.Length - 1];
                 int pos     = startIndex + originalLength - section.WildcardUnknownAfter - section.Length;
                 if(pos - section.WildcardUnknownBefore < index || !this.StringEqualWithUnknownCharacters(value, pos, this.RegexWildcardFormat, section.Start, section.Length))
-                    return (startIndex, -1);
+                    return new Result(startIndex, -1);
                 lastIndex = startIndex + originalLength;
                 length   -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
@@ -161,7 +161,7 @@ namespace System.Collections.Specialized
                 if(section.Length > 0) {
                     last = this.StringIndexOfWithUnknownCharacters(value, index, length, in section);
                     if(last < 0)
-                        return (startIndex, -1);
+                        return new Result(startIndex, -1);
                     if(sectionIndex <= 1 && firstIndex < 0)
                         firstIndex = last;
                     var new_index = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
@@ -177,14 +177,14 @@ namespace System.Collections.Specialized
             }
 
             if(sectionIndex != lastSection || length < 0)
-                return (startIndex, -1);
+                return new Result(startIndex, -1);
 
             if(!m_resultMustMatchAtEnd) {
                 var section = m_sections[m_sections.Length - 1];
                 lastIndex   = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
 
-            return (firstIndex, lastIndex - firstIndex);
+            return new Result(firstIndex, lastIndex - firstIndex);
         }
         #endregion
         #region Matches()
@@ -192,26 +192,26 @@ namespace System.Collections.Specialized
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int Index, int Length)> Matches(string value) {
+        public IEnumerable<Result> Matches(string value) {
             return this.Matches(value, 0, value.Length);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int Index, int Length)> Matches(string value, int startIndex) {
+        public IEnumerable<Result> Matches(string value, int startIndex) {
             return this.Matches(value, startIndex, value.Length - startIndex);
         }
         /// <summary>
         ///     Returns length = 0 if search = '*'.
         ///     Returns length = -1 if not found.
         /// </summary>
-        public IEnumerable<(int Index, int Length)> Matches(string value, int startIndex, int length) {
+        public IEnumerable<Result> Matches(string value, int startIndex, int length) {
             // special case, if format = '*' or ''
             if(m_sections.Length == 0) {
                 if(m_isMatchAll)
                     // if format='*' return only one match instead of infinity match
-                    yield return (startIndex, 0);
+                    yield return new Result(startIndex, 0);
                 yield break;
             }
 
@@ -364,6 +364,9 @@ namespace System.Collections.Specialized
         }
         #endregion
 
+        // todo: should have pre-built matchers for cases: exact match, partial match without ?/*, startswith with only ending ?, endswith with only starting ?
+        // this should massively speed up those cases
+
         #region ToString()
         public override string ToString() {
             return $"{this.RegexWildcardFormat} - {this.Option.ToString()}";
@@ -427,11 +430,11 @@ namespace System.Collections.Specialized
                         int duplicates   = 0;
                         int consecutives = 0;
                         // very common case: the entire section does not contain any ?, which means we have only one section
-                        if(o.length != section.Length){
-                            var visitedChars = new HashSet<char>(o.length);
+                        if(o.Length != section.Length){
+                            var visitedChars = new HashSet<char>(o.Length);
                             char prev = '\0';
-                            for(int j = 0; j < o.length; j++) {
-                                var c = format[o.start + j];
+                            for(int j = 0; j < o.Length; j++) {
+                                var c = format[o.Index + j];
                                 if(!visitedChars.Add(c))
                                     duplicates++;
                                 if(j > 0 && c == prev)
@@ -440,13 +443,13 @@ namespace System.Collections.Specialized
                             }
                             duplicates -= consecutives;
                         }
-                        return new { o.start, o.length, duplicates, consecutives };
+                        return new { o.Index, o.Length, duplicates, consecutives };
                     })
                     // trying to figure out if searching '00' over '12345' is better
-                    .OrderByDescending(o => (o.consecutives * 2 + 1) * (o.duplicates * 1.5 + 1)) // * o.length
+                    .OrderByDescending(o => (o.consecutives * 2 + 1) * (o.duplicates * 1.5 + 1)) // * o.Length
                     .ThenByDescending(o => o.consecutives)
                     .ThenByDescending(o => o.duplicates)
-                    .ThenByDescending(o => o.length)
+                    .ThenByDescending(o => o.Length)
                     .First();
 
                 res[i] = new ConsecutiveParseSection(
@@ -454,8 +457,8 @@ namespace System.Collections.Specialized
                     section.Length, 
                     section.WildcardUnknownBefore, 
                     section.WildcardUnknownAfter, 
-                    format.Substring(best_sub_section.start, best_sub_section.length), //format.Substring(section.Start, section.Length),
-                    best_sub_section.start - section.Start);
+                    format.Substring(best_sub_section.Index, best_sub_section.Length), //format.Substring(section.Start, section.Length),
+                    best_sub_section.Index - section.Start);
             }
             return res;
         }
@@ -495,12 +498,12 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     Direct string.Equals()
         /// </summary>
-        private (int Index, int Length) StringEqualNoWildcards(string value, int startIndex, int length) {
+        private Result StringEqualNoWildcards(string value, int startIndex, int length) {
             var search = m_sections[0].Search;
             var diff   = length - search.Length;
 
             if(diff < 0 || (m_resultMustMatchAtEnd && diff != 0))
-                return (startIndex, -1);
+                return new Result(startIndex, -1);
 
             // ideally would use string.Equals(), but need start/len
             int cmp = string.CompareOrdinal(
@@ -510,7 +513,7 @@ namespace System.Collections.Specialized
                 0,
                 search.Length);
 
-            return (startIndex, cmp != 0 ? -1 : search.Length);
+            return new Result(startIndex, cmp != 0 ? -1 : search.Length);
         }
         #endregion
         #region private StringEqualWithUnknownCharacters()
@@ -581,17 +584,17 @@ namespace System.Collections.Specialized
         ///     Same as string.Split(), but for returns positions instead.
         ///     ex: "abcde".SplitPosition(1, 4, new []{'b'}) = {(2,3)}
         /// </summary>
-        private static IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
+        private static IEnumerable<Result> SplitPosition(string source, int startIndex, int length, char separator) {
             int start = startIndex;
             int max   = startIndex + length;
             int i     = startIndex;
             for(; i < max; i++) {
                 if(source[i] == separator) {
-                    yield return (start, i - start);
+                    yield return new Result(start, i - start);
                     start = i + 1;
                 }
             }
-            yield return (start, i - start);
+            yield return new Result(start, i - start);
         }
         #endregion
 
@@ -645,5 +648,14 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
+
+        public readonly struct Result {
+            public readonly int Index;
+            public readonly int Length;
+            public Result(int index, int length) {
+                this.Index  = index;
+                this.Length = length;
+            }
+        }
     }
 }
