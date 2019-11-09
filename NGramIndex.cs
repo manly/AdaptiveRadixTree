@@ -101,14 +101,14 @@ namespace System.Collections.Specialized
                     return false;
  
                 foreach(var ngram in this.GenerateNGram(value.Length)) {
-                    var ngram_string = value.Substring(ngram.Start, ngram.Length);
+                    var ngram_string = value.Substring(ngram.Index, ngram.Length);
  
                     if(!m_dict.TryGetValue(ngram_string, out var list)) {
                         list = new List<NGram>();
                         m_dict.Add(ngram_string, list);
                     }
  
-                    list.Add(new NGram(value, ngram.Start));
+                    list.Add(new NGram(value, ngram.Index));
                 }
             } else {
                 if(!m_itemsNotIndexed.Add(value))
@@ -151,7 +151,7 @@ namespace System.Collections.Specialized
                     // try find the first item so as to get the actual reference to the original string
                     // this allows significant speedup in string comparison for all future compares
                     var ngram        = enumerator.Current;
-                    var ngram_string = value.Substring(ngram.Start, ngram.Length);
+                    var ngram_string = value.Substring(ngram.Index, ngram.Length);
  
                     if(!m_dict.TryGetValue(ngram_string, out var list))
                         return false;
@@ -177,7 +177,7 @@ namespace System.Collections.Specialized
  
                     while(enumerator.MoveNext()) {
                         ngram        = enumerator.Current;
-                        ngram_string = value.Substring(ngram.Start, ngram.Length);
+                        ngram_string = value.Substring(ngram.Index, ngram.Length);
  
                         if(!m_dict.TryGetValue(ngram_string, out list))
                             return false;
@@ -465,7 +465,7 @@ namespace System.Collections.Specialized
 
             for(int i = 0; i < count; i++) {
                 ngramindex.Add(GetStableHashCode(i));
-                if(i++ % 10000 == 0)
+                if(i++ % 100000 == 0)
                     Console.WriteLine($"[{i - 1}] adding {DateTime.UtcNow - now}");
             }
 
@@ -745,11 +745,11 @@ namespace System.Collections.Specialized
             var section = format.Sections[sectionIndex];
  
             var sub_searches = SplitPosition(format.Format, section.SearchStart, section.SearchLength, this.WildcardUnknown) 
-                .Where(o => o.length >= this.MinNGramLength)
-                .SelectMany(o => this.MaxNGrams(o.start, o.length))
+                .Where(o => o.Length >= this.MinNGramLength)
+                .SelectMany(o => this.MaxNGrams(o.Index, o.Length))
                 .Select(ngram => {
-                    m_dict.TryGetValue(format.Format.Substring(ngram.start, ngram.len), out var list);
-                    return (ngram.start, list);
+                    m_dict.TryGetValue(format.Format.Substring(ngram.Index, ngram.Length), out var list);
+                    return (ngram.Index, list);
                 })
                 // avoid case where you get duplicated search patterns (ex: maxngramlength=2, search='qqq' => 'qq' & 'qq')
                 .GroupBy(o => o.list) // ie: referenceequals()
@@ -760,7 +760,7 @@ namespace System.Collections.Specialized
             if(sub_searches.Count == 0 || sub_searches[0].list == null)
                 yield break;
  
-            var searchFormatIndex = sub_searches[0].start;
+            var searchFormatIndex = sub_searches[0].Index;
             var filtered          = format.Sections.Length == 1 && section.ResultMustMatchAtStart && section.ResultMustMatchAtEnd ?
                 sub_searches[0].list.Where(o => o.Value.Length == format.TotalCharacters && filter(o.Value)) :
                 sub_searches[0].list.Where(o => o.Value.Length >= format.TotalCharacters && filter(o.Value));
@@ -880,12 +880,20 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private MaxNGrams()
-        private IEnumerable<(int start, int len)> MaxNGrams(int start, int length) {
+        private IEnumerable<NGramPart> MaxNGrams(int start, int length) {
             var len = Math.Min(length, this.MaxNGramLength);
             int max = start + length;
             while(start + len <= max) {
-                yield return (start, len);
+                yield return new NGramPart(start, len);
                 start++;
+            }
+        }
+        private readonly struct NGramPart {
+            public readonly int Index;
+            public readonly int Length;
+            public NGramPart(int index, int length) {
+                this.Index  = index;
+                this.Length = length;
             }
         }
         #endregion
@@ -894,17 +902,17 @@ namespace System.Collections.Specialized
         ///     Same as string.Split(), but for returns positions instead.
         ///     ex: "abcde".SplitPosition(1, 4, new []{'b'}) = {(2,3)}
         /// </summary>
-        private static IEnumerable<(int start, int length)> SplitPosition(string source, int startIndex, int length, char separator) {
+        private static IEnumerable<Range> SplitPosition(string source, int startIndex, int length, char separator) {
             int start = startIndex;
             int max   = startIndex + length;
             int i     = startIndex;
             for(; i < max; i++) {
                 if(source[i] == separator) {
-                    yield return (start, i - start);
+                    yield return new Range(start, i - start);
                     start = i + 1;
                 }
             }
-            yield return (start, i - start);
+            yield return new Range(start, i - start);
         }
         #endregion
         #region private BuildRegex()
@@ -1112,26 +1120,24 @@ namespace System.Collections.Specialized
         ///     Could also be used as an alternative to a Generalized Suffix Tree for string searching.
         /// </summary>
         /// <param name="length">The string.Length you wish to decompose.</param>
-        private IEnumerable<InternalNGram> GenerateNGram(int length) {
+        private IEnumerable<Range> GenerateNGram(int length) {
             // note: reverse-order is intentional, as that yields better performance (ie: more initial filtering)
             for(int n = Math.Min(length, this.MaxNGramLength); n >= this.MinNGramLength; n--) {
                 int count = length - n;
                 for(int i = 0; i <= count; i++)
-                    yield return new InternalNGram(i, n);
-            }
-        }
-        private readonly struct InternalNGram {
-            public readonly int Start;
-            public readonly int Length;
-            public InternalNGram(int start, int length) {
-                this.Start  = start;
-                this.Length = length;
+                    yield return new Range(i, n);
             }
         }
         #endregion
  
         // maybe replace dict by radix/btree and use btree.startswith()
         // or maybe try with StringBuilder() instead of List<NGram> for faster building
+        // consider making a startswith and endswith -specific index
+        // better yet, a startswith index where the positioning is known
+        // in other words, i could search for '??abc' where 'abc' starts at exactly index 2
+        // could also be done via List<NGram> -> BTree<NGram> ordered by position
+        // could also include a negativeindex ordering for end positioning
+        // or maybe just do List<NGram> -> List<NGram>[], where theres one list per position
  
             //CREATE INDEX titles_trigrams_gin_idx ON titles USING GIN(trigrams_vector(title));
             // SELECT COUNT(*) FROM titles WHERE trigrams_vector(title) @@ trigrams_query('adventures');
@@ -1199,6 +1205,16 @@ namespace System.Collections.Specialized
             }
  
             public override string ToString() => $"[{this.Value.Substring(this.Start)}] {this.Value}  ({{{this.Start}}})";
+        }
+        #endregion
+        #region private struct Range
+        private readonly struct Range {
+            public readonly int Index;
+            public readonly int Length;
+            public Range(int index, int length) {
+                this.Index  = index;
+                this.Length = length;
+            }
         }
         #endregion
     }
