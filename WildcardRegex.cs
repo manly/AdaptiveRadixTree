@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 
 namespace System.Collections.Specialized
@@ -11,7 +9,7 @@ namespace System.Collections.Specialized
     /// <summary>
     ///     Simplified wildcard search comparer.
     ///     Works like a regex, but with a wildcard syntax (ie: ?* characters).
-    ///     Uses non-greedy matching for '*' wildcard.
+    ///     Uses non-greedy matching for '*' wildcard except if they are at start/end (where they are considered greedy).
     ///     Usually 2x faster than using a compiled System.Text.RegularExpressions.Regex.
     /// </summary>
     /// <remarks>
@@ -33,6 +31,8 @@ namespace System.Collections.Specialized
         
         private readonly bool m_resultMustMatchAtStart; // result/match must start at 0.
         private readonly bool m_resultMustMatchAtEnd;   // result/match must end at {start+length}.
+        private readonly bool m_resultExpandToStart;    // result/match is expanded to start at 0. ex: '*aaa'
+        private readonly bool m_resultExpandToEnd;      // result/match is expanded to end at {start+length}. ex: 'aaa*'
         private readonly int m_totalCharacters;
         private readonly ConsecutiveParseSection[] m_sections; 
         private readonly bool m_isMatchAll;             // if(m_sections.Length==0 && true) format = '*', if(m_sections.Length==0 && false) format = ''
@@ -43,42 +43,46 @@ namespace System.Collections.Specialized
         /// <param name="regex_wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
         /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
         public WildcardRegex(string regex_wildcard_format, SearchOption option = SearchOption.ExactMatch, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
-            if(string.IsNullOrEmpty(regex_wildcard_format))
-                throw new FormatException(nameof(regex_wildcard_format));
-
             this.RegexWildcardFormat = regex_wildcard_format;
             this.Option              = option;
             m_wildcardUnknown        = wildcard_unknown_character;
             m_wildcardAnything       = wildcard_anything_character;
 
             if(!string.IsNullOrEmpty(regex_wildcard_format)) {
-                m_sections        = this.ParseSearchFormat(regex_wildcard_format);
-                m_totalCharacters = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
-                m_isMatchAll      = true; // only applies if section.Length==0, which would mean format='*'
+                m_resultMustMatchAtStart = (option == SearchOption.ExactMatch || option == SearchOption.StartsWith) && regex_wildcard_format[0] != m_wildcardAnything;
+                m_resultMustMatchAtEnd   = (option == SearchOption.ExactMatch || option == SearchOption.EndsWith) && regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
 
-                if(option == SearchOption.ExactMatch || option == SearchOption.StartsWith)
-                    m_resultMustMatchAtStart = regex_wildcard_format[0] != m_wildcardAnything;
-                if(option == SearchOption.ExactMatch || option == SearchOption.EndsWith)
-                    m_resultMustMatchAtEnd = regex_wildcard_format[regex_wildcard_format.Length - 1] != m_wildcardAnything;
+                m_sections               = this.ParseSearchFormat(regex_wildcard_format, ref m_resultMustMatchAtStart, ref m_resultMustMatchAtEnd);
+                m_totalCharacters        = m_sections.Sum(section => section.Length + section.WildcardUnknownBefore + section.WildcardUnknownAfter);
+                m_isMatchAll             = true; // only applies if section.Length==0, which would mean format='*'
+                m_resultExpandToStart    = this.IsExpandToStart();
+                m_resultExpandToEnd      = this.IsExpandToEnd();
                 
                 // if theres no wildcards
-                m_simpleEquals = m_sections.Length == 1 && 
-                    m_resultMustMatchAtStart && 
+                m_simpleEquals = m_sections.Length == 1 &&
+                    m_resultMustMatchAtStart &&
                     // check if theres no '?' within the section besides the initial/ending ?s
-                    m_sections[0].SearchIndex + m_sections[0].Search.Length == m_sections[0].Length;
+                    m_sections[0].SearchIndex == 0 && m_sections[0].Search.Length == m_sections[0].Length &&
+                    // dont search for '???'
+                    m_sections[0].Length > 0;
 
                 m_simpleContains = m_sections.Length == 1 && 
                     !m_resultMustMatchAtStart && 
-                    !m_resultMustMatchAtEnd &&
+                    !m_resultMustMatchAtEnd && 
+                    //!m_resultExpandToStart && !m_resultExpandToEnd && // whether you expand of not you can perform the search
                     // check if theres no '?' within the section besides the initial/ending ?s
-                    m_sections[0].SearchIndex + m_sections[0].Search.Length == m_sections[0].Length;
+                    m_sections[0].SearchIndex == 0 && m_sections[0].Search.Length == m_sections[0].Length &&
+                    // dont search for '???'
+                    m_sections[0].Length > 0;
             } else {
                 m_sections               = new ConsecutiveParseSection[0];
                 m_totalCharacters        = 0;
                 m_isMatchAll             = false;
                 m_resultMustMatchAtStart = false;
                 m_resultMustMatchAtEnd   = false;
-                m_simpleEquals            = false;
+                m_resultExpandToStart    = false;
+                m_resultExpandToEnd      = false;
+                m_simpleEquals           = false;
                 m_simpleContains         = false;
             }
         }
@@ -127,8 +131,8 @@ namespace System.Collections.Specialized
                 return new Result(startIndex, -1);
             // special case if format = '*' or ''
             if(m_sections.Length == 0)
-                return new Result(startIndex, m_isMatchAll ? 0 : -1);
-            // special case: no wildcards, use quick comparison
+                return new Result(startIndex, m_isMatchAll ? length : -1);
+            // special case: searching in a way that can be done with just one string.Equals() (ie: no * wildcards, ? wildcard only if at start and/or end)
             if(m_simpleEquals)
                 return this.SimpleEquals(value, startIndex, length);
             // special case: searching in a way that can be done with just one IndexOf()
@@ -149,6 +153,7 @@ namespace System.Collections.Specialized
                 index  += section.Length + section.WildcardUnknownAfter;
                 length -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
 
+                // avoid recomparing twice the same section
                 if(m_resultMustMatchAtEnd && m_sections.Length == 1)
                     return new Result(startIndex, length == 0 ? originalLength : -1);
                 
@@ -196,6 +201,11 @@ namespace System.Collections.Specialized
                 lastIndex   = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
 
+            if(m_resultExpandToStart)
+                firstIndex = startIndex;
+            if(m_resultExpandToEnd)
+                lastIndex = startIndex + originalLength;
+
             return new Result(firstIndex, lastIndex - firstIndex);
         }
         #endregion
@@ -223,7 +233,8 @@ namespace System.Collections.Specialized
             if(m_sections.Length == 0) {
                 if(m_isMatchAll)
                     // if format='*' return only one match instead of infinity match
-                    yield return new Result(startIndex, 0);
+                    yield return new Result(startIndex, length);
+                //else yield return new Result(startIndex, 0); // case format=''
                 yield break;
             }
 
@@ -262,7 +273,7 @@ namespace System.Collections.Specialized
                     var c = this.RegexWildcardFormat[i];
                     if(c == m_wildcardAnything)
                         capacity += 2;
-                    else if(!IsAlphaNumeric(c))
+                    else if(IsEscapingRequired(c))
                         capacity++;
                 }
             }
@@ -271,12 +282,14 @@ namespace System.Collections.Specialized
 
             if(regex_format == RegexFormat.SQL)
                 sb.Append('\'');
-            if(m_resultMustMatchAtStart)
+            if(this.Option == SearchOption.ExactMatch || this.Option == SearchOption.StartsWith)
                 sb.Append('^');
 
             // special case: means the format = '*'
             if(m_sections.Length == 0 && m_isMatchAll)
-                sb.Append(".*?"); // ? for non-greedy matching
+                sb.Append(".*");
+            else if(m_resultExpandToStart)
+                sb.Append(".*?"); // intentionally non-greedy
 
             for(int j = 0; j < m_sections.Length; j++) {
                 var section = m_sections[j];
@@ -295,7 +308,7 @@ namespace System.Collections.Specialized
                     else if(regex_format == RegexFormat.SQL && c == '\'')
                         sb.Append("''");
                     else {
-                        if(!IsAlphaNumeric(c))
+                        if(IsEscapingRequired(c))
                             sb.Append('\\');
                         sb.Append(c);
                     }
@@ -305,21 +318,23 @@ namespace System.Collections.Specialized
                     sb.Append('.');
             }
 
-            if(m_resultMustMatchAtEnd)
+            if(m_resultExpandToEnd)
+                sb.Append(".*"); // intentionally greedy
+
+            if(this.Option == SearchOption.ExactMatch || this.Option == SearchOption.EndsWith)
                 sb.Append('$');
             if(regex_format == RegexFormat.SQL)
                 sb.Append('\'');
 
             return sb.ToString();
 
-            bool IsAlphaNumeric(char c) {
-                //char.IsLetterOrDigit(c)
-                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+            bool IsEscapingRequired(char c) {
+                return ".$^{[(|)*+?\\".IndexOf(c) >= 0;
             }
         }
         /// <summary>
         ///     Converts to a RegularExpression.
-        ///     Typically it will run at least 3x slower than this implementation.
+        ///     Typically it will run 2x slower than this implementation.
         /// </summary>
         public System.Text.RegularExpressions.Regex ToRegex(System.Text.RegularExpressions.RegexOptions regex_options) {
             // this will actually rewrite the regex to be more optimal
@@ -333,7 +348,7 @@ namespace System.Collections.Specialized
         }
         /// <summary>
         ///     Converts to a RegularExpression.
-        ///     Typically it will run at least 3x slower than this implementation.
+        ///     Typically it will run 2x slower than this implementation.
         /// </summary>
         /// <param name="wildcard_format">The wildcard pattern. ex: '20??-01-01*'</param>
         /// <param name="wildcard_anything_character">Non-greedy matching (least characters)</param>
@@ -358,7 +373,7 @@ namespace System.Collections.Specialized
             //    else if(c == wildcard_anything_character)
             //        sb.Append(".*?"); // ? for non-greedy matching
             //    else {
-            //        if(!IsAlphaNumeric(c))
+            //        if(IsEscapingRequired(c))
             //            sb.Append('\\');
             //        sb.Append(c);
             //    }
@@ -369,17 +384,88 @@ namespace System.Collections.Specialized
             //
             //return new System.Text.RegularExpressions.Regex(sb.ToString());
             //
-            //bool IsAlphaNumeric(char c) {
-            //    //char.IsLetterOrDigit(c)
-            //    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+            //bool IsEscapingRequired(char c) {
+            //    return ".$^{[(|)*+?\\".IndexOf(c) >= 0;
             //}
         }
         #endregion
 
-        // todo: should have pre-built matchers for cases: exact match, partial match without ?/*, startswith with only ending ?, endswith with only starting ?
-        // this should massively speed up those cases
-        // potential conceptual flaw: all matches must be greedy because searching *.exe for files should return abc.exe and not .exe
-        // unclear whether that means only return results expanded to include the end of string or not.
+        #region static Test()
+        public static void Test() {
+            var tests = new []{
+                new { Regex = "",                  Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "*",                 Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, 3),  Comment = "" },
+                new { Regex = "**",                Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, 3),  Comment = "check * optimized to 1 section" },
+                                                                            
+                new { Regex = "aaa",               Test = "aa",             Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "aaa",               Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, 3),  Comment = "" },
+                new { Regex = "aaa",               Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa",              Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa",              Test = "Xaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "?aaa",              Test = "XaaaX",          Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "aaa?",              Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "aaa?",              Test = "aaaX",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "aaa?",              Test = "XaaaX",          Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "Xaaa",           Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "aaaX",           Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "XaaaX",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
+                new { Regex = "a?aa",              Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "a?aa",              Test = "aXaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "a?aa",              Test = "aaaX",           Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "a?aa",              Test = "aXaaX",          Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "???",               Test = "aa",             Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "???",               Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, 3),  Comment = "" },
+                new { Regex = "???",               Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                                                                            
+                new { Regex = "*aaaa",             Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "*aaaa",             Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "*aaaa",             Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaXaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
+                new { Regex = "aa**aa",            Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "ignoring double *" },
+                new { Regex = "aa**aa",            Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "ignoring double *" },
+                                                                            
+                new { Regex = "*aaaa?bbb*",        Test = "aaaabbb",        Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "aaaaXbbb",       Option = SearchOption.ExactMatch, Result = (0, 8),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "XaaaaXbbb",      Option = SearchOption.ExactMatch, Result = (0, 9),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "aaaaXbbbX",      Option = SearchOption.ExactMatch, Result = (0, 9),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "XaaaaXbbbX",     Option = SearchOption.ExactMatch, Result = (0, 10), Comment = "" },
+                new { Regex = "??*??*aaaa",        Test = "XXXXaaaa",       Option = SearchOption.ExactMatch, Result = (0, 8),  Comment = "optimize: moved ??" },
+                new { Regex = "aaaa*??*??",        Test = "aaaaXXXX",       Option = SearchOption.ExactMatch, Result = (0, 8),  Comment = "optimize: moved ??" },
+                new { Regex = "??*??aaaaa",        Test = "XXXaaaaa",       Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "optimize: moved ??" },
+                new { Regex = "??*??aaaaa",        Test = "XXXXaaaaa",      Option = SearchOption.ExactMatch, Result = (0, 9),  Comment = "optimize: moved ??" },
+                new { Regex = "??*??aaaaa",        Test = "XXXXXaaaaa",     Option = SearchOption.ExactMatch, Result = (0, 10), Comment = "optimize: moved ??" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXX",       Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "optimize: moved ??" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXXX",      Option = SearchOption.ExactMatch, Result = (0, 9),  Comment = "optimize: moved ??" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXXXX",     Option = SearchOption.ExactMatch, Result = (0, 10), Comment = "optimize: moved ??" },
+
+                new { Regex = "??*??aaaaa?*??*??", Test = "XXXXaaaaaXXXXX", Option = SearchOption.ExactMatch, Result = (0, 14), Comment = "should have only one parse section" },
+
+                new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXX",     Option = SearchOption.ExactMatch, Result = (0, 10), Comment = "" },
+                new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXXX",    Option = SearchOption.ExactMatch, Result = (0, 11), Comment = "test for greedy match" },
+            };
+
+            foreach(var test in tests) {
+                var regex = new WildcardRegex(test.Regex, test.Option);
+
+                var result = regex.Match(test.Test);
+
+                var is_success = result.Index == test.Result.Item1 && result.Length == test.Result.Item2;
+
+                if(test.Comment.Length > 0)
+                    Console.WriteLine(test.Comment);
+                Console.WriteLine($"{nameof(WildcardRegex)}(\"{test.Regex}\", {test.Option.ToString()}).Match(\"{test.Test}\") = ({result.Index},{result.Length})  <{(is_success ? "success" : $"failure expected {test.Result.Item1},{test.Result.Item2}")}>");
+                Console.WriteLine($".net re-written query: \"{regex.ToRegex()}\"");
+            }
+
+            Console.ReadLine();
+        }
+        #endregion
 
         #region ToString()
         public override string ToString() {
@@ -388,7 +474,7 @@ namespace System.Collections.Specialized
         #endregion
 
         #region private ParseSearchFormat()
-        private ConsecutiveParseSection[] ParseSearchFormat(string format) {
+        private ConsecutiveParseSection[] ParseSearchFormat(string format, ref bool resultMustMatchAtStart, ref bool resultMustMatchAtEnd) {
             var sections = this.ParseSearchFormatSections(format)
                 .Where(o => o.Length > 0) // avoids empty sections in cases such as 'aa**aa', '*aa' and 'aa*'
                 .Select(o => new ParsingSection(){ Start = o.Index, Length = o.Length })
@@ -413,15 +499,24 @@ namespace System.Collections.Specialized
             // merge '??' section with prev
             // ex: 'abc*??*456' -> 'abc??*456'
             int index = 1;
-            while(index < sections.Count - (m_resultMustMatchAtEnd ? 1 : 0)) {
+            while(index < sections.Count) {
                 var section = sections[index];
-                if(section.Length == 0 && (section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0)) {
+                if(section.Length == 0) { // implicitly:  section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0
+                    if(resultMustMatchAtEnd && index == sections.Count - 1) // ie: 'abc*??' -> 'abc??*'
+                        resultMustMatchAtEnd = false;
+                    
                     sections[index - 1].WildcardUnknownAfter += section.WildcardUnknownBefore + section.WildcardUnknownAfter;
                     sections.RemoveAt(index);
                 } else 
                     index++;
             }
-            // note: can't merge a starting '??' section with the following one, because the returned matches would be different
+            // then do it for the first section
+            // ex: '??*abc' -> '*??abc'
+            if(sections.Count > 1 && sections[0].Length == 0) { // implicitly:  section.WildcardUnknownBefore > 0 || section.WildcardUnknownAfter > 0
+                resultMustMatchAtStart = false;
+                sections[1].WildcardUnknownBefore += sections[0].WildcardUnknownBefore + sections[0].WildcardUnknownAfter;
+                sections.RemoveAt(0);
+            }
 
             // move ['??' at section start] to [previous section end] for faster parse
             // ex: 'abc?*??456' -> 'abc???*456'
@@ -523,6 +618,8 @@ namespace System.Collections.Specialized
         ///     Direct string.Equals()
         /// </summary>
         private Result SimpleEquals(string value, int startIndex, int length) {
+            // note: this case/method can only occur if theres one section, which means no check for m_resultExpandToStart
+
             var section    = m_sections[0];
             var search     = section.Search;
             var extraChars = section.WildcardUnknownBefore + section.WildcardUnknownAfter;
@@ -539,13 +636,16 @@ namespace System.Collections.Specialized
                 0,
                 search.Length - section.WildcardUnknownAfter);
 
-            return new Result(startIndex, cmp != 0 ? -1 : search.Length + extraChars);
+            if(cmp != 0)
+                return new Result(startIndex, -1);
+            
+            return new Result(startIndex, m_resultExpandToEnd ? length : search.Length + extraChars);
         }
         #endregion
         #region private SimpleContains()
         /// <summary>
         ///     Searching in a way that can be done with just one IndexOf()
-        ///     this may include patterns such as: '*??aaaaa?*??*' but not '*aaaa?bbb*'
+        ///     this may include patterns such as: '??*??aaaaa?*??*??' but not '*aaaa?bbb*'
         /// </summary>
         private Result SimpleContains(string value, int startIndex, int length) {
             var section    = m_sections[0];
@@ -556,9 +656,8 @@ namespace System.Collections.Specialized
             if(diff < 0)
                 return new Result(startIndex, -1);
 
+            //int pos = value.IndexOf(section.Search, startIndex + section.WildcardUnknownBefore, length - extraChars, StringComparison.Ordinal);
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
-
-            //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
             int pos = compareInfo.IndexOf(
                 value,
                 section.Search,
@@ -568,8 +667,19 @@ namespace System.Collections.Specialized
             
             if(pos < 0)
                 return new Result(startIndex, -1);
-            else
-                return new Result(pos - section.WildcardUnknownBefore, search.Length + extraChars);
+            
+            var start = pos - section.WildcardUnknownBefore;
+            var len   = search.Length + extraChars;
+
+            if(m_resultExpandToStart) {
+                var match_end_pos = start + len;
+                len   = match_end_pos - startIndex;
+                start = startIndex;
+            }
+            if(m_resultExpandToEnd)
+                len = length - start;
+
+            return new Result(start, len);
         }
         #endregion
         #region private StringEqualWithUnknownCharacters()
@@ -633,6 +743,53 @@ namespace System.Collections.Specialized
             }
 
             return -1;
+        }
+        #endregion
+        #region private IsExpandToStart()
+        /// <summary>
+        ///     Checks if there is a '*' at the start with or without optimisations.
+        /// </summary>
+        private bool IsExpandToStart() {
+            // check case '*aaa'
+            // because of optimisations:
+            //     '*?*?*??aaaa' -> '*????aaaa'
+            //     '???*aaa' -> '*???aaa'
+            // m_resultMustMatchAtStart will be false here because we can't do a string.equals() on unclear boundaries
+            // so all I care to know is whether there is any * prior to the first non-?* character
+
+            if(m_sections.Length > 0) {
+                var max = m_sections[0].Start; // dont do "- m_sections[0].WildcardUnknownBefore" since that number may have been optimized in case like '????*?aa'
+                for(int i = 0; i < max; i++) {
+                    // no need to check for any other character as non-?* can't exist here outside a section
+                    if(this.RegexWildcardFormat[i] == m_wildcardAnything)
+                        return true;
+                }
+            }
+            return false;
+        }
+        #endregion
+        #region private IsExpandToEnd()
+        /// <summary>
+        ///     Checks if there is a '*' at the end with or without optimisations.
+        /// </summary>
+        private bool IsExpandToEnd() {
+            // check case 'aaa*'
+            // because of optimisations:
+            //     'aaaa??*?*?*' -> 'aaaa????*'
+            //     'aaa*???' -> 'aaa???*'
+            // m_resultMustMatchAtEnd will be false here because we can't do a string.equals() on unclear boundaries
+            // so all I care to know is whether there is any * after to the last non-?* character
+
+            if(m_sections.Length > 0) {
+                var section = m_sections[m_sections.Length - 1];
+                var start   = section.Start + section.Length; // dont do "+ section.WildcardUnknownAfter" since that number may have been optimized in case like 'aa?*?????'
+                for(int i = start; i < this.RegexWildcardFormat.Length; i++) {
+                    // no need to check for any other character as non-?* can't exist here outside a section
+                    if(this.RegexWildcardFormat[i] == m_wildcardAnything)
+                        return true;
+                }
+            }
+            return false;
         }
         #endregion
         #region private static SplitPosition()
