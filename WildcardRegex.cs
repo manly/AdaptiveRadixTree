@@ -9,8 +9,7 @@ namespace System.Collections.Specialized
     /// <summary>
     ///     Simplified wildcard search comparer.
     ///     Works like a regex, but with a wildcard syntax (ie: ?* characters).
-    ///     Uses non-greedy matching for '*' wildcard except if they are at start/end (where they are considered greedy).
-    ///     Usually 2x faster than using a compiled System.Text.RegularExpressions.Regex.
+    ///     Usually 2x faster than using a compiled System.Text.RegularExpressions.Regex, gets faster on more complex expressions.
     /// </summary>
     /// <remarks>
     ///     If pure performance is needed, long search patterns could be replaced with a pre-computed Boyer-Moore string search,
@@ -201,7 +200,7 @@ namespace System.Collections.Specialized
                 lastIndex   = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
 
-            if(m_resultExpandToStart)
+            if(m_resultExpandToStart || firstIndex < 0)
                 firstIndex = startIndex;
             if(m_resultExpandToEnd)
                 lastIndex = startIndex + originalLength;
@@ -426,9 +425,10 @@ namespace System.Collections.Specialized
                 new { Regex = "aaaa*",             Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
                 new { Regex = "aa*aa",             Test = "aaa",            Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
                 new { Regex = "aa*aa",             Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
                 new { Regex = "aa*aa",             Test = "aaXaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "" },
                 new { Regex = "aa**aa",            Test = "aaaa",           Option = SearchOption.ExactMatch, Result = (0, 4),  Comment = "ignoring double *" },
-                new { Regex = "aa**aa",            Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "ignoring double *" },
+                new { Regex = "aa**aa",            Test = "aaaaa",          Option = SearchOption.ExactMatch, Result = (0, 5),  Comment = "ignoring double *, result could be (0,4) or (0,5)" },
                                                                             
                 new { Regex = "*aaaa?bbb*",        Test = "aaaabbb",        Option = SearchOption.ExactMatch, Result = (0, -1), Comment = "" },
                 new { Regex = "*aaaa?bbb*",        Test = "aaaaXbbb",       Option = SearchOption.ExactMatch, Result = (0, 8),  Comment = "" },
@@ -448,6 +448,63 @@ namespace System.Collections.Specialized
 
                 new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXX",     Option = SearchOption.ExactMatch, Result = (0, 10), Comment = "" },
                 new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXXX",    Option = SearchOption.ExactMatch, Result = (0, 11), Comment = "test for greedy match" },
+
+                new { Regex = "",                  Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "*",                 Test = "aaa",            Option = SearchOption.Partial, Result = (0, 3),  Comment = "" },
+                new { Regex = "**",                Test = "aaa",            Option = SearchOption.Partial, Result = (0, 3),  Comment = "" },
+                                                                                                  
+                new { Regex = "aaa",               Test = "aa",             Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "aaa",               Test = "aaa",            Option = SearchOption.Partial, Result = (0, 3),  Comment = "" },
+                new { Regex = "aaa",               Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 3),  Comment = "differs from exactmatch" },
+                new { Regex = "?aaa",              Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa",              Test = "Xaaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "?aaa",              Test = "XaaaX",          Option = SearchOption.Partial, Result = (0, 4),  Comment = "differs from exactmatch" },
+                new { Regex = "aaa?",              Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "aaa?",              Test = "aaaX",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "aaa?",              Test = "XaaaX",          Option = SearchOption.Partial, Result = (1, 4),  Comment = "differs from exactmatch" },
+                new { Regex = "?aaa?",             Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "Xaaa",           Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "aaaX",           Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "?aaa?",             Test = "XaaaX",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                new { Regex = "a?aa",              Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "a?aa",              Test = "aXaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "a?aa",              Test = "aaaX",           Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "a?aa",              Test = "aXaaX",          Option = SearchOption.Partial, Result = (0, 4),  Comment = "differs from exactmatch" },
+                new { Regex = "???",               Test = "aa",             Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "???",               Test = "aaa",            Option = SearchOption.Partial, Result = (0, 3),  Comment = "" },
+                new { Regex = "???",               Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 3),  Comment = "differs from exactmatch" },
+                                                                                                  
+                new { Regex = "*aaaa",             Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "*aaaa",             Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "*aaaa",             Test = "aaaaa",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "aaaa*",             Test = "aaaaa",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaa",            Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaaaa",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                new { Regex = "aa*aa",             Test = "aaXaa",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                new { Regex = "aa**aa",            Test = "aaaa",           Option = SearchOption.Partial, Result = (0, 4),  Comment = "" },
+                new { Regex = "aa**aa",            Test = "aaaaa",          Option = SearchOption.Partial, Result = (0, 5),  Comment = "" },
+                                                                                                  
+                new { Regex = "*aaaa?bbb*",        Test = "aaaabbb",        Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "aaaaXbbb",       Option = SearchOption.Partial, Result = (0, 8),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "XaaaaXbbb",      Option = SearchOption.Partial, Result = (0, 9),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "aaaaXbbbX",      Option = SearchOption.Partial, Result = (0, 9),  Comment = "" },
+                new { Regex = "*aaaa?bbb*",        Test = "XaaaaXbbbX",     Option = SearchOption.Partial, Result = (0, 10), Comment = "" },
+                new { Regex = "??*??*aaaa",        Test = "XXXXaaaa",       Option = SearchOption.Partial, Result = (0, 8),  Comment = "" },
+                new { Regex = "aaaa*??*??",        Test = "aaaaXXXX",       Option = SearchOption.Partial, Result = (0, 8),  Comment = "" },
+                new { Regex = "??*??aaaaa",        Test = "XXXaaaaa",       Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "??*??aaaaa",        Test = "XXXXaaaaa",      Option = SearchOption.Partial, Result = (0, 9),  Comment = "" },
+                new { Regex = "??*??aaaaa",        Test = "XXXXXaaaaa",     Option = SearchOption.Partial, Result = (0, 10), Comment = "" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXX",       Option = SearchOption.Partial, Result = (0, -1), Comment = "" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXXX",      Option = SearchOption.Partial, Result = (0, 9),  Comment = "" },
+                new { Regex = "aaaaa??*??",        Test = "aaaaaXXXXX",     Option = SearchOption.Partial, Result = (0, 10), Comment = "" },
+                                                                                                  
+                new { Regex = "??*??aaaaa?*??*??", Test = "XXXXaaaaaXXXXX", Option = SearchOption.Partial, Result = (0, 14), Comment = "" },
+                                                                                                  
+                new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXX",     Option = SearchOption.Partial, Result = (0, 10), Comment = "" },
+                new { Regex = "*??aaaaa?*??*",     Test = "XXaaaaaXXXX",    Option = SearchOption.Partial, Result = (0, 11), Comment = "" },
             };
 
             foreach(var test in tests) {
@@ -658,12 +715,24 @@ namespace System.Collections.Specialized
 
             //int pos = value.IndexOf(section.Search, startIndex + section.WildcardUnknownBefore, length - extraChars, StringComparison.Ordinal);
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
-            int pos = compareInfo.IndexOf(
-                value,
-                section.Search,
-                startIndex + section.WildcardUnknownBefore,
-                length - extraChars,
-                System.Globalization.CompareOptions.Ordinal);
+            
+            int pos;
+            if(!m_resultExpandToStart) {
+                pos = compareInfo.IndexOf(
+                    value,
+                    section.Search,
+                    startIndex + section.WildcardUnknownBefore,
+                    length - extraChars,
+                    System.Globalization.CompareOptions.Ordinal);
+            } else {
+                // if search is '*aa', you want to find the last 'aa'
+                pos = compareInfo.LastIndexOf(
+                    value,
+                    section.Search,
+                    startIndex + length - 1 - section.WildcardUnknownAfter,
+                    length - extraChars,
+                    System.Globalization.CompareOptions.Ordinal);
+            }
             
             if(pos < 0)
                 return new Result(startIndex, -1);
