@@ -1194,8 +1194,8 @@ namespace System.Collections.Specialized
             EndsWith,
         }
         #endregion
-        #region private sealed class NGram
-        private sealed class NGram {
+        #region private readonly struct NGram
+        private readonly struct NGram {
             public readonly string Value;
             public readonly int Start;
  
