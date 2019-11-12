@@ -167,10 +167,26 @@ namespace System.Collections.Specialized
                     return new Result(startIndex, -1);
                 lastIndex = startIndex + originalLength;
                 length   -= section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
+            } else if(m_sections.Length > 1) { // implicit: !m_resultMustMatchAtEnd
+                // if we have 'aa*bb', we want to search the last instance of 'bb' in order to force greedy matches
+                // without this, regex('aa*bb').Match('aabbb') would match 'aabb' instead of 'aabbb'
+                // we want all * to act greedy because otherwise '*.exe' would only match the '.exe' instead of 'file.exe'
+                var section = m_sections[m_sections.Length - 1];
+                if(section.Length > 0) {
+                    int last2 = this.StringLastIndexOfWithUnknownCharacters(value, index, length, in section);
+                    if(last2 < 0)
+                        return new Result(startIndex, -1);
+                    lastIndex     = last2 + section.Length + section.WildcardUnknownAfter;
+                    length       -= originalLength - last2 + section.WildcardUnknownBefore;
+                } else {
+                    // case where format='??'  or  'aa*?'
+                    lastIndex = startIndex + originalLength;
+                    length   -= section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+                }
             }
 
             int last        = -1;
-            int lastSection = m_sections.Length - (m_resultMustMatchAtEnd ? 1 : 0);
+            int lastSection = m_sections.Length - (m_resultMustMatchAtEnd || m_sections.Length > 1 ? 1 : 0);
             
             while(sectionIndex < lastSection && length > 0) {
                 var section = m_sections[sectionIndex];
@@ -195,7 +211,7 @@ namespace System.Collections.Specialized
             if(sectionIndex != lastSection || length < 0)
                 return new Result(startIndex, -1);
 
-            if(!m_resultMustMatchAtEnd) {
+            if(lastIndex < 0) {
                 var section = m_sections[m_sections.Length - 1];
                 lastIndex   = last + section.WildcardUnknownBefore + section.Length + section.WildcardUnknownAfter;
             }
@@ -804,6 +820,51 @@ namespace System.Collections.Specialized
                 if(!endMatches) {
                     var diff = (pos + 1) - index;
                     index  += diff;
+                    length -= diff;
+                    continue;
+                }
+
+                return pos - section.SearchIndex - section.WildcardUnknownBefore;
+            }
+
+            return -1;
+        }
+        #endregion
+        #region private StringLastIndexOfWithUnknownCharacters()
+        /// <summary>
+        ///     Returns the index of section, assuming the section may contain WildcardUnknown '?'.
+        ///     Search may not contain any WildcardAnything '*'.
+        /// </summary>
+        private int StringLastIndexOfWithUnknownCharacters(string source, int index, int length, in ConsecutiveParseSection section) {
+            int charsBeforeSearch = section.WildcardUnknownBefore + section.SearchIndex;
+            int charsAfterSearch  = section.Length - section.Search.Length - section.SearchIndex;
+            
+            index            = index + length - charsAfterSearch - section.WildcardUnknownAfter - 1;
+            length          -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+            var compareInfo  = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+
+            while(length > 0) {
+                //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
+                int pos = compareInfo.LastIndexOf(
+                    source,
+                    section.Search,
+                    index,
+                    length,
+                    System.Globalization.CompareOptions.Ordinal);
+                if(pos < 0)
+                    return -1;
+
+                bool startMatches = !section.ContainsCharsBeforeSearchIndex || this.StringEqualWithUnknownCharacters(source, pos - section.SearchIndex, this.RegexWildcardFormat, section.Start, section.SearchIndex);
+                if(!startMatches) {
+                    var diff = (pos + 1) - index;
+                    index  -= diff;
+                    length -= diff;
+                    continue;
+                }
+                bool endMatches = !section.ContainsCharsAfterSearchIndex || this.StringEqualWithUnknownCharacters(source, pos + section.Search.Length, this.RegexWildcardFormat, section.Start + section.SearchIndex + section.Search.Length, charsAfterSearch);
+                if(!endMatches) {
+                    var diff = (pos + 1) - index;
+                    index  -= diff;
                     length -= diff;
                     continue;
                 }
