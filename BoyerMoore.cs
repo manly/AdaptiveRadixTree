@@ -115,7 +115,7 @@ namespace System.Text
         // implementations
         #region private struct BoyerMooreImplementation_StringInt32
         private readonly struct BoyerMooreImplementation_StringInt32 : IPrebuiltSearchAlgorithm<string> {
-            private const int ALPHABET_SIZE = 65536; // 256 / 65536
+            private const int ALPHABET_SIZE = 65536;
 
             private readonly int[] m_delta1; // size = ALPHABET_SIZE
             private readonly int[] m_delta2; // size = m_search.Length
@@ -221,7 +221,7 @@ namespace System.Text
         #endregion
         #region private struct BoyerMooreImplementation_StringUInt16
         private readonly struct BoyerMooreImplementation_StringUInt16 : IPrebuiltSearchAlgorithm<string> {
-            private const int ALPHABET_SIZE = 65536; // 256 / 65536
+            private const int ALPHABET_SIZE = 65536;
 
             private readonly ushort[] m_delta1; // size = ALPHABET_SIZE
             private readonly ushort[] m_delta2; // size = m_search.Length
@@ -297,7 +297,7 @@ namespace System.Text
         #endregion
         #region private struct BoyerMooreImplementation_StringUInt8
         private readonly struct BoyerMooreImplementation_StringUInt8 : IPrebuiltSearchAlgorithm<string> {
-            private const int ALPHABET_SIZE = 65536; // 256 / 65536
+            private const int ALPHABET_SIZE = 65536;
 
             private readonly byte[] m_delta1; // size = ALPHABET_SIZE
             private readonly byte[] m_delta2; // size = m_search.Length

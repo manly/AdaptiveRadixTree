@@ -500,8 +500,8 @@ namespace System.Collections.Specialized
 
             random = new Random(unchecked((int)SEED));
             Bench("CONTAINS", 
-                SearchOption.Partial, 
-                WildcardRegex.SearchOption.Partial,
+                SearchOption.Contains, 
+                WildcardRegex.SearchOption.Contains,
                 Enumerable.Range(0, int.MaxValue)
                     .Select(o => GetStableHashCode(random.Next(count)))
                     .SelectMany(o => Enumerable.Range(MIN_NGRAM, Math.Max(0, o.Length - MIN_NGRAM)).Select(k => o.Substring(0, k))));
@@ -509,8 +509,8 @@ namespace System.Collections.Specialized
             foreach(var wildcard in new[] { '?', '*' }) {
                 random = new Random(unchecked((int)SEED));
                 Bench($"CONTAINS WITH ONE {wildcard}",
-                    SearchOption.Partial,
-                    WildcardRegex.SearchOption.Partial,
+                    SearchOption.Contains,
+                    WildcardRegex.SearchOption.Contains,
                     Enumerable.Range(0, int.MaxValue)
                         .Select(o => GetStableHashCode(random.Next(count)))
                         .SelectMany(item => Enumerable.Range(MIN_NGRAM + 1, Math.Max(0, item.Length - MIN_NGRAM - 1)).Select(j => item.Substring(0, j).ToCharArray()))
@@ -669,7 +669,7 @@ namespace System.Collections.Specialized
                 // contains
                 foreach(var item in items) {
                     for(int i = MIN_NGRAM; i < item.Length; i++)
-                        Compare(items, item.Substring(0, i), SearchOption.Partial);
+                        Compare(items, item.Substring(0, i), SearchOption.Contains);
                 }
  
                 // contains with one ?
@@ -685,7 +685,7 @@ namespace System.Collections.Specialized
  
                             var c = key[j];
                             key[j] = '?';
-                            Compare(items, new string(key), SearchOption.Partial);
+                            Compare(items, new string(key), SearchOption.Contains);
                             key[j] = c;
                         }
                     }
@@ -921,7 +921,7 @@ namespace System.Collections.Specialized
             WildcardRegex.SearchOption option;
             switch(match) {
                 case SearchOption.ExactMatch: option = WildcardRegex.SearchOption.ExactMatch; break;
-                case SearchOption.Partial:    option = WildcardRegex.SearchOption.Partial; break;
+                case SearchOption.Contains:   option = WildcardRegex.SearchOption.Contains; break;
                 case SearchOption.StartsWith: option = WildcardRegex.SearchOption.StartsWith; break;
                 case SearchOption.EndsWith:   option = WildcardRegex.SearchOption.EndsWith; break;
                 default: throw new NotImplementedException();
@@ -1184,7 +1184,7 @@ namespace System.Collections.Specialized
             ///     equivalent to "value LIKE '%searchstring%'"
             ///     ie: contains(value)
             /// </summary>
-            Partial,
+            Contains,
             /// <summary>
             ///     equivalent to "value LIKE 'searchstring%'"
             /// </summary>
