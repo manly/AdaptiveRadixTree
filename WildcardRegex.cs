@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 
 
-namespace System.Collections.Specialized
+namespace System.Text.RegularExpressions
 {
     /// <summary>
     ///     Simplified wildcard search comparer.
