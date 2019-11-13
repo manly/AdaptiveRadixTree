@@ -1,4 +1,6 @@
-﻿using System;
+﻿#define ALLOW_PREBUILT_BOYER_MOORE  // comment if you want a simpler/self-contained class. Will reduce performance 2x+ on all indexof() calls
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -729,6 +731,24 @@ namespace System.Text.RegularExpressions
             if(diff < 0)
                 return new Result(startIndex, -1);
 
+#if ALLOW_PREBUILT_BOYER_MOORE
+            int pos;
+            if(!m_resultExpandToStart) {
+                pos = section.BoyerMoore.IndexOf(
+                    value,
+                    startIndex + section.WildcardUnknownBefore,
+                    length - extraChars);
+            } else {
+                // if search is '*aa', you want to find the last 'aa'
+                var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+                pos = compareInfo.LastIndexOf(
+                    value,
+                    section.Search,
+                    startIndex + length - 1 - section.WildcardUnknownAfter,
+                    length - extraChars,
+                    System.Globalization.CompareOptions.Ordinal);
+            }
+#else
             //int pos = value.IndexOf(section.Search, startIndex + section.WildcardUnknownBefore, length - extraChars, StringComparison.Ordinal);
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
             
@@ -749,7 +769,8 @@ namespace System.Text.RegularExpressions
                     length - extraChars,
                     System.Globalization.CompareOptions.Ordinal);
             }
-            
+#endif
+
             if(pos < 0)
                 return new Result(startIndex, -1);
             
@@ -794,11 +815,16 @@ namespace System.Text.RegularExpressions
             int charsBeforeSearch = section.WildcardUnknownBefore + section.SearchIndex;
             int charsAfterSearch  = section.Length - section.Search.Length - section.SearchIndex;
             
-            index          += charsBeforeSearch;
-            length         -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownAfter;
+            index  += charsBeforeSearch;
+            length -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownAfter;
+#if !ALLOW_PREBUILT_BOYER_MOORE
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+#endif
 
             while(length > 0) {
+#if ALLOW_PREBUILT_BOYER_MOORE
+                int pos = section.BoyerMoore.IndexOf(source, index, length);
+#else
                 //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
                 int pos = compareInfo.IndexOf(
                     source,
@@ -806,6 +832,7 @@ namespace System.Text.RegularExpressions
                     index,
                     length,
                     System.Globalization.CompareOptions.Ordinal);
+#endif
                 if(pos < 0)
                     return -1;
 
@@ -978,7 +1005,9 @@ namespace System.Text.RegularExpressions
             public readonly int SearchIndex;                     // 4, the index starting from this.Start
             public readonly bool ContainsCharsBeforeSearchIndex; // true (true if theres any characters preceding '1234' and after the initial '???')
             public readonly bool ContainsCharsAfterSearchIndex;  // false (true if theres any characters following '1234' and before the final '?????')
-
+#if ALLOW_PREBUILT_BOYER_MOORE
+            public readonly IPrebuiltSearchAlgorithm<string> BoyerMoore;
+#endif
             public ConsecutiveParseSection(int start, int length, int wildcardBefore, int wildcardAfter, string search, int searchIndex) {
                 this.Start                          = start;
                 this.Length                         = length;
@@ -988,6 +1017,9 @@ namespace System.Text.RegularExpressions
                 this.SearchIndex                    = searchIndex;
                 this.ContainsCharsBeforeSearchIndex = searchIndex > 0;
                 this.ContainsCharsAfterSearchIndex  = searchIndex + search.Length < length;
+#if ALLOW_PREBUILT_BOYER_MOORE
+                this.BoyerMoore                     = System.Text.BoyerMoore.Build(search);
+#endif
             }
         }
         #endregion

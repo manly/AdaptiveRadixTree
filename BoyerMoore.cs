@@ -1,13 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-
-
-namespace System.Text
+﻿namespace System.Text
 {
     public interface IPrebuiltSearchAlgorithm<T> {
         int IndexOf(T data, int startIndex, int count);
     }
 
+    /// <summary>
+    ///     Provides an efficient Boyer-Moore string search implementation.
+    ///     worst case: O(n)  searches
+    /// </summary>
     public static class BoyerMoore {
         #region static Build()
         public static IPrebuiltSearchAlgorithm<string> Build(string pattern) {
