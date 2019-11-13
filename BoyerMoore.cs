@@ -2,11 +2,20 @@
 {
     public interface IPrebuiltSearchAlgorithm<T> {
         int IndexOf(T data, int startIndex, int count);
+        int LastIndexOf(T data, int startIndex, int count);
     }
 
     /// <summary>
     ///     Provides an efficient Boyer-Moore string search implementation.
-    ///     worst case: O(n)  searches
+    ///     
+    ///               ====== Boyer-Moore =======     ===== KNUTH-MORRIS-PRATT =====
+    ///               string          byte[]         
+    ///     size:     O(m + 65536)    O(m + 256)     O(n)
+    ///     build:    O(m + 65536)    O(m + 256)     O(n)
+    ///     search:   O(n)                           O(n)
+    ///     
+    ///     Boyer-Moore is better suited on longer patterns and less repetitive inputs, aka "natural text".
+    ///     Knuth-Morris-Pratt is better suited for cases like DNA searching (ACTG).
     /// </summary>
     public static class BoyerMoore {
         #region static Build()
@@ -56,6 +65,20 @@
         }
         public static int IndexOf(this IPrebuiltSearchAlgorithm<byte[]> searchAlgorithm, byte[] data, int startIndex) {
             return searchAlgorithm.IndexOf(data, startIndex, data.Length - startIndex);
+        }
+        #endregion
+        #region LastIndexOf() extensions
+        public static int LastIndexOf(this IPrebuiltSearchAlgorithm<string> searchAlgorithm, string data) {
+            return searchAlgorithm.LastIndexOf(data, data.Length - 1, data.Length);
+        }
+        public static int LastIndexOf(this IPrebuiltSearchAlgorithm<string> searchAlgorithm, string data, int startIndex) {
+            return searchAlgorithm.LastIndexOf(data, startIndex, startIndex + 1);
+        }
+        public static int LastIndexOf(this IPrebuiltSearchAlgorithm<byte[]> searchAlgorithm, byte[] data) {
+            return searchAlgorithm.LastIndexOf(data, data.Length - 1, data.Length);
+        }
+        public static int LastIndexOf(this IPrebuiltSearchAlgorithm<byte[]> searchAlgorithm, byte[] data, int startIndex) {
+            return searchAlgorithm.LastIndexOf(data, startIndex, startIndex + 1);
         }
         #endregion
 
@@ -118,7 +141,7 @@
             private const int ALPHABET_SIZE = 65536;
 
             private readonly int[] m_delta1; // size = ALPHABET_SIZE
-            private readonly int[] m_delta2; // size = m_search.Length
+            private readonly int[] m_delta2; // size = m_pattern.Length
             private readonly string m_pattern;
 
             public BoyerMooreImplementation_StringInt32(string pattern) {
@@ -144,6 +167,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(string data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -224,7 +264,7 @@
             private const int ALPHABET_SIZE = 65536;
 
             private readonly ushort[] m_delta1; // size = ALPHABET_SIZE
-            private readonly ushort[] m_delta2; // size = m_search.Length
+            private readonly ushort[] m_delta2; // size = m_pattern.Length
             private readonly string m_pattern;
 
             public BoyerMooreImplementation_StringUInt16(string pattern) {
@@ -250,6 +290,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(string data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -300,7 +357,7 @@
             private const int ALPHABET_SIZE = 65536;
 
             private readonly byte[] m_delta1; // size = ALPHABET_SIZE
-            private readonly byte[] m_delta2; // size = m_search.Length
+            private readonly byte[] m_delta2; // size = m_pattern.Length
             private readonly string m_pattern;
 
             public BoyerMooreImplementation_StringUInt8(string pattern) {
@@ -326,6 +383,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(string data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -377,7 +451,7 @@
             private const int ALPHABET_SIZE = 256;
 
             private readonly int[] m_delta1; // size = ALPHABET_SIZE
-            private readonly int[] m_delta2; // size = m_search.Length
+            private readonly int[] m_delta2; // size = m_pattern.Length
             private readonly byte[] m_pattern;
 
             public BoyerMooreImplementation_ByteArrayInt32(byte[] pattern) {
@@ -403,6 +477,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(byte[] data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -453,7 +544,7 @@
             private const int ALPHABET_SIZE = 256;
 
             private readonly ushort[] m_delta1; // size = ALPHABET_SIZE
-            private readonly ushort[] m_delta2; // size = m_search.Length
+            private readonly ushort[] m_delta2; // size = m_pattern.Length
             private readonly byte[] m_pattern;
 
             public BoyerMooreImplementation_ByteArrayUInt16(byte[] pattern) {
@@ -479,6 +570,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(byte[] data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -529,7 +637,7 @@
             private const int ALPHABET_SIZE = 256;
 
             private readonly byte[] m_delta1; // size = ALPHABET_SIZE
-            private readonly byte[] m_delta2; // size = m_search.Length
+            private readonly byte[] m_delta2; // size = m_pattern.Length
             private readonly byte[] m_pattern;
 
             public BoyerMooreImplementation_ByteArrayUInt8(byte[] pattern) {
@@ -555,6 +663,23 @@
                         return i + 1;
 
                     i += Math.Max(m_delta1[data[i]], m_delta2[j]);
+                }
+                return -1;
+            }
+            public int LastIndexOf(byte[] data, int startIndex, int count) {
+                int end           = startIndex - count;
+                int patternLength = m_pattern.Length;
+                int i             = startIndex - patternLength + 1;
+                while(i > end) {
+                    int j = patternLength - 1;
+                    while(j >= 0 && data[i] == m_pattern[j]) {
+                        i++;
+                        j--;
+                    }
+                    if(j < 0)
+                        return i - 1;
+
+                    i -= Math.Max(m_delta1[data[i]], m_delta2[j]);
                 }
                 return -1;
             }
@@ -607,6 +732,12 @@
                 return startIndex;
             }
             public int IndexOf(byte[] data, int startIndex, int count) {
+                return startIndex;
+            }
+            public int LastIndexOf(string data, int startIndex, int count) {
+                return startIndex;
+            }
+            public int LastIndexOf(byte[] data, int startIndex, int count) {
                 return startIndex;
             }
         }

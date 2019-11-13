@@ -1,4 +1,7 @@
-﻿#define ALLOW_PREBUILT_BOYER_MOORE  // comment if you want a simpler/self-contained class. Will reduce performance 2x+ on all indexof() calls
+﻿// recommended: dont use pre-built Boyer-Moore searches
+// the reason is that you need to justify the performance loss due to building the searches vs the gains you get
+// if you are re-using the same regex often (think here 10000+ calls) then consider using the compiler flag
+//#define ALLOW_PREBUILT_BOYER_MOORE
 
 using System;
 using System.Collections.Generic;
@@ -14,8 +17,8 @@ namespace System.Text.RegularExpressions
     ///     Usually 2x faster than using a compiled System.Text.RegularExpressions.Regex, gets faster on more complex expressions.
     /// </summary>
     /// <remarks>
-    ///     If pure performance is needed, long search patterns could be replaced with a pre-computed Boyer-Moore string search,
-    ///     thus avoiding rebuilding the array. 
+    ///     Use the ALLOW_PREBUILT_BOYER_MOORE compiler flag if you plan to re-use same regex a lot.
+    ///     Something like 10000+ calls to IsMatch()/Match().
     /// </remarks>
     public sealed class WildcardRegex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
@@ -731,24 +734,7 @@ namespace System.Text.RegularExpressions
             if(diff < 0)
                 return new Result(startIndex, -1);
 
-#if ALLOW_PREBUILT_BOYER_MOORE
-            int pos;
-            if(!m_resultExpandToStart) {
-                pos = section.BoyerMoore.IndexOf(
-                    value,
-                    startIndex + section.WildcardUnknownBefore,
-                    length - extraChars);
-            } else {
-                // if search is '*aa', you want to find the last 'aa'
-                var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
-                pos = compareInfo.LastIndexOf(
-                    value,
-                    section.Search,
-                    startIndex + length - 1 - section.WildcardUnknownAfter,
-                    length - extraChars,
-                    System.Globalization.CompareOptions.Ordinal);
-            }
-#else
+#if !ALLOW_PREBUILT_BOYER_MOORE
             //int pos = value.IndexOf(section.Search, startIndex + section.WildcardUnknownBefore, length - extraChars, StringComparison.Ordinal);
             var compareInfo = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
             
@@ -768,6 +754,20 @@ namespace System.Text.RegularExpressions
                     startIndex + length - 1 - section.WildcardUnknownAfter,
                     length - extraChars,
                     System.Globalization.CompareOptions.Ordinal);
+            }
+#else
+            int pos;
+            if(!m_resultExpandToStart) {
+                pos = section.BoyerMoore.IndexOf(
+                    value,
+                    startIndex + section.WildcardUnknownBefore,
+                    length - extraChars);
+            } else {
+                // if search is '*aa', you want to find the last 'aa'
+                pos = section.BoyerMoore.LastIndexOf(
+                    value, 
+                    startIndex + length - 1 - section.WildcardUnknownAfter, 
+                    length - extraChars);
             }
 #endif
 
@@ -822,9 +822,7 @@ namespace System.Text.RegularExpressions
 #endif
 
             while(length > 0) {
-#if ALLOW_PREBUILT_BOYER_MOORE
-                int pos = section.BoyerMoore.IndexOf(source, index, length);
-#else
+#if !ALLOW_PREBUILT_BOYER_MOORE
                 //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
                 int pos = compareInfo.IndexOf(
                     source,
@@ -832,6 +830,8 @@ namespace System.Text.RegularExpressions
                     index,
                     length,
                     System.Globalization.CompareOptions.Ordinal);
+#else
+                int pos = section.BoyerMoore.IndexOf(source, index, length);
 #endif
                 if(pos < 0)
                     return -1;
@@ -868,16 +868,22 @@ namespace System.Text.RegularExpressions
             
             index            = index + length - charsAfterSearch - section.WildcardUnknownAfter - 1;
             length          -= charsBeforeSearch + charsAfterSearch + section.WildcardUnknownBefore + section.WildcardUnknownAfter;
+#if !ALLOW_PREBUILT_BOYER_MOORE
             var compareInfo  = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+#endif
 
             while(length > 0) {
-                //value.IndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
+#if !ALLOW_PREBUILT_BOYER_MOORE
+                //value.LastIndexOf(section.Search, startIndex, length, StringComparison.Ordinal);
                 int pos = compareInfo.LastIndexOf(
                     source,
                     section.Search,
                     index,
                     length,
                     System.Globalization.CompareOptions.Ordinal);
+#else
+                int pos = section.BoyerMoore.LastIndexOf(source, index, length);
+#endif
                 if(pos < 0)
                     return -1;
 
