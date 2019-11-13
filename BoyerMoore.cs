@@ -8,14 +8,23 @@
     /// <summary>
     ///     Provides an efficient Boyer-Moore string search implementation.
     ///     
-    ///               ====== Boyer-Moore =======     ===== KNUTH-MORRIS-PRATT =====
-    ///               string          byte[]         
-    ///     size:     O(m + 65536)    O(m + 256)     O(n)
-    ///     build:    O(m + 65536)    O(m + 256)     O(n)
-    ///     search:   O(n)                           O(n)
+    ///                           search          pre-processing       space
+    ///                         =================================================
+    ///     Naive                 O(nm)           -                    -
+    ///     Boyer-Moore           best: O(n/m)    O(m + k)             O(m + k)
+    ///                           worst: O(mn)
+    ///     Knuth-Morris-Pratt    O(n)            O(m)                 O(m)
+    ///     Bitap                 O(mn)           O(m + k)
+    ///     BNDM                  O(m)            O(n)
     ///     
-    ///     Boyer-Moore is better suited on longer patterns and less repetitive inputs, aka "natural text".
-    ///     Knuth-Morris-Pratt is better suited for cases like DNA searching (ACTG).
+    ///     m = pattern length
+    ///     n = data length
+    ///     k = alphabet size (string = 65536, byte[] = 256, DNA = 4)
+    ///     
+    ///     Boyer-Moore is the standard benchmark for practical string-searching and typically recommended when searching either [long text] or [long search patterns].
+    ///     Knuth-Morris-Pratt is better suited for [shorter search patterns] or [small alphabet sizes].
+    ///     Bitap (shift-or, shift-and, Baeza-Yates-Gonnet) for regex search. Used by grep.
+    ///     BNDM (Backward Non-Deterministic DAWG (Directed Acyclic Word Graph) Matching) for replacement-wildcard searches.
     /// </summary>
     public static class BoyerMoore {
         #region static Build()
@@ -189,8 +198,6 @@
             }
 
             /// <summary>
-            ///     O(ALPHABET_SIZE + value.Length).
-            ///     
             ///     delta1[c] contains the distance between the last character of "value" and the rightmost occurrence of c in "value".
             ///     If c does not occur in "value", then delta1[c] = value.Length.
             ///     If c is at string[i] and c != value[value.Length - 1], we can safely shift i over by delta1[c], which is the minimum distance
