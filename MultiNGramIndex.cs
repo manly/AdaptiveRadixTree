@@ -28,7 +28,7 @@ namespace System.Collections.Specialized
     ///     But typically the only gain (from a higher value) is the specificity of how rare a longer n-gram is, thus leading to faster filtering 
     ///     when searching for that specific value.
     /// </remarks>
-    public sealed class NGramIndex {
+    public sealed class MultiNGramIndex {
         private const char DEFAULT_WILDCARD_UNKNOWN  = '?';
         private const char DEFAULT_WILDCARD_ANYTHING = '*';
  
@@ -53,7 +53,7 @@ namespace System.Collections.Specialized
         #region constructors
         /// <param name="minNGramLength">Inclusive. Avoid too low values, as that will slow down matching.</param>
         /// <param name="maxNGramLength">Inclusive.</param>
-        public NGramIndex(int minNGramLength, int maxNGramLength, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
+        public MultiNGramIndex(int minNGramLength, int maxNGramLength, char wildcard_unknown_character = DEFAULT_WILDCARD_UNKNOWN, char wildcard_anything_character = DEFAULT_WILDCARD_ANYTHING) {
             if(minNGramLength < 2) // while 1 is valid, it would be a massive slowdown
                 throw new ArgumentOutOfRangeException(nameof(minNGramLength));
             if(maxNGramLength < minNGramLength)
@@ -458,9 +458,9 @@ namespace System.Collections.Specialized
             const uint SEED = 0xBADC0FFE;
             var TIME_PER_BENCH = TimeSpan.FromSeconds(5);
 
-            Console.WriteLine($"building {nameof(NGramIndex)}({MIN_NGRAM}, {MAX_NGRAM}) with {count} items");
+            Console.WriteLine($"building {nameof(MultiNGramIndex)}({MIN_NGRAM}, {MAX_NGRAM}) with {count} items");
             var culture    = System.Globalization.CultureInfo.InvariantCulture;
-            var ngramindex = new NGramIndex(MIN_NGRAM, MAX_NGRAM);
+            var ngramindex = new MultiNGramIndex(MIN_NGRAM, MAX_NGRAM);
 
             var now = DateTime.UtcNow;
 
@@ -633,7 +633,7 @@ namespace System.Collections.Specialized
             const int ITEM_COUNT = 100000;
  
             var random        = new Random(unchecked((int)seed));
-            var ngramindex    = new NGramIndex(MIN_NGRAM, MAX_NGRAM);
+            var ngramindex    = new MultiNGramIndex(MIN_NGRAM, MAX_NGRAM);
             var shuffed_items = Enumerable.Range(0, ITEM_COUNT)
                 .Select(o => o.ToString())
                 .OrderBy(o => random.NextDouble()) // very bad shuffle

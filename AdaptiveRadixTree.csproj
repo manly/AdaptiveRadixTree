@@ -81,7 +81,7 @@
     <Compile Include="AvlTree.cs" />
     <Compile Include="BoyerMoore.cs" />
     <Compile Include="WildcardRegex.cs" />
-    <Compile Include="NGramIndex.cs" />
+    <Compile Include="MultiNGramIndex.cs" />
     <Compile Include="PriorityQueue.cs" />
     <Compile Include="DynamicMemoryStream.cs" />
     <Compile Include="AdaptiveRadixTree.cs" />
