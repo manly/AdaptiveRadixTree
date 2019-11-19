@@ -34,7 +34,7 @@ Simply use the relevant files and change the constants to optimize your usage.
 Note
 -------
 
-C# Adaptive Radix Tree implementation + Fuzzy String Match stuff + License Plate Index + NGram Index
+C# Adaptive Radix Tree implementation + Fuzzy String Match stuff + License Plate Index + multi n-gram Index
 
 For now this is a placeholder for bits of code written on my own time for fun. 
 Most of the code is the AdaptiveRadixTree implementation, which includes multiple nifty search options.
