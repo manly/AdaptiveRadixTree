@@ -554,7 +554,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
+                var node = res.Node.Previous(); // shouldnt this be next() ???
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -573,6 +573,13 @@ namespace System.Collections.Specialized
             public KeyValuePair Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public KeyValuePair[] Items => this.Node?.Value.Items;
             public int NodeCount => this.Node.Value.Count;
+
+            #region constructors
+            internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
+                this.Node  = node;
+                this.Index = index;
+            }
+            #endregion
 
             #region Next()
             /// <summary>
@@ -652,64 +659,22 @@ namespace System.Collections.Specialized
                 return new BinarySearchResult(this.Node, ~this.Index);
             }
             #endregion
- 
-            internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
-                this.Node  = node;
-                this.Index = index;
-            }
-        }
-        #endregion
-        #region BinarySearch_Storeable()
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key) {
-            return this.BinarySearch_Storeable(key, m_comparer.Compare);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, IComparer<TKey> comparer) {
-            return this.BinarySearch_Storeable(key, comparer.Compare);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, Comparison<TKey> comparer) {
-            var res = m_tree.BinarySearch(key, comparer);
- 
-            if(res.Diff > 0) {
-                var node  = res.Node;
-                var index = node.Value.BinarySearch(key, comparer);
-                return new BinarySearchResult_Storeable(node, index);
-            } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
- 
-                if(node != null) {
-                    var index = node.Value.BinarySearch(key, comparer);
-                    return new BinarySearchResult_Storeable(node, index);
-                } else
-                    // if node==null, it means we need to add as the minimum item
-                    return new BinarySearchResult_Storeable(res.Node, ~0);
-            } else
-                // this can either be an exact match, or "default" if count==0
-                return new BinarySearchResult_Storeable(res.Node, 0);
         }
         public readonly struct BinarySearchResult_Storeable {
             internal readonly AvlTree<TKey, Node>.Node Node;
             public readonly int Index;
- 
+
             public KeyValuePair Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public KeyValuePair[] Items => this.Node?.Value.Items;
             public int NodeCount => this.Node.Value.Count;
+
+            #region constructors
+            internal BinarySearchResult_Storeable(AvlTree<TKey, Node>.Node node, int index) : this() {
+                this.Node  = node;
+                this.Index = index;
+            }
+            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
+            #endregion
 
             #region Next()
             /// <summary>
@@ -789,11 +754,15 @@ namespace System.Collections.Specialized
                 return new BinarySearchResult_Storeable(this.Node, ~this.Index);
             }
             #endregion
- 
-            internal BinarySearchResult_Storeable(AvlTree<TKey, Node>.Node node, int index) : this() {
-                this.Node  = node;
-                this.Index = index;
+
+            #region implicit casts
+            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+                return new BinarySearchResult_Storeable(value);
             }
+            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+                return new BinarySearchResult(value.Node, value.Index);
+            }
+            #endregion
         }
         #endregion
         #region BinarySearchNearby()
@@ -827,7 +796,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
+                var node = res.Node.Previous(); // shouldnt this be next() ???
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -838,50 +807,6 @@ namespace System.Collections.Specialized
             } else
                 // this can either be an exact match, or "default" if count==0
                 return new BinarySearchResult(res.Node, 0);
-        }
-        #endregion
-        #region BinarySearchNearby_Storeable()
-        /// <summary>
-        ///    Worst: O(2 log n + log items_per_node)
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(BinarySearchResult start, TKey key) {
-            return this.BinarySearchNearby_Storeable(start, key, m_comparer.Compare);
-        }
-        /// <summary>
-        ///    Worst: O(2 log n + log items_per_node)
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(BinarySearchResult start, TKey key, Comparison<TKey> comparer) {
-            // note: maybe check [key is between start.Node.Value.Items[0].Key and start.Node.Value.Items[max].Key] to avoid tree binarysearchnearby() ?
-             
-            var res = m_tree.BinarySearchNearby(start.Node, key);
- 
-            if(res.Diff > 0) {
-                var node  = res.Node;
-                var index = node.Value.BinarySearch(key, comparer);
-                return new BinarySearchResult_Storeable(node, index);
-            } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
- 
-                if(node != null) {
-                    var index = node.Value.BinarySearch(key, comparer);
-                    return new BinarySearchResult_Storeable(node, index);
-                } else
-                    // if node==null, it means we need to add as the minimum item
-                    return new BinarySearchResult_Storeable(res.Node, ~0);
-            } else
-                // this can either be an exact match, or "default" if count==0
-                return new BinarySearchResult_Storeable(res.Node, 0);
         }
         #endregion
         #region Range()
@@ -941,7 +866,7 @@ namespace System.Collections.Specialized
             if(tree.Count == 0)
                 yield break;
  
-            var search_start = tree.BinarySearch_Storeable(key);
+            var search_start = tree.BinarySearch(key);
             var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
 
             int max                = search_start.Node.Value.Count;
@@ -1570,19 +1495,25 @@ namespace System.Collections.Specialized
         public readonly struct KeyValuePair {
             public readonly TKey Key;
             public readonly TValue Value;
+            #region constructors
             public KeyValuePair(TKey key, TValue value) {
                 this.Key   = key;
                 this.Value = value;
             }
+            #endregion
+            #region implicit casts
             public static implicit operator System.Collections.Generic.KeyValuePair<TKey, TValue>(KeyValuePair value) {
                 return new System.Collections.Generic.KeyValuePair<TKey, TValue>(value.Key, value.Value);
             }
             public static implicit operator KeyValuePair(System.Collections.Generic.KeyValuePair<TKey, TValue> value) {
                 return new KeyValuePair(value.Key, value.Value);
             }
+            #endregion
+            #region ToString()
             public override string ToString() {
                 return $"[{this.Key}] {this.Value}";
             }
+            #endregion
         }
     }
 
@@ -1964,7 +1895,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
+                var node = res.Node.Previous(); // shouldnt this be next() ???
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -1983,6 +1914,13 @@ namespace System.Collections.Specialized
             public TKey Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public TKey[] Items => this.Node?.Value.Items;
             public int NodeCount => this.Node.Value.Count;
+
+            #region constructors
+            internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
+                this.Node  = node;
+                this.Index = index;
+            }
+            #endregion
 
             #region Next()
             /// <summary>
@@ -2037,64 +1975,22 @@ namespace System.Collections.Specialized
                 return new BinarySearchResult(this.Node, ~this.Index);
             }
             #endregion
- 
-            internal BinarySearchResult(AvlTree<TKey, Node>.Node node, int index) : this() {
-                this.Node  = node;
-                this.Index = index;
-            }
-        }
-        #endregion
-        #region BinarySearch_Storeable()
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key) {
-            return this.BinarySearch_Storeable(key, m_comparer.Compare);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, IComparer<TKey> comparer) {
-            return this.BinarySearch_Storeable(key, comparer.Compare);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, Comparison<TKey> comparer) {
-            var res = m_tree.BinarySearch(key, comparer);
- 
-            if(res.Diff > 0) {
-                var node  = res.Node;
-                var index = node.Value.BinarySearch(key, comparer);
-                return new BinarySearchResult_Storeable(node, index);
-            } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
- 
-                if(node != null) {
-                    var index = node.Value.BinarySearch(key, comparer);
-                    return new BinarySearchResult_Storeable(node, index);
-                } else
-                    // if node==null, it means we need to add as the minimum item
-                    return new BinarySearchResult_Storeable(res.Node, ~0);
-            } else
-                // this can either be an exact match, or "default" if count==0
-                return new BinarySearchResult_Storeable(res.Node, 0);
         }
         public readonly struct BinarySearchResult_Storeable {
             internal readonly AvlTree<TKey, Node>.Node Node;
             public readonly int Index;
- 
+
             public TKey Item => this.Node.Value.Items[this.Index]; // this.Node.Value.Items[this.Index >= 0 ? this.Index : ~this.Index]
             public TKey[] Items => this.Node?.Value.Items;
             public int NodeCount => this.Node.Value.Count;
+
+            #region constructors
+            internal BinarySearchResult_Storeable(AvlTree<TKey, Node>.Node node, int index) : this() {
+                this.Node  = node;
+                this.Index = index;
+            }
+            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
+            #endregion
 
             #region Next()
             /// <summary>
@@ -2149,11 +2045,15 @@ namespace System.Collections.Specialized
                 return new BinarySearchResult_Storeable(this.Node, ~this.Index);
             }
             #endregion
- 
-            internal BinarySearchResult_Storeable(AvlTree<TKey, Node>.Node node, int index) : this() {
-                this.Node  = node;
-                this.Index = index;
+
+            #region implicit casts
+            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+                return new BinarySearchResult_Storeable(value);
             }
+            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+                return new BinarySearchResult(value.Node, value.Index);
+            }
+            #endregion
         }
         #endregion
         #region BinarySearchNearby()
@@ -2187,7 +2087,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
+                var node = res.Node.Previous(); // shouldnt this be next() ???
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -2198,50 +2098,6 @@ namespace System.Collections.Specialized
             } else
                 // this can either be an exact match, or "default" if count==0
                 return new BinarySearchResult(res.Node, 0);
-        }
-        #endregion
-        #region BinarySearchNearby_Storeable()
-        /// <summary>
-        ///    Worst: O(2 log n + log items_per_node)
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(BinarySearchResult start, TKey key) {
-            return this.BinarySearchNearby_Storeable(start, key, m_comparer.Compare);
-        }
-        /// <summary>
-        ///    Worst: O(2 log n + log items_per_node)
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(BinarySearchResult start, TKey key, Comparison<TKey> comparer) {
-            // note: maybe check [key is between start.Node.Value.Items[0].Key and start.Node.Value.Items[max].Key] to avoid tree binarysearchnearby() ?
-             
-            var res = m_tree.BinarySearchNearby(start.Node, key);
- 
-            if(res.Diff > 0) {
-                var node  = res.Node;
-                var index = node.Value.BinarySearch(key, comparer);
-                return new BinarySearchResult_Storeable(node, index);
-            } else if(res.Diff < 0) {
-                var node = res.Node.Previous();
- 
-                if(node != null) {
-                    var index = node.Value.BinarySearch(key, comparer);
-                    return new BinarySearchResult_Storeable(node, index);
-                } else
-                    // if node==null, it means we need to add as the minimum item
-                    return new BinarySearchResult_Storeable(res.Node, ~0);
-            } else
-                // this can either be an exact match, or "default" if count==0
-                return new BinarySearchResult_Storeable(res.Node, 0);
         }
         #endregion
         #region Range()
@@ -2301,7 +2157,7 @@ namespace System.Collections.Specialized
             if(tree.Count == 0)
                 yield break;
  
-            var search_start = tree.BinarySearch_Storeable(key);
+            var search_start = tree.BinarySearch(key);
             var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
 
             int max                = search_start.Node.Value.Count;

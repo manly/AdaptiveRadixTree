@@ -712,7 +712,7 @@ namespace System.Collections.Specialized
         ///    O(log n)
         ///    
         ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    Returns {null, 0} if this.Count==0.
@@ -742,7 +742,7 @@ namespace System.Collections.Specialized
         ///    O(log n)
         ///    
         ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    Returns {null, 0} if this.Count==0.
@@ -779,66 +779,6 @@ namespace System.Collections.Specialized
                 this.Diff = diff;
             }
         }
-        #endregion
-        #region BinarySearch_Storeable()
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key) {
-            // inline this since this is usually called in hot paths
-            //return this.BinarySearch_Storeable(key, m_comparer);
- 
-            var current   = m_header.Parent;
-            var prev      = current;
-            var prev_diff = 0;
-            while(current != null) {
-                prev_diff = m_comparer(key, current.Key);
- 
-                if(prev_diff > 0) {
-                    prev    = current;
-                    current = current.Right;
-                } else if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else
-                    return new BinarySearchResult_Storeable(current, 0);
-            }
-            return new BinarySearchResult_Storeable(prev, prev_diff);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, Comparison<TKey> comparer) {
-            var current   = m_header.Parent;
-            var prev      = current;
-            var prev_diff = 0;
-            while(current != null) {
-                prev_diff = comparer(key, current.Key);
- 
-                if(prev_diff > 0) {
-                    prev    = current;
-                    current = current.Right;
-                } else if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else
-                    return new BinarySearchResult_Storeable(current, 0);
-            }
-            return new BinarySearchResult_Storeable(prev, prev_diff);
-        }
         public readonly struct BinarySearchResult_Storeable {
             /// <summary>
             ///    -1: key &lt; node.key
@@ -851,6 +791,83 @@ namespace System.Collections.Specialized
                 this.Node = node;
                 this.Diff = diff;
             }
+            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Diff) { }
+            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+                return new BinarySearchResult_Storeable(value);
+            }
+            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+                return new BinarySearchResult(value.Node, value.Diff);
+            }
+        }
+        #endregion
+        #region BinarySearch_GreaterOrEqual()
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    
+        ///    Returns "-1 diff" if not found.
+        /// </summary>
+        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
+ 
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = m_comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
+        }
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    
+        ///    Returns "-1 diff" if not found.
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
         }
         #endregion
         #region BinarySearchNearby()
@@ -858,7 +875,7 @@ namespace System.Collections.Specialized
         ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    This method is mostly meant for tree traversal of nearby items on deep trees.
@@ -873,7 +890,7 @@ namespace System.Collections.Specialized
         ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    This method is mostly meant for tree traversal of nearby items on deep trees.
@@ -947,102 +964,6 @@ namespace System.Collections.Specialized
             }
  
             return new BinarySearchResult(prev, prev_diff);
-        }
-        #endregion
-        #region BinarySearchNearby_Storeable()
-        /// <summary>
-        ///    Worst: O(2 log n)
-        ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(Node start, TKey key) {
-            return this.BinarySearchNearby_Storeable(start, key, m_comparer);
-        }
-        /// <summary>
-        ///    Worst: O(2 log n)
-        ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(Node start, TKey key, Comparison<TKey> comparer) {
-            var node = start;
-            var prev = start;
- 
-            if(start != null) {
-                // go up until we cross key, then go down
-                var diff = comparer(key, start.Key);
- 
-                if(diff > 0) {
-                    while(node != null) {
-                        var parent = node.Parent;
-                        if(parent.Balance != State.Header) {
-                            if(node == parent.Left) {
-                                diff = comparer(key, parent.Key);
-                                if(diff < 0) {
-                                    // go down from here
-                                    node = parent;
-                                    break;
-                                } else if(diff == 0)
-                                    return new BinarySearchResult_Storeable(parent, 0);
-                            }
-                            node = parent;
-                        } else
-                            return this.BinarySearch_Storeable(key);
-                    }
-                } else if(diff < 0) {
-                    while(node != null) {
-                        var parent = node.Parent;
-                        if(parent.Balance != State.Header) {
-                            if(node == parent.Right) {
-                                diff = comparer(key, parent.Key);
-                                if(diff > 0) {
-                                    // go down from here
-                                    node = parent;
-                                    break;
-                                } else if(diff == 0)
-                                    return new BinarySearchResult_Storeable(parent, 0);
-                            }
-                            node = parent;
-                        } else
-                            return this.BinarySearch_Storeable(key);
-                    }
-                } else
-                    return new BinarySearchResult_Storeable(node, 0);
-            } else {
-                node = m_header.Parent;
-                prev = node;
-            }
-             
-            // then go down as normal
-            int prev_diff = 0;
-            while(node != null) {
-                prev_diff = comparer(key, node.Key);
- 
-                if(prev_diff > 0) {
-                    prev = node;
-                    node = node.Right;
-                } else if(prev_diff < 0) {
-                    prev = node;
-                    node = node.Left;
-                } else
-                    return new BinarySearchResult_Storeable(node, 0);
-            }
- 
-            return new BinarySearchResult_Storeable(prev, prev_diff);
         }
         #endregion
         #region Depth()
@@ -1521,7 +1442,7 @@ namespace System.Collections.Specialized
 #endif
         #endregion
  
-        private enum Direction {
+        private enum Direction : byte {
             Left, 
             Right
         }
@@ -2254,7 +2175,7 @@ namespace System.Collections.Specialized
         ///    O(log n)
         ///    
         ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    Returns {null, 0} if this.Count==0.
@@ -2284,7 +2205,7 @@ namespace System.Collections.Specialized
         ///    O(log n)
         ///    
         ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    Returns {null, 0} if this.Count==0.
@@ -2321,66 +2242,6 @@ namespace System.Collections.Specialized
                 this.Diff = diff;
             }
         }
-        #endregion
-        #region BinarySearch_Storeable()
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key) {
-            // inline this since this is usually called in hot paths
-            //return this.BinarySearch_Storeable(key, m_comparer);
- 
-            var current   = m_header.Parent;
-            var prev      = current;
-            var prev_diff = 0;
-            while(current != null) {
-                prev_diff = m_comparer(key, current.Key);
- 
-                if(prev_diff > 0) {
-                    prev    = current;
-                    current = current.Right;
-                } else if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else
-                    return new BinarySearchResult_Storeable(current, 0);
-            }
-            return new BinarySearchResult_Storeable(prev, prev_diff);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    This lets you know the nearest match to your key.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearch_Storeable(TKey key, Comparison<TKey> comparer) {
-            var current   = m_header.Parent;
-            var prev      = current;
-            var prev_diff = 0;
-            while(current != null) {
-                prev_diff = comparer(key, current.Key);
- 
-                if(prev_diff > 0) {
-                    prev    = current;
-                    current = current.Right;
-                } else if(prev_diff < 0) {
-                    prev    = current;
-                    current = current.Left;
-                } else
-                    return new BinarySearchResult_Storeable(current, 0);
-            }
-            return new BinarySearchResult_Storeable(prev, prev_diff);
-        }
         public readonly struct BinarySearchResult_Storeable {
             /// <summary>
             ///    -1: key &lt; node.key
@@ -2393,6 +2254,83 @@ namespace System.Collections.Specialized
                 this.Node = node;
                 this.Diff = diff;
             }
+            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Diff) { }
+            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+                return new BinarySearchResult_Storeable(value);
+            }
+            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+                return new BinarySearchResult(value.Node, value.Diff);
+            }
+        }
+        #endregion
+        #region BinarySearch_GreaterOrEqual()
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    
+        ///    Returns "-1 diff" if not found.
+        /// </summary>
+        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
+ 
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = m_comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
+        }
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    
+        ///    Returns "-1 diff" if not found.
+        /// </summary>
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
         }
         #endregion
         #region BinarySearchNearby()
@@ -2400,7 +2338,7 @@ namespace System.Collections.Specialized
         ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    This method is mostly meant for tree traversal of nearby items on deep trees.
@@ -2415,7 +2353,7 @@ namespace System.Collections.Specialized
         ///    Worst: O(2 log n)
         ///    
         ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
+        ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
         ///    This method is mostly meant for tree traversal of nearby items on deep trees.
@@ -2489,102 +2427,6 @@ namespace System.Collections.Specialized
             }
  
             return new BinarySearchResult(prev, prev_diff);
-        }
-        #endregion
-        #region BinarySearchNearby_Storeable()
-        /// <summary>
-        ///    Worst: O(2 log n)
-        ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(Node start, TKey key) {
-            return this.BinarySearchNearby_Storeable(start, key, m_comparer);
-        }
-        /// <summary>
-        ///    Worst: O(2 log n)
-        ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
-        ///    This isn't like a Array.BinarySearch() returning a guaranteed lowest_or_equal result; 
-        ///    you have to manually check the diff and use result.Node.Next()/Previous().
-        ///    
-        ///    This method is mostly meant for tree traversal of nearby items on deep trees.
-        ///    If the items are not nearby, you could get 2x the performance just calling BinarySearch().
-        ///    
-        ///    Returns {null, 0} if this.Count==0.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult_Storeable BinarySearchNearby_Storeable(Node start, TKey key, Comparison<TKey> comparer) {
-            var node = start;
-            var prev = start;
- 
-            if(start != null) {
-                // go up until we cross key, then go down
-                var diff = comparer(key, start.Key);
- 
-                if(diff > 0) {
-                    while(node != null) {
-                        var parent = node.Parent;
-                        if(parent.Balance != State.Header) {
-                            if(node == parent.Left) {
-                                diff = comparer(key, parent.Key);
-                                if(diff < 0) {
-                                    // go down from here
-                                    node = parent;
-                                    break;
-                                } else if(diff == 0)
-                                    return new BinarySearchResult_Storeable(parent, 0);
-                            }
-                            node = parent;
-                        } else
-                            return this.BinarySearch_Storeable(key);
-                    }
-                } else if(diff < 0) {
-                    while(node != null) {
-                        var parent = node.Parent;
-                        if(parent.Balance != State.Header) {
-                            if(node == parent.Right) {
-                                diff = comparer(key, parent.Key);
-                                if(diff > 0) {
-                                    // go down from here
-                                    node = parent;
-                                    break;
-                                } else if(diff == 0)
-                                    return new BinarySearchResult_Storeable(parent, 0);
-                            }
-                            node = parent;
-                        } else
-                            return this.BinarySearch_Storeable(key);
-                    }
-                } else
-                    return new BinarySearchResult_Storeable(node, 0);
-            } else {
-                node = m_header.Parent;
-                prev = node;
-            }
-             
-            // then go down as normal
-            int prev_diff = 0;
-            while(node != null) {
-                prev_diff = comparer(key, node.Key);
- 
-                if(prev_diff > 0) {
-                    prev = node;
-                    node = node.Right;
-                } else if(prev_diff < 0) {
-                    prev = node;
-                    node = node.Left;
-                } else
-                    return new BinarySearchResult_Storeable(node, 0);
-            }
- 
-            return new BinarySearchResult_Storeable(prev, prev_diff);
         }
         #endregion
         #region Depth()
@@ -2985,7 +2827,7 @@ namespace System.Collections.Specialized
         }
         #endregion
  
-        private enum Direction {
+        private enum Direction : byte {
             Left, 
             Right
         }
