@@ -811,6 +811,14 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
+
+            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key)
+            //     if(bsr.Diff >= 0) return bsr;
+            //     var node = bsr.Node.Next();
+            //     if(this.Compare(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, 0); // not found
  
             var current           = m_header.Parent;
             var prev              = current;
@@ -845,6 +853,14 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
+            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key)
+            //     if(bsr.Diff >= 0) return bsr;
+            //     var node = bsr.Node.Next();
+            //     if(this.Compare(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, 0); // not found
+
             var current           = m_header.Parent;
             var prev              = current;
             var prev_diff         = 0;
@@ -2275,6 +2291,14 @@ namespace System.Collections.Specialized
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
  
+            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key)
+            //     if(bsr.Diff >= 0) return bsr;
+            //     var node = bsr.Node.Next();
+            //     if(this.Compare(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, 0); // not found
+
             var current           = m_header.Parent;
             var prev              = current;
             var prev_diff         = 0;
@@ -2308,6 +2332,14 @@ namespace System.Collections.Specialized
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
+            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key)
+            //     if(bsr.Diff >= 0) return bsr;
+            //     var node = bsr.Node.Next();
+            //     if(this.Compare(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, 0); // not found
+
             var current           = m_header.Parent;
             var prev              = current;
             var prev_diff         = 0;
