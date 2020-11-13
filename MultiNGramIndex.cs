@@ -1196,7 +1196,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private readonly struct NGram
-        private readonly struct NGram {
+        private readonly struct NGram : IEquatable<NGram> {
             public readonly string Value;
             public readonly int Start;
  
@@ -1206,6 +1206,25 @@ namespace System.Collections.Specialized
             }
  
             public override string ToString() => $"[{this.Value.Substring(this.Start)}] {this.Value}  ({{{this.Start}}})";
+
+            
+            public bool Equals(NGram other) {
+                return this.Value == other.Value && this.Start == other.Start;
+            }
+            public override bool Equals(object obj) {
+                if(obj is NGram memseg)
+                    return this.Equals(memseg);
+                return false;
+            }
+            public static bool operator ==(NGram x, NGram y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(NGram x, NGram y) {
+                return !(x == y);
+            }
+            public override int GetHashCode() {
+                return (this.Value, this.Start).GetHashCode();
+            }
         }
         #endregion
         #region private struct Range
