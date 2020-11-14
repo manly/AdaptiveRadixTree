@@ -849,7 +849,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Search the nearest match that is greater or equal to key.
         ///    
-        ///    Returns "-1 diff" if not found.
+        ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
@@ -935,7 +935,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Search the nearest match that is lesser or equal to key.
         ///    
-        ///    Returns "1 diff" if not found.
+        ///    Returns "-1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
@@ -2414,7 +2414,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Search the nearest match that is greater or equal to key.
         ///    
-        ///    Returns "-1 diff" if not found.
+        ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
@@ -2500,7 +2500,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Search the nearest match that is lesser or equal to key.
         ///    
-        ///    Returns "1 diff" if not found.
+        ///    Returns "-1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
         public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
