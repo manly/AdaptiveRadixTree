@@ -316,7 +316,49 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-        private sealed class MemorySegment {
+        
+        private readonly struct MemorySegment : IEquatable<MemorySegment> {
+            public readonly long Address;
+            public readonly long Length;
+
+            #region constructors
+            public MemorySegment(long address, long length) {
+                this.Address = address;
+                this.Length  = length;
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return $"[{this.Address} - {(this.Address + this.Length)}] ({this.Length} bytes)";
+            }
+            #endregion
+
+            #region Equals()
+            public bool Equals(MemorySegment other) {
+                return this.Address == other.Address && this.Length == other.Length;
+            }
+            public override bool Equals(object obj) {
+                if(obj is MemorySegment memseg)
+                    return this.Equals(memseg);
+                return false;
+            }
+
+            public static bool operator ==(MemorySegment x, MemorySegment y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(MemorySegment x, MemorySegment y) {
+                return !(x == y);
+            }
+            #endregion
+            #region GetHashCode()
+            public override int GetHashCode() {
+                return (this.Address, this.Length).GetHashCode();
+            }
+            #endregion
+        }
+
+        // todo: benchmark with oldcode
+        /*private sealed class MemorySegment {
             public long Address;
             public long Length;
 
@@ -331,6 +373,6 @@ namespace System.Collections.Specialized
                 return $"[{this.Address} - {(this.Address + this.Length)}] ({this.Length} bytes)";
             }
             #endregion
-        }
+        }*/
     }
 }
