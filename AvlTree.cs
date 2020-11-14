@@ -711,7 +711,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key.
+        ///    Search the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -741,7 +741,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key.
+        ///    Search the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -804,7 +804,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    Search the nearest match that is greater or equal to key.
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
@@ -814,7 +814,7 @@ namespace System.Collections.Specialized
 
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Next();
             //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
@@ -847,7 +847,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    Search the nearest match that is greater or equal to key.
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
@@ -855,7 +855,7 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Next();
             //     if(comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
@@ -890,7 +890,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is lesser or equal.
+        ///    Search the nearest match that is lesser or equal to key.
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
@@ -900,7 +900,7 @@ namespace System.Collections.Specialized
 
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Previous();
             //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
@@ -933,7 +933,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is lesser or equal.
+        ///    Search the nearest match that is lesser or equal to key.
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
@@ -941,7 +941,7 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch_LesserOrEqual(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Previous();
             //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
@@ -976,7 +976,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    Worst: O(2 log n)
         ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    Search the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -991,7 +991,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    Worst: O(2 log n)
         ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    Search the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -2276,7 +2276,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key.
+        ///    Search the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -2306,7 +2306,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key.
+        ///    Search the nearest match to your key.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -2369,7 +2369,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    Search the nearest match that is greater or equal to key.
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
@@ -2379,7 +2379,7 @@ namespace System.Collections.Specialized
  
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Next();
             //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
@@ -2412,7 +2412,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is greater or equal.
+        ///    Search the nearest match that is greater or equal to key.
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
@@ -2420,7 +2420,7 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Next();
             //     if(comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
@@ -2455,7 +2455,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is lesser or equal.
+        ///    Search the nearest match that is lesser or equal to key.
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
@@ -2465,7 +2465,7 @@ namespace System.Collections.Specialized
 
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Previous();
             //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
@@ -2498,7 +2498,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         ///    
-        ///    This lets you know the nearest match to your key that is lesser or equal.
+        ///    Search the nearest match that is lesser or equal to key.
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
@@ -2506,7 +2506,7 @@ namespace System.Collections.Specialized
         public BinarySearchResult BinarySearch_LesserOrEqual(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
-            //     var bsr = this.BinarySearch(key)
+            //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Previous();
             //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
@@ -2541,7 +2541,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    Worst: O(2 log n)
         ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    Search the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
@@ -2556,7 +2556,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    Worst: O(2 log n)
         ///    
-        ///    This lets you know the nearest match to your key, starting from a given node.
+        ///    Search the nearest match to your key, starting from a given node.
         ///    This isn't like a Array.BinarySearch() returning a guaranteed greater_or_equal result.
         ///    you have to manually check the diff and use result.Node.Next()/Previous().
         ///    
