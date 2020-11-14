@@ -800,7 +800,50 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region BinarySearch_GreaterOrEqual()
+        #region BinarySearch_GreaterOrEqualTo()
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    Search the nearest match that is greater or equal to key.
+        ///    
+        ///    Returns "1 diff" if not found.
+        /// </summary>
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return this.BinarySearch_GreaterOrEqualTo(key, m_comparer);
+
+            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key);
+            //     if(bsr.Diff <= 0) return bsr;
+            //     var node = bsr.Node.Next();
+            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
+            //     return new BinarySearchResult(null, 1); // not found
+
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = m_comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? -1 : 1);
+        }
         /// <summary>
         ///    O(log n)
         ///    
@@ -808,168 +851,125 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key) {
-            // inline this since this is usually called in hot paths
-            //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
-
+        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff >= 0) return bsr;
+            //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Next();
+            //     if(comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
+            //     return new BinarySearchResult(null, 1); // not found
+
+            var current           = m_header.Parent;
+            var prev              = current;
+            var prev_diff         = 0;
+            var last_greater_than = (Node)null;
+
+            while(current != null) {
+                prev      = current;
+                prev_diff = comparer(key, current.Key);
+ 
+                if(prev_diff > 0)
+                    current = current.Right;
+                else if(prev_diff < 0) {
+                    last_greater_than = current;
+                    current           = current.Left;
+                } else
+                    return new BinarySearchResult(current, 0);
+            }
+
+            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
+                return new BinarySearchResult(prev, prev_diff);
+            else
+                // if all stored values are smaller: last_greater_than == null
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? -1 : 1);
+        }
+        #endregion
+        #region BinarySearch_LesserOrEqualTo()
+        /// <summary>
+        ///    O(log n)
+        ///    
+        ///    Search the nearest match that is lesser or equal to key.
+        ///    
+        ///    Returns "-1 diff" if not found.
+        /// </summary>
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key) {
+            // inline this since this is usually called in hot paths
+            //return this.BinarySearch_LesserOrEqualTo(key, m_comparer);
+
+            // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
+            // code intent:
+            //     var bsr = this.BinarySearch(key);
+            //     if(bsr.Diff >= 0) return bsr;
+            //     var node = bsr.Node.Previous();
             //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
             //     return new BinarySearchResult(null, -1); // not found
  
-            var current           = m_header.Parent;
-            var prev              = current;
-            var prev_diff         = 0;
-            var last_greater_than = (Node)null;
+            var current          = m_header.Parent;
+            var prev             = current;
+            var prev_diff        = 0;
+            var last_lesser_than = (Node)null;
 
             while(current != null) {
                 prev      = current;
                 prev_diff = m_comparer(key, current.Key);
- 
-                if(prev_diff > 0)
-                    current = current.Right;
-                else if(prev_diff < 0) {
-                    last_greater_than = current;
-                    current           = current.Left;
-                } else
+
+                if(prev_diff > 0) {
+                    last_lesser_than = current;
+                    current          = current.Right;
+                } else if(prev_diff < 0)
+                    current = current.Left;
+                else
                     return new BinarySearchResult(current, 0);
             }
 
             if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
-                // if all stored values are smaller: last_greater_than == null
-                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
+                // if all stored values are bigger: last_lesser_than == null
+                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? 1 : -1);
         }
         /// <summary>
         ///    O(log n)
         ///    
-        ///    Search the nearest match that is greater or equal to key.
+        ///    Search the nearest match that is lesser or equal to key.
         ///    
-        ///    Returns "-1 diff" if not found.
+        ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
-            // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
+            // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
             //     if(bsr.Diff >= 0) return bsr;
-            //     var node = bsr.Node.Next();
-            //     if(comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     var node = bsr.Node.Previous();
+            //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
             //     return new BinarySearchResult(null, -1); // not found
-
-            var current           = m_header.Parent;
-            var prev              = current;
-            var prev_diff         = 0;
-            var last_greater_than = (Node)null;
+ 
+            var current          = m_header.Parent;
+            var prev             = current;
+            var prev_diff        = 0;
+            var last_lesser_than = (Node)null;
 
             while(current != null) {
                 prev      = current;
                 prev_diff = comparer(key, current.Key);
- 
-                if(prev_diff > 0)
-                    current = current.Right;
-                else if(prev_diff < 0) {
-                    last_greater_than = current;
-                    current           = current.Left;
-                } else
+
+                if(prev_diff > 0) {
+                    last_lesser_than = current;
+                    current          = current.Right;
+                } else if(prev_diff < 0)
+                    current = current.Left;
+                else
                     return new BinarySearchResult(current, 0);
             }
 
             if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
-                // if all stored values are smaller: last_greater_than == null
-                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
-        }
-        #endregion
-        #region BinarySearch_LesserOrEqual()
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Search the nearest match that is lesser or equal to key.
-        ///    
-        ///    Returns "1 diff" if not found.
-        /// </summary>
-        public BinarySearchResult BinarySearch_LesserOrEqual(TKey key) {
-            // inline this since this is usually called in hot paths
-            //return this.BinarySearch_LesserOrEqual(key, m_comparer);
-
-            // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
-            // code intent:
-            //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff <= 0) return bsr;
-            //     var node = bsr.Node.Previous();
-            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
-            //     return new BinarySearchResult(null, 1); // not found
- 
-            var current          = m_header.Parent;
-            var prev             = current;
-            var prev_diff        = 0;
-            var last_lesser_than = (Node)null;
-
-            while(current != null) {
-                prev      = current;
-                prev_diff = m_comparer(key, current.Key);
-
-                if(prev_diff > 0) {
-                    last_lesser_than = current;
-                    current          = current.Right;
-                } else if(prev_diff < 0)
-                    current = current.Left;
-                else
-                    return new BinarySearchResult(current, 0);
-            }
-
-            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
-                return new BinarySearchResult(prev, prev_diff);
-            else
                 // if all stored values are bigger: last_lesser_than == null
-                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? -1 : 1);
-        }
-        /// <summary>
-        ///    O(log n)
-        ///    
-        ///    Search the nearest match that is lesser or equal to key.
-        ///    
-        ///    Returns "1 diff" if not found.
-        /// </summary>
-        /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_LesserOrEqual(TKey key, Comparison<TKey> comparer) {
-            // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
-            // code intent:
-            //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff <= 0) return bsr;
-            //     var node = bsr.Node.Previous();
-            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
-            //     return new BinarySearchResult(null, 1); // not found
- 
-            var current          = m_header.Parent;
-            var prev             = current;
-            var prev_diff        = 0;
-            var last_lesser_than = (Node)null;
-
-            while(current != null) {
-                prev      = current;
-                prev_diff = comparer(key, current.Key);
-
-                if(prev_diff > 0) {
-                    last_lesser_than = current;
-                    current          = current.Right;
-                } else if(prev_diff < 0)
-                    current = current.Left;
-                else
-                    return new BinarySearchResult(current, 0);
-            }
-
-            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
-                return new BinarySearchResult(prev, prev_diff);
-            else
-                // if all stored values are bigger: last_lesser_than == null
-                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? -1 : 1);
+                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? 1 : -1);
         }
         #endregion
         #region BinarySearchNearby()
@@ -2365,25 +2365,25 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
-        #region BinarySearch_GreaterOrEqual()
+        #region BinarySearch_GreaterOrEqualTo()
         /// <summary>
         ///    O(log n)
         ///    
         ///    Search the nearest match that is greater or equal to key.
         ///    
-        ///    Returns "-1 diff" if not found.
+        ///    Returns "1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key) {
             // inline this since this is usually called in hot paths
-            //return this.BinarySearch_GreaterOrEqual(key, m_comparer);
- 
+            //return this.BinarySearch_GreaterOrEqualTo(key, m_comparer);
+
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff >= 0) return bsr;
+            //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Next();
-            //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
-            //     return new BinarySearchResult(null, -1); // not found
+            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
+            //     return new BinarySearchResult(null, 1); // not found
 
             var current           = m_header.Parent;
             var prev              = current;
@@ -2403,11 +2403,11 @@ namespace System.Collections.Specialized
                     return new BinarySearchResult(current, 0);
             }
 
-            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
                 // if all stored values are smaller: last_greater_than == null
-                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? -1 : 1);
         }
         /// <summary>
         ///    O(log n)
@@ -2417,14 +2417,14 @@ namespace System.Collections.Specialized
         ///    Returns "-1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_GreaterOrEqual(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff >= 0) return bsr;
+            //     if(bsr.Diff <= 0) return bsr;
             //     var node = bsr.Node.Next();
-            //     if(comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
-            //     return new BinarySearchResult(null, -1); // not found
+            //     if(comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
+            //     return new BinarySearchResult(null, 1); // not found
 
             var current           = m_header.Parent;
             var prev              = current;
@@ -2444,32 +2444,32 @@ namespace System.Collections.Specialized
                     return new BinarySearchResult(current, 0);
             }
 
-            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
+            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
                 // if all stored values are smaller: last_greater_than == null
-                return new BinarySearchResult(last_greater_than, last_greater_than != null ? 1 : -1);
+                return new BinarySearchResult(last_greater_than, last_greater_than != null ? -1 : 1);
         }
         #endregion
-        #region BinarySearch_LesserOrEqual()
+        #region BinarySearch_LesserOrEqualTo()
         /// <summary>
         ///    O(log n)
         ///    
         ///    Search the nearest match that is lesser or equal to key.
         ///    
-        ///    Returns "1 diff" if not found.
+        ///    Returns "-1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_LesserOrEqual(TKey key) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key) {
             // inline this since this is usually called in hot paths
-            //return this.BinarySearch_LesserOrEqual(key, m_comparer);
+            //return this.BinarySearch_LesserOrEqualTo(key, m_comparer);
 
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff <= 0) return bsr;
+            //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Previous();
-            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
-            //     return new BinarySearchResult(null, 1); // not found
+            //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, -1); // not found
  
             var current          = m_header.Parent;
             var prev             = current;
@@ -2489,11 +2489,11 @@ namespace System.Collections.Specialized
                     return new BinarySearchResult(current, 0);
             }
 
-            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
                 // if all stored values are bigger: last_lesser_than == null
-                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? -1 : 1);
+                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? 1 : -1);
         }
         /// <summary>
         ///    O(log n)
@@ -2503,14 +2503,14 @@ namespace System.Collections.Specialized
         ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_LesserOrEqual(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
-            //     if(bsr.Diff <= 0) return bsr;
+            //     if(bsr.Diff >= 0) return bsr;
             //     var node = bsr.Node.Previous();
-            //     if(m_comparer(key, node.Key) < 0) return new BinarySearchResult(node, -1);
-            //     return new BinarySearchResult(null, 1); // not found
+            //     if(m_comparer(key, node.Key) > 0) return new BinarySearchResult(node, 1);
+            //     return new BinarySearchResult(null, -1); // not found
  
             var current          = m_header.Parent;
             var prev             = current;
@@ -2530,11 +2530,11 @@ namespace System.Collections.Specialized
                     return new BinarySearchResult(current, 0);
             }
 
-            if(prev_diff < 0) // dont do == 0 because this would cover .Count==0 case
+            if(prev_diff > 0) // dont do == 0 because this would cover .Count==0 case
                 return new BinarySearchResult(prev, prev_diff);
             else
                 // if all stored values are bigger: last_lesser_than == null
-                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? -1 : 1);
+                return new BinarySearchResult(last_lesser_than, last_lesser_than != null ? 1 : -1);
         }
         #endregion
         #region BinarySearchNearby()
