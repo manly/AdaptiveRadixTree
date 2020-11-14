@@ -554,7 +554,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous(); // shouldnt this be next() ???
+                var node = res.Node.Previous();
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -796,7 +796,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous(); // shouldnt this be next() ???
+                var node = res.Node.Previous();
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -1895,7 +1895,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous(); // shouldnt this be next() ???
+                var node = res.Node.Previous();
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
@@ -2087,7 +2087,7 @@ namespace System.Collections.Specialized
                 var index = node.Value.BinarySearch(key, comparer);
                 return new BinarySearchResult(node, index);
             } else if(res.Diff < 0) {
-                var node = res.Node.Previous(); // shouldnt this be next() ???
+                var node = res.Node.Previous();
  
                 if(node != null) {
                     var index = node.Value.BinarySearch(key, comparer);
