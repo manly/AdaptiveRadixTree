@@ -10,6 +10,7 @@ namespace System.Collections.Specialized
     ///     Manages memory allocation without allocating memory.
     ///     Handles infinite (2^63) memory.
     ///     Dynamically resizes itselfs based on use, both upwards and downwards.
+    ///     Has no memory alignment (no roundings, etc.) and allows free()ing fractions of previous allocs.
     /// </summary>
     /// <remarks>
     ///     Potential alternatives: use a native memory manager (https://github.com/allisterb/jemalloc.NET)
@@ -55,18 +56,19 @@ namespace System.Collections.Specialized
                 throw new ArgumentOutOfRangeException(nameof(length));
 
             if(m_avail.Count > 0) {
-                var res = m_avail.BinarySearch(new MemorySegment(0, length), CompareMemorySegmentsSizeOnly);
-
-                if(res.Diff < 0) {
+                // search for an available memory segment of at least length bytes, returning the smallest result that is >= length
+                var res = m_avail.BinarySearch_GreaterOrEqualTo(new MemorySegment(0, length), CompareMemorySegmentsSizeOnly);
+                
+                if(res.Diff <= 0) { // if available_memory_segment >= length
                     var x           = res.Node.Key;
                     var bsr         = m_availAddresses.BinarySearch(x.Address);
                     if(bsr.Index < 0)
                         bsr = bsr.BitwiseNot();
-
+                    
                     m_avail.Remove(res.Node);
                     var address     = x.Address;
-                    x.Address       = address + length;
-                    x.Length       -= length;
+                    x               = new MemorySegment(address + length, x.Length - length);
+                    res.Node.UpdateKey(x);
                     this.TotalFree -= length;
 
                     if(x.Length > 0) {
