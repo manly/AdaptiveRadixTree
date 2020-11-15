@@ -82,7 +82,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public TValue this[TKey key] {
+        public TValue this[in TKey key] {
             get{
                 if(!this.TryGetValue(key, out var value))
                     throw new KeyNotFoundException();
@@ -130,7 +130,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public BinarySearchResult Add(TKey key, TValue value) {
+        public BinarySearchResult Add(in TKey key, in TValue value) {
             var x = this.BinarySearch(key);
             if(!this.TryAdd(in x, key, value, out var insertLocation))
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
@@ -144,7 +144,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public BinarySearchResult Add(BinarySearchResult bsr, TKey key, TValue value) {
+        public BinarySearchResult Add(in BinarySearchResult bsr, in TKey key, in TValue value) {
             if(!this.TryAdd(in bsr, key, value, out var insertLocation))
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
             return insertLocation;
@@ -352,7 +352,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         /// </summary>
-        public bool Remove(TKey key) {
+        public bool Remove(in TKey key) {
             var x = this.BinarySearch(key);
  
             return this.Remove(x);
@@ -360,7 +360,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(1)
         /// </summary>
-        public bool Remove(BinarySearchResult bsr) {
+        public bool Remove(in BinarySearchResult bsr) {
             if(bsr.Index >= 0 && bsr.Node != null) {
                 bsr.Node.Value.RemoveAt(bsr.Index);
                 if(bsr.Index == 0)
@@ -488,7 +488,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetValue(TKey key, out TValue value) {
+        public bool TryGetValue(in TKey key, out TValue value) {
             if(!this.TryGetItem(key, out var item)) {
                 value = default;
                 return false;
@@ -501,7 +501,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetItem(TKey key, out KeyValuePair item) {
+        public bool TryGetItem(in TKey key, out KeyValuePair item) {
             var x = this.BinarySearch(key);
             if(x.Index >= 0 && x.Node != null) {
                 item = x.Item;
@@ -516,7 +516,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool ContainsKey(TKey key) {
+        public bool ContainsKey(in TKey key) {
             //return this.TryGetItem(key, out _);
             var x = this.BinarySearch(key);
             return x.Index >= 0 && x.Node != null;
@@ -528,7 +528,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearch(TKey key) {
+        public BinarySearchResult BinarySearch(in TKey key) {
             return this.BinarySearch(key, m_comparer.Compare);
         }
         /// <summary>
@@ -537,7 +537,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, IComparer<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, IComparer<TKey> comparer) {
             return this.BinarySearch(key, comparer.Compare);
         }
         /// <summary>
@@ -546,7 +546,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, Comparison<TKey> comparer) {
             var res = m_tree.BinarySearch(key, comparer);
  
             if(res.Diff > 0) {
@@ -620,7 +620,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void Update(TKey key, TValue value) {
+            public void Update(in TKey key, in TValue value) {
                 this.Node.Value.Items[this.Index] = new KeyValuePair(key, value);
                 if(this.Index == 0)
                     this.Node.UpdateKey(key);
@@ -633,7 +633,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(key, x.Value);
@@ -645,7 +645,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     O(1)
             /// </summary>
-            public void UpdateValue(TValue value) {
+            public void UpdateValue(in TValue value) {
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(x.Key, value);
@@ -673,7 +673,7 @@ namespace System.Collections.Specialized
                 this.Node  = node;
                 this.Index = index;
             }
-            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
+            public BinarySearchResult_Storeable(in BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
             #endregion
 
             #region Next()
@@ -715,7 +715,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void Update(TKey key, TValue value) {
+            public void Update(in TKey key, in TValue value) {
                 this.Node.Value.Items[this.Index] = new KeyValuePair(key, value);
                 if(this.Index == 0)
                     this.Node.UpdateKey(key);
@@ -728,7 +728,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(key, x.Value);
@@ -740,7 +740,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     O(1)
             /// </summary>
-            public void UpdateValue(TValue value) {
+            public void UpdateValue(in TValue value) {
                 var items = this.Node.Value.Items;
                 var x     = items[this.Index];
                 items[this.Index] = new KeyValuePair(x.Key, value);
@@ -756,10 +756,10 @@ namespace System.Collections.Specialized
             #endregion
 
             #region implicit casts
-            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+            public static implicit operator BinarySearchResult_Storeable(in BinarySearchResult value) {
                 return new BinarySearchResult_Storeable(value);
             }
-            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+            public static implicit operator BinarySearchResult(in BinarySearchResult_Storeable value) {
                 return new BinarySearchResult(value.Node, value.Index);
             }
             #endregion
@@ -774,7 +774,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearchNearby(BinarySearchResult start, TKey key) {
+        public BinarySearchResult BinarySearchNearby(in BinarySearchResult start, in TKey key) {
             return this.BinarySearchNearby(start, key, m_comparer.Compare);
         }
         /// <summary>
@@ -786,7 +786,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearchNearby(BinarySearchResult start, TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearchNearby(in BinarySearchResult start, in TKey key, Comparison<TKey> comparer) {
             // note: maybe check [key is between start.Node.Value.Items[0].Key and start.Node.Value.Items[max].Key] to avoid tree binarysearchnearby() ?
              
             var res = m_tree.BinarySearchNearby(start.Node, key);
@@ -924,7 +924,7 @@ namespace System.Collections.Specialized
             ///     Throws ArgumentException() on duplicate key.
             /// </summary>
             /// <exception cref="ArgumentException" />
-            public void AddOrdered(TKey key, TValue value) {
+            public void AddOrdered(in TKey key, in TValue value) {
                 var item = new KeyValuePair(key, value);
 
                 if(m_lastNode != null)
@@ -1047,7 +1047,7 @@ namespace System.Collections.Specialized
         ///     O(node.Items.Count / 2)     O(1) operation, but memcpy() of half the items to insert.
         ///     Returns false if key found.
         /// </summary>
-        private bool TryAdd(in BinarySearchResult searchResult, TKey key, TValue value, out BinarySearchResult insertLocation) {
+        private bool TryAdd(in BinarySearchResult searchResult, in TKey key, in TValue value, out BinarySearchResult insertLocation) {
             var x = searchResult;
 
             if(x.Index >= 0 && x.Node != null) {
@@ -1199,12 +1199,12 @@ namespace System.Collections.Specialized
             new_node.Count    = 1;
             return m_tree.Add(item.Key, new_node);
         }
-        private BinarySearchResult TryAdd_HandlePreviousCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair item) {
+        private BinarySearchResult TryAdd_HandlePreviousCurrentAndNextFull(in BinarySearchResult bsr, in KeyValuePair item) {
             // we could split the 3x nodes into 4x nodes at 75%, 
             // instead we split 2 nodes into 3x nodes at 66%
             return this.TryAdd_HandlePreviousAndCurrentFull(bsr, in item);
         }
-        private BinarySearchResult TryAdd_HandlePreviousAndCurrentFull(BinarySearchResult bsr, in KeyValuePair item) {
+        private BinarySearchResult TryAdd_HandlePreviousAndCurrentFull(in BinarySearchResult bsr, in KeyValuePair item) {
             var index = ~bsr.Index;
             // note: we know current and prev() are full
             var nodes = this.TryAdd_Rebalance2FullNodesInto3(bsr.Node.Previous(), bsr.Node);
@@ -1225,7 +1225,7 @@ namespace System.Collections.Specialized
                 insert_node.UpdateKey(item.Key);
             return new BinarySearchResult(insert_node, index);
         }
-        private BinarySearchResult TryAdd_HandleCurrentAndNextFull(BinarySearchResult bsr, in KeyValuePair item) {
+        private BinarySearchResult TryAdd_HandleCurrentAndNextFull(in BinarySearchResult bsr, in KeyValuePair item) {
             var index = ~bsr.Index;
             // note: we know current and next() are full
             var nodes = this.TryAdd_Rebalance2FullNodesInto3(bsr.Node, bsr.Node.Next());
@@ -1388,14 +1388,14 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        void ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Add(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
+        void ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Add(in System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             this.Add(item.Key, item.Value);
         }
  
         /// <summary>
         ///     O(log n)
         /// </summary>
-        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Remove(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
+        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Remove(in System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             return this.Remove(item.Key);
         }
          
@@ -1406,7 +1406,7 @@ namespace System.Collections.Specialized
  
         bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.IsReadOnly => false;
  
-        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Contains(System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
+        bool ICollection<System.Collections.Generic.KeyValuePair<TKey, TValue>>.Contains(in System.Collections.Generic.KeyValuePair<TKey, TValue> item) {
             return this.TryGetValue(item.Key, out TValue value) && object.Equals(item.Value, value);
         }
  
@@ -1434,7 +1434,7 @@ namespace System.Collections.Specialized
  
             #region BinarySearch()
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int BinarySearch(TKey key, Comparison<TKey> comparer) {
+            public int BinarySearch(in TKey key, Comparison<TKey> comparer) {
                 int min = 0;
                 int max = this.Count - 1;
              
@@ -1453,7 +1453,7 @@ namespace System.Collections.Specialized
                 return ~min;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int BinarySearch(TKey key, int min, Comparison<TKey> comparer) {
+            public int BinarySearch(in TKey key, int min, Comparison<TKey> comparer) {
                 int max = this.Count - 1;
              
                 while(min <= max) {
@@ -1496,16 +1496,16 @@ namespace System.Collections.Specialized
             public readonly TKey Key;
             public readonly TValue Value;
             #region constructors
-            public KeyValuePair(TKey key, TValue value) {
+            public KeyValuePair(in TKey key, in TValue value) {
                 this.Key   = key;
                 this.Value = value;
             }
             #endregion
             #region implicit casts
-            public static implicit operator System.Collections.Generic.KeyValuePair<TKey, TValue>(KeyValuePair value) {
+            public static implicit operator System.Collections.Generic.KeyValuePair<TKey, TValue>(in KeyValuePair value) {
                 return new System.Collections.Generic.KeyValuePair<TKey, TValue>(value.Key, value.Value);
             }
-            public static implicit operator KeyValuePair(System.Collections.Generic.KeyValuePair<TKey, TValue> value) {
+            public static implicit operator KeyValuePair(in System.Collections.Generic.KeyValuePair<TKey, TValue> value) {
                 return new KeyValuePair(value.Key, value.Value);
             }
             #endregion
@@ -1597,7 +1597,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public BinarySearchResult Add(TKey key) {
+        public BinarySearchResult Add(in TKey key) {
             var x = this.BinarySearch(key);
             if(!this.TryAdd(in x, key, out var insertLocation))
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
@@ -1611,7 +1611,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public BinarySearchResult Add(BinarySearchResult bsr, TKey key) {
+        public BinarySearchResult Add(in BinarySearchResult bsr, in TKey key) {
             if(!this.TryAdd(in bsr, key, out var insertLocation))
                 throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
             return insertLocation;
@@ -1722,7 +1722,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         /// </summary>
-        public bool Remove(TKey key) {
+        public bool Remove(in TKey key) {
             var x = this.BinarySearch(key);
  
             return this.Remove(x);
@@ -1730,7 +1730,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(1)
         /// </summary>
-        public bool Remove(BinarySearchResult bsr) {
+        public bool Remove(in BinarySearchResult bsr) {
             if(bsr.Index >= 0 && bsr.Node != null) {
                 bsr.Node.Value.RemoveAt(bsr.Index);
                 if(bsr.Index == 0)
@@ -1858,7 +1858,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool ContainsKey(TKey key) {
+        public bool ContainsKey(in TKey key) {
             var x = this.BinarySearch(key);
             return x.Index >= 0 && x.Node != null;
         }
@@ -1869,7 +1869,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearch(TKey key) {
+        public BinarySearchResult BinarySearch(in TKey key) {
             return this.BinarySearch(key, m_comparer.Compare);
         }
         /// <summary>
@@ -1878,7 +1878,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, IComparer<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, IComparer<TKey> comparer) {
             return this.BinarySearch(key, comparer.Compare);
         }
         /// <summary>
@@ -1887,7 +1887,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, Comparison<TKey> comparer) {
             var res = m_tree.BinarySearch(key, comparer);
  
             if(res.Diff > 0) {
@@ -1961,7 +1961,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 this.Node.Value.Items[this.Index] = key;
                 if(this.Index == 0)
                     this.Node.UpdateKey(key);
@@ -1989,7 +1989,7 @@ namespace System.Collections.Specialized
                 this.Node  = node;
                 this.Index = index;
             }
-            public BinarySearchResult_Storeable(BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
+            public BinarySearchResult_Storeable(in BinarySearchResult bsr) : this(bsr.Node, bsr.Index) { }
             #endregion
 
             #region Next()
@@ -2031,7 +2031,7 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 this.Node.Value.Items[this.Index] = key;
                 if(this.Index == 0)
                     this.Node.UpdateKey(key);
@@ -2047,10 +2047,10 @@ namespace System.Collections.Specialized
             #endregion
 
             #region implicit casts
-            public static implicit operator BinarySearchResult_Storeable(BinarySearchResult value) {
+            public static implicit operator BinarySearchResult_Storeable(in BinarySearchResult value) {
                 return new BinarySearchResult_Storeable(value);
             }
-            public static implicit operator BinarySearchResult(BinarySearchResult_Storeable value) {
+            public static implicit operator BinarySearchResult(in BinarySearchResult_Storeable value) {
                 return new BinarySearchResult(value.Node, value.Index);
             }
             #endregion
@@ -2065,7 +2065,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearchNearby(BinarySearchResult start, TKey key) {
+        public BinarySearchResult BinarySearchNearby(in BinarySearchResult start, in TKey key) {
             return this.BinarySearchNearby(start, key, m_comparer.Compare);
         }
         /// <summary>
@@ -2077,7 +2077,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearchNearby(BinarySearchResult start, TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearchNearby(in BinarySearchResult start, in TKey key, Comparison<TKey> comparer) {
             // note: maybe check [key is between start.Node.Value.Items[0].Key and start.Node.Value.Items[max].Key] to avoid tree binarysearchnearby() ?
              
             var res = m_tree.BinarySearchNearby(start.Node, key);
@@ -2215,7 +2215,7 @@ namespace System.Collections.Specialized
             ///     Throws ArgumentException() on duplicate key.
             /// </summary>
             /// <exception cref="ArgumentException" />
-            public void AddOrdered(TKey key) {
+            public void AddOrdered(in TKey key) {
                 if(m_lastNode != null)
                     this.Add(key);
                 else {
@@ -2238,7 +2238,7 @@ namespace System.Collections.Specialized
                     }
                 }
             }
-            private void Add(TKey key) {
+            private void Add(in TKey key) {
                 var cmp = m_comparer(key, m_maximum);
                 if(cmp > 0) {
                     var lastNode = m_lastNode;
@@ -2336,7 +2336,7 @@ namespace System.Collections.Specialized
         ///     O(node.Items.Count / 2)     O(1) operation, but memcpy() of half the items to insert.
         ///     Returns false if key found.
         /// </summary>
-        private bool TryAdd(in BinarySearchResult searchResult, TKey key, out BinarySearchResult insertLocation) {
+        private bool TryAdd(in BinarySearchResult searchResult, in TKey key, out BinarySearchResult insertLocation) {
             var x = searchResult;
 
             if(x.Index >= 0 && x.Node != null) {
@@ -2389,7 +2389,7 @@ namespace System.Collections.Specialized
             this.Count++;
             return true;
         }
-        private bool TryAdd_TryMove1ItemToPreviousOrNextNode(AvlTree<TKey, Node>.Node node, int index, TKey _new) {
+        private bool TryAdd_TryMove1ItemToPreviousOrNextNode(AvlTree<TKey, Node>.Node node, int index, in TKey _new) {
             var next = node.Next();
             if(next != null && next.Value.Count < m_itemsPerNode) {
                 Move1Next(_new);
@@ -2419,13 +2419,13 @@ namespace System.Collections.Specialized
             // prev and next are full
             return false;
 
-            void Move1Prev(TKey new_item) {
+            void Move1Prev(in TKey new_item) {
                 prev.Value.InsertAt(prev.Value.Count, node.Value.Items[0]);
                 Array.Copy(node.Value.Items, 1, node.Value.Items, 0, index - 1); //node.Value.RemoveAt(0);
                 node.Value.Items[index - 1] = new_item; //node.Value.InsertAt(index - 1, in _new);
                 node.UpdateKey(node.Value.Items[0]);
             }
-            void Move1Next(TKey new_item) {
+            void Move1Next(in TKey new_item) {
                 var count = node.Value.Count;
 
                 next.Value.InsertAt(0, node.Value.Items[count - 1]);
@@ -2434,7 +2434,7 @@ namespace System.Collections.Specialized
                 node.Value.InsertAt(index, new_item);
             }
         }
-        private bool TryAdd_TryInsertOnPreviousNode(AvlTree<TKey, Node>.Node node, TKey item, out BinarySearchResult insertLocation) {
+        private bool TryAdd_TryInsertOnPreviousNode(AvlTree<TKey, Node>.Node node, in TKey item, out BinarySearchResult insertLocation) {
             var prev = node.Previous();
              
             if(prev != null) {
@@ -2456,7 +2456,7 @@ namespace System.Collections.Specialized
             insertLocation = new BinarySearchResult(node, 0);
             return true;
         }
-        private bool TryAdd_TryInsertOnNextNode(AvlTree<TKey, Node>.Node node, TKey item, out BinarySearchResult insertLocation) {
+        private bool TryAdd_TryInsertOnNextNode(AvlTree<TKey, Node>.Node node, in TKey item, out BinarySearchResult insertLocation) {
             var next = node.Next();
  
             if(next != null) {
@@ -2480,18 +2480,18 @@ namespace System.Collections.Specialized
             }
             return true;
         }
-        private AvlTree<TKey, Node>.Node TryAdd_HandleNoRoot(TKey item) {
+        private AvlTree<TKey, Node>.Node TryAdd_HandleNoRoot(in TKey item) {
             var new_node      = new Node(m_itemsPerNode);
             new_node.Items[0] = item;
             new_node.Count    = 1;
             return m_tree.Add(item, new_node);
         }
-        private BinarySearchResult TryAdd_HandlePreviousCurrentAndNextFull(BinarySearchResult bsr, TKey item) {
+        private BinarySearchResult TryAdd_HandlePreviousCurrentAndNextFull(in BinarySearchResult bsr, in TKey item) {
             // we could split the 3x nodes into 4x nodes at 75%, 
             // instead we split 2 nodes into 3x nodes at 66%
             return this.TryAdd_HandlePreviousAndCurrentFull(bsr, item);
         }
-        private BinarySearchResult TryAdd_HandlePreviousAndCurrentFull(BinarySearchResult bsr, TKey item) {
+        private BinarySearchResult TryAdd_HandlePreviousAndCurrentFull(in BinarySearchResult bsr, in TKey item) {
             var index = ~bsr.Index;
             // note: we know current and prev() are full
             var nodes = this.TryAdd_Rebalance2FullNodesInto3(bsr.Node.Previous(), bsr.Node);
@@ -2512,7 +2512,7 @@ namespace System.Collections.Specialized
                 insert_node.UpdateKey(item);
             return new BinarySearchResult(insert_node, index);
         }
-        private BinarySearchResult TryAdd_HandleCurrentAndNextFull(BinarySearchResult bsr, TKey item) {
+        private BinarySearchResult TryAdd_HandleCurrentAndNextFull(in BinarySearchResult bsr, in TKey item) {
             var index = ~bsr.Index;
             // note: we know current and next() are full
             var nodes = this.TryAdd_Rebalance2FullNodesInto3(bsr.Node, bsr.Node.Next());
@@ -2653,7 +2653,7 @@ namespace System.Collections.Specialized
  
             #region BinarySearch()
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int BinarySearch(TKey key, Comparison<TKey> comparer) {
+            public int BinarySearch(in TKey key, Comparison<TKey> comparer) {
                 int min = 0;
                 int max = this.Count - 1;
              
@@ -2672,7 +2672,7 @@ namespace System.Collections.Specialized
                 return ~min;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int BinarySearch(TKey key, int min, Comparison<TKey> comparer) {
+            public int BinarySearch(in TKey key, int min, Comparison<TKey> comparer) {
                 int max = this.Count - 1;
              
                 while(min <= max) {
@@ -2691,7 +2691,7 @@ namespace System.Collections.Specialized
             }
             #endregion
             #region InsertAt()
-            public void InsertAt(int index, TKey item) {
+            public void InsertAt(int index, in TKey item) {
                 var count  = this.Count;
                 this.Count = count + 1;
                 Array.Copy(this.Items, index, this.Items, index + 1, count - index);

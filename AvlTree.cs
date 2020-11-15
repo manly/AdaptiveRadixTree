@@ -84,7 +84,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public TValue this[TKey key] {
+        public TValue this[in TKey key] {
             get{
                 var current = m_header.Parent;
                 while(current != null) {
@@ -204,7 +204,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public Node Add(TKey key, TValue value) {
+        public Node Add(in TKey key, TValue value) {
             var node = m_header.Parent;
             if(node != null) {
                 while(true) {
@@ -214,56 +214,66 @@ namespace System.Collections.Specialized
                         if(node.Right != null)
                             node = node.Right;
                         else {
-                            var _new = new Node(key, value){
-                                Parent  = node,
-                                Balance = State.Balanced,
-                            };
-                            node.Right = _new;
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                            if(m_header.Right == node)
-                                m_header.Right = _new;
-#endif
-                            BalanceSet(node, Direction.Right);
-                            node = _new;
+                            node = CreateRightNodeRare(key, value, node);
                             break;
                         }
                     } else if(diff < 0) {
                         if(node.Left != null)
                             node = node.Left;
                         else {
-                            var _new = new Node(key, value){
-                                Parent  = node,
-                                Balance = State.Balanced,
-                            };
-                            node.Left = _new;
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                            if(m_header.Left == node)
-                                m_header.Left = _new;
-#endif
-                            BalanceSet(node, Direction.Left);
-                            node = _new;
+                            node = CreateLeftNodeRare(key, value, node);
                             break;
                         }
                     } else
                         throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
-            } else {
-                var root = new Node(key, value) {
-                    Parent  = m_header,
-                    Balance = State.Balanced,
-                };
-                m_header.Parent = root;
-                node            = root;
- 
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                m_header.Left   = root;
-                m_header.Right  = root;
-#endif
-            }
- 
+            } else
+                node = CreateRootNodeRare(key, value);
+
             this.Count++;
             return node;
         }
+
+        private static Node CreateLeftNodeRare(in TKey key, TValue value, Node node) {
+            var _new = new Node(key, value){
+                Parent  = node,
+                Balance = State.Balanced,
+            };
+            node.Left = _new;
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            if(m_header.Left == node)
+                m_header.Left = _new;
+#endif
+            BalanceSet(node, Direction.Left);
+            return _new;
+        }
+        private static Node CreateRightNodeRare(in TKey key, TValue value, Node node) {
+            var _new = new Node(key, value){
+                Parent  = node,
+                Balance = State.Balanced,
+            };
+            node.Right = _new;
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            if(m_header.Right == node)
+                m_header.Right = _new;
+#endif
+            BalanceSet(node, Direction.Right);
+            return _new;
+        }
+        private Node CreateRootNodeRare(in TKey key, TValue value) {
+            var root = new Node(key, value) {
+                Parent  = m_header,
+                Balance = State.Balanced,
+            };
+            m_header.Parent = root;
+
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            m_header.Left   = root;
+            m_header.Right  = root;
+#endif
+            return root;
+        }
+
         /// <summary>
         ///     Balance the tree by walking the tree upwards.
         /// </summary>
@@ -340,7 +350,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         /// </summary>
-        public bool Remove(TKey key) {
+        public bool Remove(in TKey key) {
             var root = m_header.Parent;
  
             while(true) {
@@ -638,7 +648,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetValue(TKey key, out TValue value) {
+        public bool TryGetValue(in TKey key, out TValue value) {
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
@@ -669,7 +679,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetNode(TKey key, out Node node) {
+        public bool TryGetNode(in TKey key, out Node node) {
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
@@ -692,7 +702,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool ContainsKey(TKey key) {
+        public bool ContainsKey(in TKey key) {
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
@@ -717,7 +727,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearch(TKey key) {
+        public BinarySearchResult BinarySearch(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch(key, m_comparer);
  
@@ -748,7 +758,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, Comparison<TKey> comparer) {
             var current   = m_header.Parent;
             var prev      = current;
             var prev_diff = 0;
@@ -808,7 +818,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_GreaterOrEqualTo(key, m_comparer);
 
@@ -852,7 +862,7 @@ namespace System.Collections.Specialized
         ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(in TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
@@ -894,7 +904,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_LesserOrEqualTo(key, m_comparer);
 
@@ -938,7 +948,7 @@ namespace System.Collections.Specialized
         ///    Returns "-1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(in TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
@@ -985,7 +995,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearchNearby(Node start, TKey key) {
+        public BinarySearchResult BinarySearchNearby(Node start, in TKey key) {
             return this.BinarySearchNearby(start, key, m_comparer);
         }
         /// <summary>
@@ -1001,7 +1011,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearchNearby(Node start, in TKey key, Comparison<TKey> comparer) {
             var node = start;
             var prev = start;
  
@@ -1090,7 +1100,7 @@ namespace System.Collections.Specialized
         ///     Returns all nodes between the 2 keys.
         ///     Use RangeEnumerator instead for efficient re-use.
         /// </summary>
-        public IEnumerable<Node> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
+        public IEnumerable<Node> Range(in TKey start, in TKey end, bool include_start = true, bool include_end = true) {
             return new RangeEnumerator(this).Run(start, end, include_start, include_end);
         }
         /// <summary>
@@ -1147,7 +1157,7 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindStartNode(TKey start, HashSet<Node> path, bool include_start) {
+            private Node FindStartNode(in TKey start, HashSet<Node> path, bool include_start) {
                 var node = this.TryGetPath(start, path);
                 var diff = m_owner.m_comparer(start, node.Key);
                 if(diff > 0 || (!include_start && diff == 0))
@@ -1155,14 +1165,14 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindEndNode(TKey end, bool include_end) {
+            private Node FindEndNode(in TKey end, bool include_end) {
                 var x    = m_owner.BinarySearch(end);
                 var node = x.Node;
                 if(x.Diff < 0 || (!include_end && x.Diff == 0))
                     node = node.Previous();
                 return node;
             }
-            private Node TryGetPath(TKey key, HashSet<Node> path) {
+            private Node TryGetPath(in TKey key, HashSet<Node> path) {
                 var current = m_owner.m_header.Parent;
                 var prev    = current;
                 while(current != null) {
@@ -1472,7 +1482,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        void IDictionary<TKey, TValue>.Add(TKey key, TValue value) {
+        void IDictionary<TKey, TValue>.Add(in TKey key, TValue value) {
             this.Add(key, value);
         }
  
@@ -1635,13 +1645,13 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 this.Key = key;
             }
             #endregion
  
             #region constructors
-            public Node(TKey key, TValue value) {
+            public Node(in TKey key, TValue value) {
                 this.Key   = key;
                 this.Value = value;
             }
@@ -1800,7 +1810,7 @@ namespace System.Collections.Specialized
         ///     Throws ArgumentException() on duplicate key.
         /// </summary>
         /// <exception cref="ArgumentException" />
-        public Node Add(TKey key) {
+        public Node Add(in TKey key) {
             var node = m_header.Parent;
             if(node != null) {
                 while(true) {
@@ -1810,56 +1820,66 @@ namespace System.Collections.Specialized
                         if(node.Right != null)
                             node = node.Right;
                         else {
-                            var _new = new Node(key){
-                                Parent  = node,
-                                Balance = State.Balanced,
-                            };
-                            node.Right = _new;
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                            if(m_header.Right == node)
-                                m_header.Right = _new;
-#endif
-                            BalanceSet(node, Direction.Right);
-                            node = _new;
+                            node = CreateRightNodeRare(key, node);
                             break;
                         }
                     } else if(diff < 0) {
                         if(node.Left != null)
                             node = node.Left;
                         else {
-                            var _new = new Node(key){
-                                Parent  = node,
-                                Balance = State.Balanced,
-                            };
-                            node.Left = _new;
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                            if(m_header.Left == node)
-                                m_header.Left = _new;
-#endif
-                            BalanceSet(node, Direction.Left);
-                            node = _new;
+                            node = CreateLeftNodeRare(key, node);
                             break;
                         }
                     } else
                         throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
-            } else {
-                var root = new Node(key) {
-                    Parent  = m_header,
-                    Balance = State.Balanced,
-                };
-                m_header.Parent = root;
-                node            = root;
- 
-#if MAINTAIN_MINIMUM_AND_MAXIMUM
-                m_header.Left   = root;
-                m_header.Right  = root;
-#endif
-            }
- 
+            } else
+                node = CreateRootNodeRare(key);
+
             this.Count++;
             return node;
         }
+
+        private static Node CreateLeftNodeRare(in TKey key, Node node) {
+            var _new = new Node(key){
+                Parent  = node,
+                Balance = State.Balanced,
+            };
+            node.Left = _new;
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            if(m_header.Left == node)
+                m_header.Left = _new;
+#endif
+            BalanceSet(node, Direction.Left);
+            return _new;
+        }
+        private static Node CreateRightNodeRare(in TKey key, Node node) {
+            var _new = new Node(key){
+                Parent  = node,
+                Balance = State.Balanced,
+            };
+            node.Right = _new;
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            if(m_header.Right == node)
+                m_header.Right = _new;
+#endif
+            BalanceSet(node, Direction.Right);
+            return _new;
+        }
+        private Node CreateRootNodeRare(in TKey key) {
+            var root = new Node(key) {
+                Parent  = m_header,
+                Balance = State.Balanced,
+            };
+            m_header.Parent = root;
+
+#if MAINTAIN_MINIMUM_AND_MAXIMUM
+            m_header.Left   = root;
+            m_header.Right  = root;
+#endif
+            return root;
+        }
+
         /// <summary>
         ///     Balance the tree by walking the tree upwards.
         /// </summary>
@@ -1936,7 +1956,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(log n)
         /// </summary>
-        public bool Remove(TKey key) {
+        public bool Remove(in TKey key) {
             var root = m_header.Parent;
  
             while(true) {
@@ -2234,7 +2254,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool TryGetNode(TKey key, out Node node) {
+        public bool TryGetNode(in TKey key, out Node node) {
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
@@ -2257,7 +2277,7 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(log n)
         /// </summary>
-        public bool ContainsKey(TKey key) {
+        public bool ContainsKey(in TKey key) {
             var current = m_header.Parent;
             while(current != null) {
                 int diff = m_comparer(key, current.Key);
@@ -2282,7 +2302,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearch(TKey key) {
+        public BinarySearchResult BinarySearch(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch(key, m_comparer);
  
@@ -2313,7 +2333,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch(in TKey key, Comparison<TKey> comparer) {
             var current   = m_header.Parent;
             var prev      = current;
             var prev_diff = 0;
@@ -2373,7 +2393,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns "1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_GreaterOrEqualTo(key, m_comparer);
 
@@ -2417,7 +2437,7 @@ namespace System.Collections.Specialized
         ///    Returns "1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_GreaterOrEqualTo(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_GreaterOrEqualTo(in TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Next() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
@@ -2459,7 +2479,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns "-1 diff" if not found.
         /// </summary>
-        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(in TKey key) {
             // inline this since this is usually called in hot paths
             //return this.BinarySearch_LesserOrEqualTo(key, m_comparer);
 
@@ -2503,7 +2523,7 @@ namespace System.Collections.Specialized
         ///    Returns "-1 diff" if not found.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearch_LesserOrEqualTo(TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearch_LesserOrEqualTo(in TKey key, Comparison<TKey> comparer) {
             // this is basically an inlined version of AvlTree + node.Previous() to avoid re-reads
             // code intent:
             //     var bsr = this.BinarySearch(key);
@@ -2550,7 +2570,7 @@ namespace System.Collections.Specialized
         ///    
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
-        public BinarySearchResult BinarySearchNearby(Node start, TKey key) {
+        public BinarySearchResult BinarySearchNearby(Node start, in TKey key) {
             return this.BinarySearchNearby(start, key, m_comparer);
         }
         /// <summary>
@@ -2566,7 +2586,7 @@ namespace System.Collections.Specialized
         ///    Returns {null, 0} if this.Count==0.
         /// </summary>
         /// <param name="comparer">Custom comparer. This can be used for various speed optimisation tricks comparing only some values out of everything normally compared.</param>
-        public BinarySearchResult BinarySearchNearby(Node start, TKey key, Comparison<TKey> comparer) {
+        public BinarySearchResult BinarySearchNearby(Node start, in TKey key, Comparison<TKey> comparer) {
             var node = start;
             var prev = start;
  
@@ -2655,7 +2675,7 @@ namespace System.Collections.Specialized
         ///     Returns all nodes between the 2 keys.
         ///     Use RangeEnumerator instead for efficient re-use.
         /// </summary>
-        public IEnumerable<Node> Range(TKey start, TKey end, bool include_start = true, bool include_end = true) {
+        public IEnumerable<Node> Range(in TKey start, in TKey end, bool include_start = true, bool include_end = true) {
             return new RangeEnumerator(this).Run(start, end, include_start, include_end);
         }
         /// <summary>
@@ -2712,7 +2732,7 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindStartNode(TKey start, HashSet<Node> path, bool include_start) {
+            private Node FindStartNode(in TKey start, HashSet<Node> path, bool include_start) {
                 var node = this.TryGetPath(start, path);
                 var diff = m_owner.m_comparer(start, node.Key);
                 if(diff > 0 || (!include_start && diff == 0))
@@ -2720,14 +2740,14 @@ namespace System.Collections.Specialized
                 return node;
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private Node FindEndNode(TKey end, bool include_end) {
+            private Node FindEndNode(in TKey end, bool include_end) {
                 var x    = m_owner.BinarySearch(end);
                 var node = x.Node;
                 if(x.Diff < 0 || (!include_end && x.Diff == 0))
                     node = node.Previous();
                 return node;
             }
-            private Node TryGetPath(TKey key, HashSet<Node> path) {
+            private Node TryGetPath(in TKey key, HashSet<Node> path) {
                 var current = m_owner.m_header.Parent;
                 var prev    = current;
                 while(current != null) {
@@ -3121,13 +3141,13 @@ namespace System.Collections.Specialized
             ///     This is an "unsafe" operation; it can break the tree if you don't know what you're doing.
             ///     Safe to change if [key &gt; this.Previous() && key &lt; this.Next()].
             /// </summary>
-            public void UpdateKey(TKey key) {
+            public void UpdateKey(in TKey key) {
                 this.Key = key;
             }
             #endregion
  
             #region constructors
-            public Node(TKey key) {
+            public Node(in TKey key) {
                 this.Key = key;
             }
             #endregion
