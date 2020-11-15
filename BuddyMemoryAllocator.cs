@@ -3,7 +3,7 @@
 namespace System.Collections.Specialized 
 {
     /// <summary>
-    ///     Thread safe.
+    ///     Not thread safe.
     ///     Allocates managed memory using the buddy memory allocation algorithm.
     ///     
     ///     This implementation is meant for small allocations (i.e.: 24- bytes) and ideally 2-8 bytes allocations.
@@ -32,8 +32,6 @@ namespace System.Collections.Specialized
         private const int MIN_ALLOC_SIZE   = 2; // must be an exponent of 2 (1,2,4,8,16,...)
         private const int DEFAULT_CAPACITY = 4096;
 
-        private readonly object m_lock = new object();
-
         private Level[] m_levels; // from smallest to biggest
         private ulong[] m_bitmaps;
 
@@ -54,9 +52,7 @@ namespace System.Collections.Specialized
         /// The returned memory is not zeroed out.
         /// </summary>
         public Ptr Alloc(int size) {
-            lock(m_lock) {
-                return this.InternalAlloc(size);
-            }
+            return this.InternalAlloc(size);
         }
         private Ptr InternalAlloc(int size) {
             var level = CalculateLevel(size);
@@ -94,7 +90,7 @@ namespace System.Collections.Specialized
 
             // if no free block exists that are bigger than size, then increase capacity
             // typically this will *2 capacity
-            this.InternalEnsureCapacity(this.Capacity + size, false);
+            this.EnsureCapacity(this.Capacity + size);
             // this recursion will not go deeper than 1 level
             return this.InternalAlloc(size);
 
@@ -126,13 +122,8 @@ namespace System.Collections.Specialized
         /// Frees previously allocated memory.
         /// </summary>
         public void Free(Ptr memoryHandle) {
-            lock(m_lock) {
-                InternalFree(memoryHandle, m_levels, m_bitmaps);
-            }
+             InternalFree(memoryHandle, m_levels, m_bitmaps);
         }
-        /// <summary>
-        /// Frees previously allocated memory.
-        /// </summary>
         private static void InternalFree(Ptr memoryHandle, Level[] levels, ulong[] bitmaps) {
             while(true) {
                 var index      = memoryHandle.GetBitmapIndex(levels);
@@ -183,9 +174,6 @@ namespace System.Collections.Specialized
         /// This will allocate capacity to powers of 2.
         /// </summary>
         public void EnsureCapacity(int capacity) {
-            this.InternalEnsureCapacity(capacity, true);
-        }
-        private void InternalEnsureCapacity(int capacity, bool _lock) {
             var level = CalculateLevel(capacity);
 
             // if remainder, double
@@ -199,93 +187,76 @@ namespace System.Collections.Specialized
             if(m_levels != null && this.Capacity >= capacity)
                 return;
 
-            try { // lock(m_lock) 
-                if(_lock) {
-                    System.Threading.Monitor.Enter(m_lock);
+            level++; // add 1 because we want that level created too
 
-                    // already have capacity
-                    if(m_levels != null && this.Capacity >= capacity)
-                        return;
-                }
+            int bitmap_index = 0;
+            var new_levels   = new Level[level];
 
-                level++; // add 1 because we want that level created too
-
-                int bitmap_index = 0;
-                var new_levels   = new Level[level];
-
-                for(int i = 0; i < level; i++) {
-                    block_size         = GetBlockSize(i);
-                    var old_free_count = i < m_levels.Length ? m_levels[i].FreeCount : 0;
-                    var block_count    = Math.Max(1, capacity / block_size);
-                    new_levels[i]      = new Level(bitmap_index, block_size, block_count, old_free_count);
-                    bitmap_index      += Math.Max(1, block_count >> 6);
-                }
-
-                var new_bitmaps = new ulong[bitmap_index];
-
-                // recopy bitmaps
-                for(int i = 0; i < m_levels.Length; i++) {
-                    ref var current = ref m_levels[i];
-                    if(current.FreeCount == 0)
-                        continue;
-                    Array.Copy(
-                        m_bitmaps, 
-                        current.BitmapIndex, 
-                        new_bitmaps, 
-                        current.BitmapIndex, 
-                        Math.Max(1, current.BlockCount >> 6));
-                }
-                // at this point, the new bitmaps think all the new memory is allocated
-                // we mark it as free in order to properly assign all values (level[x].FreeCount + bitmaps)
-                var memory_freeing_pointer = this.Capacity; // start freeing after old capacity
-                for(int i = 0; i < level - m_levels.Length; i++) {
-                    //  BEFORE             AFTER
-                    //                       8
-                    //                    /      \
-                    //                 4            9
-                    //               /   \        /   \
-                    //              2     5     10     13
-                    //             / \   / \   / \    /  \
-                    //  1         1   3 6   7 11  12 14  15
-                    // 
-                    // 1= old top of tree (/last level)
-                    // the calls were doing here, which will mark the new memory as free:
-                    // free(3)
-                    // free(5)
-                    // free(9)
-
-                    InternalFree(new Ptr(unchecked((byte)(m_levels.Length + i - 1)), memory_freeing_pointer), new_levels, new_bitmaps);
-                    memory_freeing_pointer += new_levels[m_levels.Length + i - 1].BlockSize;
-                }
-
-                var new_memory = new byte[capacity];
-                Array.Copy(this.Memory, 0, new_memory, 0, this.Memory.Length);
-
-                this.Memory = new_memory;
-                m_levels    = new_levels;
-                m_bitmaps   = new_bitmaps;
-            } finally {
-                if(_lock)
-                    System.Threading.Monitor.Exit(m_lock);
+            for(int i = 0; i < level; i++) {
+                block_size         = GetBlockSize(i);
+                var old_free_count = i < m_levels.Length ? m_levels[i].FreeCount : 0;
+                var block_count    = Math.Max(1, capacity / block_size);
+                new_levels[i]      = new Level(bitmap_index, block_size, block_count, old_free_count);
+                bitmap_index      += Math.Max(1, block_count >> 6);
             }
+
+            var new_bitmaps = new ulong[bitmap_index];
+
+            // recopy bitmaps
+            for(int i = 0; i < m_levels.Length; i++) {
+                ref var current = ref m_levels[i];
+                if(current.FreeCount == 0)
+                    continue;
+                Array.Copy(
+                    m_bitmaps, 
+                    current.BitmapIndex, 
+                    new_bitmaps, 
+                    current.BitmapIndex, 
+                    Math.Max(1, current.BlockCount >> 6));
+            }
+            // at this point, the new bitmaps think all the new memory is allocated
+            // we mark it as free in order to properly assign all values (level[x].FreeCount + bitmaps)
+            var memory_freeing_pointer = this.Capacity; // start freeing after old capacity
+            for(int i = 0; i < level - m_levels.Length; i++) {
+                //  BEFORE             AFTER
+                //                       8
+                //                    /      \
+                //                 4            9
+                //               /   \        /   \
+                //              2     5     10     13
+                //             / \   / \   / \    /  \
+                //  1         1   3 6   7 11  12 14  15
+                // 
+                // 1= old top of tree (/last level)
+                // the calls were doing here, which will mark the new memory as free:
+                // free(3)
+                // free(5)
+                // free(9)
+
+                InternalFree(new Ptr(unchecked((byte)(m_levels.Length + i - 1)), memory_freeing_pointer), new_levels, new_bitmaps);
+                memory_freeing_pointer += new_levels[m_levels.Length + i - 1].BlockSize;
+            }
+
+            var new_memory = new byte[capacity];
+            Array.Copy(this.Memory, 0, new_memory, 0, this.Memory.Length);
+
+            this.Memory = new_memory;
+            m_levels    = new_levels;
+            m_bitmaps   = new_bitmaps;
         }
         #endregion
 
         #region CalculateUsedMemory()
         public int CalculateUsedMemory() {
-            lock(m_lock) {
-                int memory_alloc = this.Memory.Length;
-                int free_memory  = this.InternalCalculateFreeMemory();
+            int memory_alloc = this.Memory.Length;
+            int free_memory  = this.InternalCalculateFreeMemory();
 
-                return memory_alloc - free_memory;
-            }
+            return memory_alloc - free_memory;
         }
         #endregion
         #region CalculateFreeMemory()
         public int CalculateFreeMemory() {
-            lock(m_lock) {
-                return this.InternalCalculateFreeMemory();
-            }
+            return this.InternalCalculateFreeMemory();
         }
         private int InternalCalculateFreeMemory() {
             int level_count = m_levels.Length;
@@ -304,7 +275,7 @@ namespace System.Collections.Specialized
         /// <summary>
         /// If memory allocated is less than capacity, then allocates to that.
         /// </summary>
-        public void Init(int capacity) {
+        private void Init(int capacity) {
             var level = CalculateLevel(capacity);
 
             // if remainder, double
