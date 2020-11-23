@@ -27,11 +27,12 @@ namespace System.Collections.Specialized
     ///     If ultimate memory savings is the goal, using pure structs for everything works, as long as all the types are the same.
     /// </remarks>
     public sealed class BuddyMemoryAllocator {
-        private const int MIN_ALLOC_SIZE   = 2; // must be an exponent of 2 (1,2,4,8,16,...)
-        private const int DEFAULT_CAPACITY = DEFAULT_MIN_CHUNK_SIZE;
+        private const int MIN_ALLOC_SIZE              = 2; // must be an exponent of 2 (1,2,4,8,16,...)
+        private const int FREE_BLOCKS_CACHE_PER_LEVEL = 4; // # of free blocks cached per level
 
         private Level[] m_levels; // from smallest to biggest
         private ulong[] m_bitmaps;
+        private readonly FreeBlockCache m_freeBlockCache;
 
         private MemoryChunk[] m_chunks;
         private int m_chunkCount;
@@ -39,7 +40,8 @@ namespace System.Collections.Specialized
         public int Capacity { get; private set; }
 
         #region constructors
-        public BuddyMemoryAllocator(int capacity = DEFAULT_CAPACITY) {
+        public BuddyMemoryAllocator(int capacity = DEFAULT_MIN_CHUNK_SIZE) {
+            m_freeBlockCache = new FreeBlockCache();
             this.Init(DEFAULT_MIN_CHUNK_SIZE); // do not change this unless you really know what you're doing
             this.EnsureCapacity(capacity);
         }
@@ -77,11 +79,12 @@ namespace System.Collections.Specialized
 
                     for(int i = bigger_level - 1; i >= level; i--) {
                         level_instance        = ref m_levels[i];
-                        level_instance.FreeBlocks++; // = 1?
                         current_free_address -= level_instance.BlockSize;
                         var bitmap_index      = GetBitmapIndex(current_free_address, level_instance);
                         ref var bitmap        = ref m_bitmaps[bitmap_index.BitmapsIndex];
                         bitmap               |= (ulong)1 << bitmap_index.Shift;
+                        m_freeBlockCache.Add(i, (bitmap_index.BitmapsIndex << 6) + bitmap_index.Shift);
+                        level_instance.FreeBlocks++; // = 1?
                     }
 
                     var chunkID = this.BinarySearchChunk(level_instance.ChunkID, allocated_address, out var chunk);
@@ -101,33 +104,50 @@ namespace System.Collections.Specialized
             return this.InternalAlloc(size);
         }
         private PtrExtended AllocOnLevel(int lvl, ref Level level_instance) {
-            var index = level_instance.BitmapIndex;
-            var max   = Math.Max(1, level_instance.BlockCount >> 6);
-            var chunk = m_chunks[level_instance.ChunkID]; // dont use "ref" here because we do "out chunk" later on
-            int start = (chunk.MemoryPosition / level_instance.BlockSize) >> 6; // skip the parts where chunks cant even allocate the requested size
-
-            // find first free bit
-            for(int i = start; i < max; i++) {
-                ref var bitmap = ref m_bitmaps[index + i];
-
-                if(bitmap == 0) 
-                    continue;
-
-                var free_bitmap_index = BitScanForward(bitmap);
-                bitmap &= ~((ulong)1 << free_bitmap_index); // mark as used
-                level_instance.FreeBlocks--;
-
-                var memory_position = (i * 64 + free_bitmap_index) * level_instance.BlockSize;
-                var chunkID         = this.BinarySearchChunk(level_instance.ChunkID, memory_position, out chunk);
+            // try cache first
+            var cached_block = m_freeBlockCache.Pop(lvl);
+            if(cached_block >= 0) {
+                var memory_position = (cached_block - (level_instance.BitmapIndex << 6)) * level_instance.BlockSize;
+                var chunkID         = this.BinarySearchChunk(level_instance.ChunkID, memory_position, out var chunk);
                 var address         = memory_position - chunk.MemoryPosition;
+
+                ref var bitmap = ref m_bitmaps[cached_block >> 6]; // level_instance.BitmapIndex + ...
+                bitmap &= ~((ulong)1 << (cached_block % 64)); // mark as used
+                //m_freeBlockCache.Remove(lvl, cached_block); // pop() removed it
+                level_instance.FreeBlocks--;
 
                 return new PtrExtended(
                     new Ptr(lvl, chunkID, address),
                     chunk.Memory);
+            } else {
+                var index = level_instance.BitmapIndex;
+                var max   = Math.Max(1, level_instance.BlockCount >> 6);
+                var chunk = m_chunks[level_instance.ChunkID]; // dont use "ref" here because we do "out chunk" later on
+                int start = (chunk.MemoryPosition / level_instance.BlockSize) >> 6; // skip the parts where chunks cant even allocate the requested size
+
+                // find first free bit
+                for(int i = start; i < max; i++) {
+                    ref var bitmap = ref m_bitmaps[index + i];
+                    if(bitmap == 0) 
+                        continue;
+
+                    var free_bitmap_index = BitScanForward(bitmap);
+                    bitmap &= ~((ulong)1 << free_bitmap_index); // mark as used
+                    m_freeBlockCache.Remove(lvl, ((index + i) << 6) + free_bitmap_index);
+                    level_instance.FreeBlocks--;
+
+                    var memory_position = (i * 64 + free_bitmap_index) * level_instance.BlockSize;
+                    var chunkID         = this.BinarySearchChunk(level_instance.ChunkID, memory_position, out chunk);
+                    var address         = memory_position - chunk.MemoryPosition;
+
+                    return new PtrExtended(
+                        new Ptr(lvl, chunkID, address),
+                        chunk.Memory);
+                }
+                // should be impossible to make it here
+                //throw new ApplicationException($"{this.GetType().Name} state is invalid.");
+                return new PtrExtended();
             }
-            // should be impossible to make it here
-            //throw new ApplicationException($"{this.GetType().Name} state is invalid.");
-            return new PtrExtended();
         }
         private int BinarySearchChunk(int min, int memory_position, out MemoryChunk chunk) {
             int max = m_chunkCount - 1;
@@ -158,9 +178,9 @@ namespace System.Collections.Specialized
         /// Frees previously allocated memory.
         /// </summary>
         public void Free(Ptr memoryHandle) {
-             InternalFree(memoryHandle, m_levels, m_bitmaps, m_chunks);
+             InternalFree(memoryHandle, m_levels, m_bitmaps, m_chunks, m_freeBlockCache);
         }
-        private static void InternalFree(Ptr memoryHandle, Level[] levels, ulong[] bitmaps, MemoryChunk[] chunks) {
+        private static void InternalFree(Ptr memoryHandle, Level[] levels, ulong[] bitmaps, MemoryChunk[] chunks, FreeBlockCache freeBlockCache) {
             var chunkID = memoryHandle.ChunkID;
             var chunk   = chunks[chunkID];
 
@@ -176,8 +196,9 @@ namespace System.Collections.Specialized
 
                 // if top level, dont recurse
                 if(memoryHandle.Level == levels.Length - 1) {
-                    level.FreeBlocks++;
                     bitmap |= (ulong)1 << index.Shift;
+                    freeBlockCache.Add(memoryHandle.Level, (index.BitmapsIndex << 6) + index.Shift);
+                    level.FreeBlocks++;
                     return;
                 }
 
@@ -195,6 +216,7 @@ namespace System.Collections.Specialized
 
                         // mark buddy as used
                         buddy_bitmap &= ~((ulong)1 << buddy_index.Shift);
+                        freeBlockCache.Remove(memoryHandle.Level + 1, (buddy_index.BitmapsIndex << 6) + buddy_index.Shift);
                         level.FreeBlocks--;
                         // recurse (eg: compaction)
                         memoryHandle = new Ptr(
@@ -208,6 +230,7 @@ namespace System.Collections.Specialized
                 // case "buddy_is_free == false"
                 // mark as free and were done, no compaction
                 bitmap |= (ulong)1 << index.Shift;
+                freeBlockCache.Add(memoryHandle.Level, (index.BitmapsIndex << 6) + index.Shift);
                 level.FreeBlocks++;
                 // no compaction needed
                 return;
@@ -285,6 +308,9 @@ namespace System.Collections.Specialized
             m_bitmaps[last_level.BitmapIndex] = 1;
             last_level.FreeBlocks = 1;
 
+            m_freeBlockCache.SupportLevel(m_levels.Length - 1);
+            m_freeBlockCache.Add(m_levels.Length - 1, last_level.BitmapIndex << 6);
+
             this.Capacity = capacity;
         }
         #endregion
@@ -308,6 +334,8 @@ namespace System.Collections.Specialized
             var level          = CalculateLevel(capacity);
             var new_levels     = new Level[level];
             var total_capacity = this.Capacity + capacity;
+
+            m_freeBlockCache.SupportLevel(level);
 
             for(int i = 0; i < level; i++) {
                 var block_size      = GetBlockSize(i);
@@ -343,7 +371,8 @@ namespace System.Collections.Specialized
                     new Ptr(current_level, m_chunkCount, address),
                     new_levels, 
                     new_bitmaps, 
-                    m_chunks);
+                    m_chunks,
+                    m_freeBlockCache);
                 memory_freeing_pointer += new_levels[current_level].BlockSize;
                 current_level--;
             }
@@ -561,9 +590,11 @@ namespace System.Collections.Specialized
             //allocator.EnsureCapacity(100000);
             //allocator.Alloc(100000);
 
+            var start = DateTime.MinValue;
+
             for(int i = 0; i < loops; i++) {
                 if(i % 1000 == 0) {
-                    Console.WriteLine(i);
+                    Console.WriteLine($"{i} {DateTime.UtcNow - start}");
                     if(!Verify())
                         System.Diagnostics.Debugger.Break();
                 }
@@ -581,6 +612,8 @@ namespace System.Collections.Specialized
                     }
                 }
             }
+
+            Console.WriteLine($"{loops} {DateTime.UtcNow - start}");
 
             bool Verify() {
                 if(allocator.CalculateUsedMemory() != reference.Count * 4)
@@ -606,6 +639,134 @@ namespace System.Collections.Specialized
                     (buffer[ptr.Ptr.Address + 1] << 8) |
                     (buffer[ptr.Ptr.Address + 2] << 16) |
                     (buffer[ptr.Ptr.Address + 3] << 24);
+            }
+        }
+        #endregion
+
+        #region private struct Level
+        private struct Level {
+            /// <summary>
+            /// Index in m_bitmaps where this level blocks bitarray starts
+            /// </summary>
+            public readonly int BitmapIndex;
+            /// <summary>
+            /// The size of blocks (ie: allocated size)
+            /// </summary>
+            public readonly int BlockSize;
+            /// <summary>
+            /// Number of blocks
+            /// </summary>
+            public readonly int BlockCount;
+            /// <summary>
+            /// The first index in m_chunks where chunk.Length >= BlockSize
+            /// </summary>
+            public readonly int ChunkID;
+
+            /// <summary>
+            /// Number of free blocks
+            /// </summary>
+            public int FreeBlocks;
+
+            #region constructors
+            public Level(int bitmap_index, int block_size, int block_count, int chunkID, int free_blocks) : this() {
+                this.BitmapIndex = bitmap_index;
+                this.BlockSize   = block_size;
+                this.BlockCount  = block_count;
+                this.ChunkID     = chunkID;
+                this.FreeBlocks  = free_blocks;
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return $"[{this.FreeBlocks}x {this.BlockSize} bytes] free ({this.BlockCount} blocks)";
+            }
+            #endregion
+        }
+        #endregion
+        #region private struct MemoryChunk
+        private readonly struct MemoryChunk {
+            public readonly byte[] Memory;
+            /// <summary>
+            /// The cumulative position within the memory chunks.
+            /// Essentially sum(previous_chunks.Length)
+            /// </summary>
+            public readonly int MemoryPosition;
+            /// <summary>
+            /// Memory.Length
+            /// </summary>
+            public readonly int Length;
+
+            #region constructors
+            public MemoryChunk(byte[] memory, int memory_position) {
+                this.Memory         = memory;
+                this.Length         = memory.Length;
+                this.MemoryPosition = memory_position;
+            }
+            #endregion
+            #region Contains()
+            public bool Contains(int memory_position, int length) {
+                return memory_position >= this.MemoryPosition && 
+                    memory_position + length < this.MemoryPosition + this.Length;
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return $"@{this.MemoryPosition} ({this.Length} bytes)";
+            }
+            #endregion
+        }
+        #endregion
+        #region private class FreeBlockCache
+        private class FreeBlockCache {
+            private int[] m_cache;
+
+            public FreeBlockCache() : base(){
+                m_cache = new int[FREE_BLOCKS_CACHE_PER_LEVEL * 16];
+                for(int i = 0; i < m_cache.Length; i++)
+                    m_cache[i] = -1;
+            }
+
+            public void SupportLevel(int levels) {
+                var size = levels * FREE_BLOCKS_CACHE_PER_LEVEL;
+                if(m_cache.Length < size) {
+                    var old_size = m_cache.Length;
+                    Array.Resize(ref m_cache, size);
+                    for(int i = old_size; i < size; i++)
+                        m_cache[i] = -1;
+                }
+            }
+
+            public void Add(int level, int block) {
+                var index = level * FREE_BLOCKS_CACHE_PER_LEVEL;
+                for(int i = 0; i < FREE_BLOCKS_CACHE_PER_LEVEL; i++) {
+                    ref var x = ref m_cache[index + i];
+                    if(x < 0) { // if free
+                        x = block;
+                        break;
+                    }
+                }
+            }
+            public void Remove(int level, int block) {
+                var index = level * FREE_BLOCKS_CACHE_PER_LEVEL;
+                for(int i = 0; i < FREE_BLOCKS_CACHE_PER_LEVEL; i++) {
+                    ref var x = ref m_cache[index + i];
+                    if(x == block) {
+                        x = -1;
+                        break;
+                    }
+                }
+            }
+            public int Pop(int level) {
+                var index = level * FREE_BLOCKS_CACHE_PER_LEVEL;
+                for(int i = 0; i < FREE_BLOCKS_CACHE_PER_LEVEL; i++) {
+                    ref var x = ref m_cache[index + i];
+                    if(x >= 0) {
+                        var res = x;
+                        x = -1;
+                        return res;
+                    }
+                }
+                return -1;
             }
         }
         #endregion
@@ -697,76 +858,6 @@ namespace System.Collections.Specialized
                     this.Level.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     this.ChunkID.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     this.Address.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            }
-            #endregion
-        }
-
-        internal struct Level {
-            /// <summary>
-            /// Index in m_bitmaps where this level blocks bitarray starts
-            /// </summary>
-            public readonly int BitmapIndex;
-            /// <summary>
-            /// The size of blocks (ie: allocated size)
-            /// </summary>
-            public readonly int BlockSize;
-            /// <summary>
-            /// Number of blocks
-            /// </summary>
-            public readonly int BlockCount;
-            /// <summary>
-            /// The first index in m_chunks where chunk.Length >= BlockSize
-            /// </summary>
-            public readonly int ChunkID;
-
-            /// <summary>
-            /// Number of free blocks
-            /// </summary>
-            public int FreeBlocks;
-
-            #region constructors
-            public Level(int bitmap_index, int block_size, int block_count, int chunkID, int free_blocks) : this() {
-                this.BitmapIndex = bitmap_index;
-                this.BlockSize   = block_size;
-                this.BlockCount  = block_count;
-                this.ChunkID     = chunkID;
-                this.FreeBlocks  = free_blocks;
-            }
-            #endregion
-            #region ToString()
-            public override string ToString() {
-                return $"[{this.FreeBlocks}x {this.BlockSize} bytes] free ({this.BlockCount} blocks)";
-            }
-            #endregion
-        }
-        private readonly struct MemoryChunk {
-            public readonly byte[] Memory;
-            /// <summary>
-            /// The cumulative position within the memory chunks.
-            /// Essentially sum(previous_chunks.Length)
-            /// </summary>
-            public readonly int MemoryPosition;
-            /// <summary>
-            /// Memory.Length
-            /// </summary>
-            public readonly int Length;
-
-            #region constructors
-            public MemoryChunk(byte[] memory, int memory_position) {
-                this.Memory         = memory;
-                this.Length         = memory.Length;
-                this.MemoryPosition = memory_position;
-            }
-            #endregion
-            #region Contains()
-            public bool Contains(int memory_position, int length) {
-                return memory_position >= this.MemoryPosition && 
-                    memory_position + length < this.MemoryPosition + this.Length;
-            }
-            #endregion
-            #region ToString()
-            public override string ToString() {
-                return $"@{this.MemoryPosition} ({this.Length} bytes)";
             }
             #endregion
         }
