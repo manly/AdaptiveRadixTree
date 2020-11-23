@@ -10,9 +10,9 @@ namespace System.Collections.Specialized
     ///     While it would work on bigger allocations, a dynamic allocator would be better suited to avoid heavy fragmentation.
     ///     
     ///     log(n) alloc/free.
-    ///     Very small overhead footprint. (about 1/8 memory, in fact ~2 bits per 2 bytes)
+    ///     Very small overhead footprint. (about 1/8 memory, in fact ~2 bits per 2 bytes, or more precisely, ~2 bits per MIN_ALLOC_SIZE)
     ///     Memory alignments at exponents of 2. (i.e.: alloc(3) will take 4 bytes, alloc(6) will take 8 bytes, etc.)
-    ///     Smallest memory alignment is 2 bytes.
+    ///     Smallest alloc is 2 bytes.
     ///     
     ///     https://en.wikipedia.org/wiki/Buddy_memory_allocation
     /// </summary>
@@ -23,25 +23,25 @@ namespace System.Collections.Specialized
     ///     When doing a lot of small allocs, this adds up quickly.
     ///     32 bits references have 8 bytes overhead, with 4 bytes alignment, resulting in 12 bytes being the smallest alloc possible.
     ///     
-    ///     This class is best suited for small structs types of either variable type or variable size.
+    ///     This class is best suited for small structs, variable-sized structs, or dynamicly-typed structs.
     ///     If ultimate memory savings is the goal, using pure structs for everything works, as long as all the types are the same.
-    ///     
-    ///     Also, this class can only increase capacity by multiplying by 2. There is no finer granularity possible.
     /// </remarks>
     public sealed class BuddyMemoryAllocator {
         private const int MIN_ALLOC_SIZE   = 2; // must be an exponent of 2 (1,2,4,8,16,...)
-        private const int DEFAULT_CAPACITY = 4096;
+        private const int DEFAULT_CAPACITY = DEFAULT_MIN_CHUNK_SIZE;
 
         private Level[] m_levels; // from smallest to biggest
         private ulong[] m_bitmaps;
 
-        // not meant to be safe, just fast
-        public byte[] Memory { get; private set; }
-        public int Capacity => this.Memory.Length;
+        private MemoryChunk[] m_chunks;
+        private int m_chunkCount;
+
+        public int Capacity { get; private set; }
 
         #region constructors
         public BuddyMemoryAllocator(int capacity = DEFAULT_CAPACITY) {
-            this.Init(capacity);
+            this.Init(DEFAULT_MIN_CHUNK_SIZE); // do not change this unless you really know what you're doing
+            this.EnsureCapacity(capacity);
         }
         #endregion
 
@@ -51,69 +51,105 @@ namespace System.Collections.Specialized
         /// Allocates n bytes and returns a pointer to it.
         /// The returned memory is not zeroed out.
         /// </summary>
-        public Ptr Alloc(int size) {
+        public PtrExtended Alloc(int size) {
             return this.InternalAlloc(size);
         }
-        private Ptr InternalAlloc(int size) {
-            var level = CalculateLevel(size);
+        private PtrExtended InternalAlloc(int size) {
+            var level = CalculateLevel(size) - 1;
 
             if(level < m_levels.Length) {
                 ref var level_instance = ref m_levels[level];
 
-                if(level_instance.FreeCount != 0)
-                    return AllocOnLevel(level, ref level_instance);
+                if(level_instance.FreeBlocks != 0)
+                    return this.AllocOnLevel(level, ref level_instance);
 
                 // if no block exist of the requested size, then try and split a bigger block
                 var bigger_level = level + 1;
-                while(bigger_level < m_levels.Length && m_levels[bigger_level].FreeCount == 0)
+                while(bigger_level < m_levels.Length && m_levels[bigger_level].FreeBlocks == 0)
                     bigger_level++;
 
                 if(bigger_level < m_levels.Length) {
                     // split bigger blocks until we have one of the size we need
-                    level_instance = ref m_levels[bigger_level];
-                    var ptr = AllocOnLevel(bigger_level, ref level_instance);
-                    var current_free_address = ptr.Address + level_instance.BlockSize;
+                    level_instance           = ref m_levels[bigger_level];
+                    var ptr                  = this.AllocOnLevel(bigger_level, ref level_instance);
+                    var allocated_address    = m_chunks[ptr.Ptr.ChunkID].MemoryPosition + ptr.Ptr.Address;
+                    var current_free_address = allocated_address + level_instance.BlockSize;
 
                     for(int i = bigger_level - 1; i >= level; i--) {
-                        level_instance = ref m_levels[i];
-                        level_instance.FreeCount++; // = 1?
+                        level_instance        = ref m_levels[i];
+                        level_instance.FreeBlocks++; // = 1?
                         current_free_address -= level_instance.BlockSize;
-                        var x = new Ptr(unchecked((byte)i), current_free_address);
-                        var bitmap_index = x.GetBitmapIndex(m_levels);
-                        ref var bitmap = ref m_bitmaps[bitmap_index.BitmapsIndex];
-                        bitmap |= (ulong)1 << bitmap_index.Shift;
+                        var bitmap_index      = GetBitmapIndex(current_free_address, level_instance);
+                        ref var bitmap        = ref m_bitmaps[bitmap_index.BitmapsIndex];
+                        bitmap               |= (ulong)1 << bitmap_index.Shift;
                     }
 
-                    return new Ptr(unchecked((byte)level), ptr.Address);
+                    var chunkID = this.BinarySearchChunk(level_instance.ChunkID, allocated_address, out var chunk);
+                    var address = allocated_address - chunk.MemoryPosition;
+
+                    return new PtrExtended(
+                        new Ptr(level, chunkID, address),
+                        chunk.Memory);
                 }
             }
 
             // if no free block exists that are bigger than size, then increase capacity
-            // typically this will *2 capacity
-            this.EnsureCapacity(this.Capacity + size);
+            // dont use "this.EnsureCapacity(this.Capacity + size);" because it doesnt guarantee we will get all the allocated memory consecutively
+            this.IncreaseCapacityUntilOneFreeLevelExists(level + 1);
+
             // this recursion will not go deeper than 1 level
             return this.InternalAlloc(size);
+        }
+        private PtrExtended AllocOnLevel(int lvl, ref Level level_instance) {
+            var index = level_instance.BitmapIndex;
+            var max   = Math.Max(1, level_instance.BlockCount >> 6);
+            var chunk = m_chunks[level_instance.ChunkID]; // dont use "ref" here because we do "out chunk" later on
+            int start = (chunk.MemoryPosition / level_instance.BlockSize) >> 6; // skip the parts where chunks cant even allocate the requested size
 
-            Ptr AllocOnLevel(int lvl, ref Level level_instance) {
-                var index = level_instance.BitmapIndex;
-                var max   = Math.Max(1, level_instance.BlockCount >> 6);
+            // find first free bit
+            for(int i = start; i < max; i++) {
+                ref var bitmap = ref m_bitmaps[index + i];
 
-                // find first free bit
-                for(int i = 0; i < max; i++) {
-                    ref var bitmap = ref m_bitmaps[index + i];
+                if(bitmap == 0) 
+                    continue;
 
-                    if(bitmap == 0) 
-                        continue;
+                var free_bitmap_index = BitScanForward(bitmap);
+                bitmap &= ~((ulong)1 << free_bitmap_index); // mark as used
+                level_instance.FreeBlocks--;
 
-                    var free_bitmap_index = BitScanForward(bitmap);
-                    bitmap &= ~((ulong)1 << free_bitmap_index); // mark as used
-                    level_instance.FreeCount--;
-                    return new Ptr(unchecked((byte)lvl), (i * 64 + free_bitmap_index) * level_instance.BlockSize);
-                }
-                // should be impossible to make it here
-                //throw new ApplicationException($"{this.GetType().Name} state is invalid.");
-                return new Ptr();
+                var memory_position = (i * 64 + free_bitmap_index) * level_instance.BlockSize;
+                var chunkID         = this.BinarySearchChunk(level_instance.ChunkID, memory_position, out chunk);
+                var address         = memory_position - chunk.MemoryPosition;
+
+                return new PtrExtended(
+                    new Ptr(lvl, chunkID, address),
+                    chunk.Memory);
             }
+            // should be impossible to make it here
+            //throw new ApplicationException($"{this.GetType().Name} state is invalid.");
+            return new PtrExtended();
+        }
+        private int BinarySearchChunk(int min, int memory_position, out MemoryChunk chunk) {
+            int max = m_chunkCount - 1;
+
+            while(min <= max) {
+                int median     = (min + max) >> 1;
+                var temp_chunk = m_chunks[median];
+                var diff       = temp_chunk.MemoryPosition - memory_position;
+
+                if(diff < 0)
+                    min = median + 1;
+                else if(diff > 0)
+                    max = median - 1;
+                else {
+                    chunk = temp_chunk;
+                    return median;
+                }
+            }
+
+            var res = min - 1;
+            chunk = m_chunks[res];
+            return res;
         }
         #endregion
         #region Free()
@@ -122,11 +158,15 @@ namespace System.Collections.Specialized
         /// Frees previously allocated memory.
         /// </summary>
         public void Free(Ptr memoryHandle) {
-             InternalFree(memoryHandle, m_levels, m_bitmaps);
+             InternalFree(memoryHandle, m_levels, m_bitmaps, m_chunks);
         }
-        private static void InternalFree(Ptr memoryHandle, Level[] levels, ulong[] bitmaps) {
+        private static void InternalFree(Ptr memoryHandle, Level[] levels, ulong[] bitmaps, MemoryChunk[] chunks) {
+            var chunkID = memoryHandle.ChunkID;
+            var chunk   = chunks[chunkID];
+
             while(true) {
-                var index      = memoryHandle.GetBitmapIndex(levels);
+                ref var level  = ref levels[memoryHandle.Level];
+                var index      = GetBitmapIndex(chunk.MemoryPosition + memoryHandle.Address, level);
                 ref var bitmap = ref bitmaps[index.BitmapsIndex];
                 var is_free    = ((bitmap >> index.Shift) & 1) == 1;
 
@@ -134,137 +174,83 @@ namespace System.Collections.Specialized
                 if(is_free)
                     return;
 
-                ref var level = ref levels[memoryHandle.Level];
-
                 // if top level, dont recurse
                 if(memoryHandle.Level == levels.Length - 1) {
-                    level.FreeCount++;
+                    level.FreeBlocks++;
                     bitmap |= (ulong)1 << index.Shift;
                     return;
                 }
 
-                var buddy            = new Ptr(memoryHandle.Level, memoryHandle.Address ^ level.BlockSize);
-                var buddy_index      = buddy.GetBitmapIndex(levels);
-                ref var buddy_bitmap = ref bitmaps[buddy_index.BitmapsIndex];
-                var buddy_is_free    = ((buddy_bitmap >> buddy_index.Shift) & 1) == 1;
+                var memory_position        = chunk.MemoryPosition + memoryHandle.Address;
+                var buddy_memory_position  = memory_position ^ level.BlockSize;
+                var is_buddy_in_same_chunk = chunk.Contains(buddy_memory_position, level.BlockSize);
 
-                if(!buddy_is_free) {
-                    // mark as free and were done, no compaction
-                    bitmap |= (ulong)1 << index.Shift;
-                    level.FreeCount++;
-                    // no compaction needed
-                    return;
-                } else {
-                    // if both current and buddy is free, then we need to free one level up instead
+                if(is_buddy_in_same_chunk) {
+                    var buddy_index      = GetBitmapIndex(buddy_memory_position, level);
+                    ref var buddy_bitmap = ref bitmaps[buddy_index.BitmapsIndex];
+                    var buddy_is_free    = ((buddy_bitmap >> buddy_index.Shift) & 1) == 1;
 
-                    // mark buddy as used
-                    buddy_bitmap &= ~((ulong)1 << buddy_index.Shift);
-                    level.FreeCount--;
-                    // recurse (eg: compaction)
-                    memoryHandle = new Ptr(
-                        unchecked((byte)(memoryHandle.Level + 1)), 
-                        Math.Min(memoryHandle.Address, buddy.Address));
+                    if(buddy_is_free) {
+                        // if both current and buddy is free, then we need to free one level up instead
+
+                        // mark buddy as used
+                        buddy_bitmap &= ~((ulong)1 << buddy_index.Shift);
+                        level.FreeBlocks--;
+                        // recurse (eg: compaction)
+                        memoryHandle = new Ptr(
+                            memoryHandle.Level + 1, 
+                            chunkID,
+                            Math.Min(memoryHandle.Address, buddy_memory_position - chunk.MemoryPosition));
+                        continue;
+                    }
                 }
+
+                // case "buddy_is_free == false"
+                // mark as free and were done, no compaction
+                bitmap |= (ulong)1 << index.Shift;
+                level.FreeBlocks++;
+                // no compaction needed
+                return;
             }
         }
         #endregion
         #region EnsureCapacity()
         /// <summary>
         /// Ensures at least n capacity is allocated.
-        /// This will allocate capacity to powers of 2.
         /// </summary>
         public void EnsureCapacity(int capacity) {
-            var level = CalculateLevel(capacity);
+            this.IncreaseCapacityTo(capacity);
+        }
+        #endregion
 
-            // if remainder, double
-            var block_size = GetBlockSize(level);
-            if(capacity % block_size != 0) {
-                level++;
-                capacity = block_size << 1;
-            }
-
-            // already have capacity
-            if(m_levels != null && this.Capacity >= capacity)
-                return;
-
-            level++; // add 1 because we want that level created too
-
-            int bitmap_index = 0;
-            var new_levels   = new Level[level];
-
-            for(int i = 0; i < level; i++) {
-                block_size         = GetBlockSize(i);
-                var old_free_count = i < m_levels.Length ? m_levels[i].FreeCount : 0;
-                var block_count    = Math.Max(1, capacity / block_size);
-                new_levels[i]      = new Level(bitmap_index, block_size, block_count, old_free_count);
-                bitmap_index      += Math.Max(1, block_count >> 6);
-            }
-
-            var new_bitmaps = new ulong[bitmap_index];
-
-            // recopy bitmaps
-            for(int i = 0; i < m_levels.Length; i++) {
-                ref var current = ref m_levels[i];
-                if(current.FreeCount == 0)
-                    continue;
-                Array.Copy(
-                    m_bitmaps, 
-                    current.BitmapIndex, 
-                    new_bitmaps, 
-                    current.BitmapIndex, 
-                    Math.Max(1, current.BlockCount >> 6));
-            }
-            // at this point, the new bitmaps think all the new memory is allocated
-            // we mark it as free in order to properly assign all values (level[x].FreeCount + bitmaps)
-            var memory_freeing_pointer = this.Capacity; // start freeing after old capacity
-            for(int i = 0; i < level - m_levels.Length; i++) {
-                //  BEFORE             AFTER
-                //                       8
-                //                    /      \
-                //                 4            9
-                //               /   \        /   \
-                //              2     5     10     13
-                //             / \   / \   / \    /  \
-                //  1         1   3 6   7 11  12 14  15
-                // 
-                // 1= old top of tree (/last level)
-                // the calls were doing here, which will mark the new memory as free:
-                // free(3)
-                // free(5)
-                // free(9)
-
-                InternalFree(new Ptr(unchecked((byte)(m_levels.Length + i - 1)), memory_freeing_pointer), new_levels, new_bitmaps);
-                memory_freeing_pointer += new_levels[m_levels.Length + i - 1].BlockSize;
-            }
-
-            var new_memory = new byte[capacity];
-            Array.Copy(this.Memory, 0, new_memory, 0, this.Memory.Length);
-
-            this.Memory = new_memory;
-            m_levels    = new_levels;
-            m_bitmaps   = new_bitmaps;
+        #region GetMemory()
+        /// <summary>
+        /// Returns the memory backing the ptr.
+        /// </summary>
+        public byte[] GetMemory(in Ptr memoryHandle) {
+            return m_chunks[memoryHandle.ChunkID].Memory;
         }
         #endregion
 
         #region CalculateUsedMemory()
-        public int CalculateUsedMemory() {
-            int memory_alloc = this.Memory.Length;
-            int free_memory  = this.InternalCalculateFreeMemory();
+        public long CalculateUsedMemory() {
+            var memory_alloc = this.Capacity;
+            var free_memory  = this.InternalCalculateFreeMemory();
 
             return memory_alloc - free_memory;
         }
         #endregion
         #region CalculateFreeMemory()
-        public int CalculateFreeMemory() {
+        public long CalculateFreeMemory() {
             return this.InternalCalculateFreeMemory();
         }
-        private int InternalCalculateFreeMemory() {
+        private long InternalCalculateFreeMemory() {
             int level_count = m_levels.Length;
-            int free_memory = 0;
+            long free_memory = 0;
 
             for(int i = 0; i < level_count; i++) {
                 var level    = m_levels[i];
-                free_memory += level.FreeCount * level.BlockSize;
+                free_memory += level.FreeBlocks * level.BlockSize;
             }
 
             return free_memory;
@@ -278,22 +264,17 @@ namespace System.Collections.Specialized
         private void Init(int capacity) {
             var level = CalculateLevel(capacity);
 
-            // if remainder, double
-            var block_size = GetBlockSize(level);
-            if(capacity % block_size != 0) {
-                level++;
-                capacity = block_size << 1;
-            }
-
-            level++; // add 1 because we want that level created too
+            m_chunks     = new MemoryChunk[4];
+            m_chunkCount = 1;
+            m_chunks[0]  = new MemoryChunk(new byte[capacity], 0);
 
             int bitmap_index = 0;
             m_levels         = new Level[level];
             
             for(int i = 0; i < level; i++) {
-                block_size      = GetBlockSize(i);
+                var block_size  = GetBlockSize(i);
                 var block_count = Math.Max(1, capacity / block_size);
-                m_levels[i]     = new Level(bitmap_index, block_size, block_count);
+                m_levels[i]     = new Level(bitmap_index, block_size, block_count, 0, 0);
                 bitmap_index   += Math.Max(1, block_count >> 6);
             }
 
@@ -302,8 +283,156 @@ namespace System.Collections.Specialized
             // mark all as free
             ref var last_level = ref m_levels[m_levels.Length - 1];
             m_bitmaps[last_level.BitmapIndex] = 1;
-            last_level.FreeCount = 1;
-            this.Memory = new byte[capacity];
+            last_level.FreeBlocks = 1;
+
+            this.Capacity = capacity;
+        }
+        #endregion
+        #region private IncreaseCapacityBy()
+        private void IncreaseCapacityBy(int capacity) {
+            if(capacity < m_chunks[m_chunkCount - 1].Length)
+                throw new InvalidOperationException($"{nameof(capacity)} ({capacity}) must be >= last chunk size ({m_chunks[m_chunkCount - 1].Length}).");
+
+            // do this first to make sure no OutOfMemoryException()
+            // create new chunk
+            var new_memory = new byte[capacity];
+
+            if(m_chunkCount == m_chunks.Length)
+                Array.Resize(ref m_chunks, m_chunks.Length * 2);
+
+            var chunk              = new MemoryChunk(new_memory, this.Capacity);
+            m_chunks[m_chunkCount] = chunk;
+
+            // recreate levels
+            int bitmap_index   = 0;
+            var level          = CalculateLevel(capacity);
+            var new_levels     = new Level[level];
+            var total_capacity = this.Capacity + capacity;
+
+            for(int i = 0; i < level; i++) {
+                var block_size      = GetBlockSize(i);
+                var old_free_blocks = i < m_levels.Length ? m_levels[i].FreeBlocks : 0;
+                var chunkID         = i < m_levels.Length ? m_levels[i].ChunkID : m_chunkCount;
+                var block_count     = Math.Max(1, total_capacity / block_size);
+                new_levels[i]       = new Level(bitmap_index, block_size, block_count, chunkID, old_free_blocks);
+                bitmap_index       += Math.Max(1, block_count >> 6);
+            }
+
+            var new_bitmaps = new ulong[bitmap_index];
+
+            // recopy bitmaps
+            for(int i = 0; i < m_levels.Length; i++) {
+                ref var current = ref m_levels[i];
+                if(current.FreeBlocks == 0)
+                    continue;
+                Array.Copy(
+                    m_bitmaps, 
+                    current.BitmapIndex, 
+                    new_bitmaps, 
+                    new_levels[i].BitmapIndex, 
+                    Math.Max(1, current.BlockCount >> 6));
+            }
+            // at this point, the new bitmaps think all the new memory is allocated
+            // we mark it as free in order to properly assign all values (level[x].FreeBlocks + bitmaps)
+            var memory_freeing_pointer = this.Capacity; // start freeing after old capacity
+
+            int current_level = level - 1;
+            while(memory_freeing_pointer < total_capacity) {
+                var address = memory_freeing_pointer - chunk.MemoryPosition;
+                InternalFree(
+                    new Ptr(current_level, m_chunkCount, address),
+                    new_levels, 
+                    new_bitmaps, 
+                    m_chunks);
+                memory_freeing_pointer += new_levels[current_level].BlockSize;
+                current_level--;
+            }
+            
+            m_chunkCount++;
+            m_levels       = new_levels;
+            m_bitmaps      = new_bitmaps;
+            this.Capacity += capacity;
+        }
+        #endregion
+        #region private IncreaseCapacityTo()
+        private void IncreaseCapacityTo(int capacity) {
+            // this intentionally just creates new chunks of CalculateNewChunkSize() recommended growing algorithm
+            // this will intentionally not create just the requested capacity size, since we want to pre-alloc memory anyway
+            // the danger of just creating "GetBlockSize(CalculateLevel(capacity))" is that that will force rounding alloc to powers of 2
+            // this is fine for small allocs, but when you request for example 33 MB, you dont want it to reserve 64 MB
+            // also theres an indirect advantage to do "jagged" allocs like this makes a more spread out availability of blocks, 
+            // which allows faster log(n) allocs/frees since it doesnt need to merge up as high
+
+            // note that if you need consecutive memory, which this will not do, Alloc() will take care of that
+            
+            while(this.Capacity < capacity) {
+                var chunk_size = this.CalculateNewChunkSize(0); // level doesnt really matter much here
+                this.IncreaseCapacityBy(chunk_size);
+            }
+        }
+        #endregion
+        #region private IncreaseCapacityUntilOneFreeLevelExists()
+        /// <summary>
+        /// Increase capacity until we get one blocksize available of the given level.
+        /// </summary>
+        private void IncreaseCapacityUntilOneFreeLevelExists(int level) {
+            do {
+                var chunk_size = this.CalculateNewChunkSize(level);
+                this.IncreaseCapacityBy(chunk_size);
+            } while(m_levels.Length < level);
+        }
+        #endregion
+        #region private CalculateNewChunkSize()
+        private const int DEFAULT_MIN_CHUNK_SIZE = 4096;     // do not change this value unless you know what you're doing.
+        private const int DEFAULT_MAX_CHUNK_SIZE = 16777216; // 16MB
+        private const int DEFAULT_MIN_CHUNK_SIZE_SHIFT = 12; // 4096
+
+        private int CalculateNewChunkSize(int level) {
+            // the chunk grow algorithm has to follow the chunk size and level blocksize together
+            // otherwise we get alignment issues between chunks and levels, and that makes it complicated to use well afterwards
+            // ie: chunk(4096), chunk(8192), then the 8192 blocksize level will start in the middle of the 2nd chunk
+
+            // chunk size must always be >= last chunk size because levels expect further chunks to be able to contain their level
+
+            // in short, the goal is to create this:
+            // chunk[0] = 4096
+            // chunk[1] = 4096
+            // chunk[2] = 8192
+            // chunk[3] = 16384
+            // ...
+
+            var block_size = GetBlockSize(level);
+            var last_chunk = m_chunks[m_chunkCount - 1];
+
+            var requested = Math.Max(
+                block_size,
+                last_chunk.Length);
+
+            var suggested = Math.Min(
+                DEFAULT_MIN_CHUNK_SIZE << Math.Min(m_chunkCount - 1, 30 - DEFAULT_MIN_CHUNK_SIZE_SHIFT),
+                DEFAULT_MAX_CHUNK_SIZE);
+
+            if(suggested >= requested)
+                return suggested;
+            else if(block_size <= last_chunk.Length)
+                return requested;
+            else { // ie: level >= m_levels.Length
+                // if were requesting a blocksize bigger than the next level, then we need to gradually ease into it
+                // in other words, we need to ensure the data aligns between chunk size and level
+
+                // keep in mind, due to 16MB default limit, we could have multiple 16MB blocks without necessarily a level for 32MB
+                // because of this we need to be mindful of alignments
+
+                var last_level = m_levels[m_levels.Length - 1];
+
+                if(last_level.BlockCount % 2 == 0)
+                    // if we dont have alignment issues, then create a new level
+                    return last_chunk.Length * 2;
+                else
+                    // if we will have alignment issue making the new level, then we can't increase level until we finish alignment on this current level
+                    // in other words, we can't create a 32K chunk if we currently only have one 16K chunk
+                    return last_chunk.Length;
+            }
         }
         #endregion
 
@@ -318,21 +447,49 @@ namespace System.Collections.Specialized
             MIN_ALLOC_SIZE == 16 ? 4 : -1;
 
         private static int CalculateLevel(int size) {
-#if !ALLOW_CPU_INTRINSICS
-            var zeroes = 32 - BitScanReverse(size);
+            var non_zeroes = 32 - BitScanReverse(size);
+            
+            // if we have size=3, then non_zeroes=2 (which means the 2 least significant bits are used)
+            // normally this means 1 bit is used for level (due to level -1 below)
+            // in this case we want to signal to interpret it back to a 2 bits used since we need to round up
+            var mask = (1 << (non_zeroes - 1)) - 1;
+            if((size & mask) != 0)
+                non_zeroes++;
 
-            return Math.Max(0, zeroes - MIN_LEVEL - 1);
-#else
-            // (NETINTRINSICS_NUGET).System.Intrinsic.BitScan(value) or System.Numerics.Vector
-            //System.Runtime.Intrinsics.X86.
-            return Math.Max(0, );
-            throw new NotImplementedException();
-#endif
+            return Math.Max(0, non_zeroes - MIN_LEVEL);
+
+            //#if !ALLOW_CPU_INTRINSICS
+            //// code above
+            //#else
+            //// (NETINTRINSICS_NUGET).System.Intrinsic.BitScan(value) or System.Numerics.Vector
+            ////System.Runtime.Intrinsics.X86.
+            //return Math.Max(0, );
+            //throw new NotImplementedException();
+            //#endif
         }
         #endregion
         #region private static GetBlockSize()
         private static int GetBlockSize(int level) {
             return (int)1 << (level + MIN_LEVEL);
+        }
+        #endregion
+        #region private static GetBitmapIndex()
+        private static BitmapIndex GetBitmapIndex(int memory_position, in Level level) {
+            //ref var level = ref levels[ptr.Level];
+            //ref var chunk = ref chunks[ptr.ChunkID];
+            var temp = memory_position / level.BlockSize;
+            return new BitmapIndex(
+                level.BitmapIndex + (temp >> 6),
+                unchecked((byte)(temp % 64)));
+        }
+        private readonly ref struct BitmapIndex {
+            public readonly int BitmapsIndex;
+            public readonly byte Shift; // bitshift within ulong
+
+            public BitmapIndex(int bitmapsIndex, byte shift) : this() {
+                this.BitmapsIndex = bitmapsIndex;
+                this.Shift        = shift;
+            }
         }
         #endregion
 
@@ -365,20 +522,20 @@ namespace System.Collections.Specialized
 #if ALLOW_CPU_INTRINSICS
             return System.Intrinsic.BitScanForward(value);
 #else
-            int _bytes = 0;
+            int _bits = 0;
             if((value & 0x0000_0000_FFFF_FFFFul) != 0) {
                 if((value & 0x0000_0000_0000_FFFFul) != 0)
-                    _bytes = (value & 0x0000_0000_0000_00FFul) != 0 ? 0 : 1;
+                    _bits = (value & 0x0000_0000_0000_00FFul) != 0 ? 0 : 8;
                 else
-                    _bytes = (value & 0x0000_0000_00FF_0000ul) != 0 ? 2 : 3;
+                    _bits = (value & 0x0000_0000_00FF_0000ul) != 0 ? 16 : 24;
             } else {
                 if((value & 0x0000_FFFF_0000_0000ul) != 0)
-                    _bytes = (value & 0x0000_00FF_0000_0000ul) != 0 ? 4 : 5;
+                    _bits = (value & 0x0000_00FF_0000_0000ul) != 0 ? 32 : 40;
                 else
-                    _bytes = (value & 0x00FF_0000_0000_0000ul) != 0 ? 6 : 7;
+                    _bits = (value & 0x00FF_0000_0000_0000ul) != 0 ? 48 : 56;
             }
             
-            int res = _bytes << 3;
+            int res = _bits;
             value >>= res;
 
             // use for(8) to let the compiler unroll this
@@ -399,7 +556,10 @@ namespace System.Collections.Specialized
             int sequence  = 0;
             var random    = new Random(seed);
             var allocator = new BuddyMemoryAllocator();
-            var reference = new System.Collections.Generic.Dictionary<int, Ptr>();
+            var reference = new System.Collections.Generic.Dictionary<int, PtrExtended>();
+
+            //allocator.EnsureCapacity(100000);
+            //allocator.Alloc(100000);
 
             for(int i = 0; i < loops; i++) {
                 if(i % 1000 == 0) {
@@ -417,7 +577,7 @@ namespace System.Collections.Specialized
                     var rng_key = random.Next(0, sequence);
                     if(reference.TryGetValue(rng_key, out var ptr)) {
                         reference.Remove(rng_key);
-                        allocator.Free(ptr);
+                        allocator.Free(ptr.Ptr);
                     }
                 }
             }
@@ -432,60 +592,86 @@ namespace System.Collections.Specialized
                 }
                 return true;
             }
-            void Encode(Ptr ptr, int value) {
-                var buffer = allocator.Memory;
-                buffer[ptr.Address + 0] = (byte)((value >> 0) & 0xFF);
-                buffer[ptr.Address + 1] = (byte)((value >> 8) & 0xFF);
-                buffer[ptr.Address + 2] = (byte)((value >> 16) & 0xFF);
-                buffer[ptr.Address + 3] = (byte)((value >> 24) & 0xFF);
+            void Encode(in PtrExtended ptr, int value) {
+                var buffer = ptr.Memory;
+                buffer[ptr.Ptr.Address + 0] = (byte)((value >> 0) & 0xFF);
+                buffer[ptr.Ptr.Address + 1] = (byte)((value >> 8) & 0xFF);
+                buffer[ptr.Ptr.Address + 2] = (byte)((value >> 16) & 0xFF);
+                buffer[ptr.Ptr.Address + 3] = (byte)((value >> 24) & 0xFF);
             }
-            int Decode(Ptr ptr) {
-                var buffer = allocator.Memory;
+            int Decode(in PtrExtended ptr) {
+                var buffer = ptr.Memory;
                 return 
-                    (buffer[ptr.Address + 0] << 0) |
-                    (buffer[ptr.Address + 1] << 8) |
-                    (buffer[ptr.Address + 2] << 16) |
-                    (buffer[ptr.Address + 3] << 24);
+                    (buffer[ptr.Ptr.Address + 0] << 0) |
+                    (buffer[ptr.Ptr.Address + 1] << 8) |
+                    (buffer[ptr.Ptr.Address + 2] << 16) |
+                    (buffer[ptr.Ptr.Address + 3] << 24);
             }
         }
         #endregion
 
         /// <summary>
-        /// MemoryHandle / Pointer
+        /// MemoryHandle / Pointer and its associated memory.
         /// </summary>
-        public readonly struct Ptr : IEquatable<Ptr> {
-            internal readonly byte Level;
-            public readonly int Address; // this is an int and not a long because the algorithm is not meant to handle large memory allocs
+        public readonly struct PtrExtended : IEquatable<PtrExtended> {
+            public readonly Ptr Ptr;
+            public readonly byte[] Memory;
 
             #region constructors
-            internal Ptr(byte level, int address) : this() {
-                this.Level   = level;
-                this.Address = address;
+            internal PtrExtended(Ptr memoryHandle, byte[] memory) : this() {
+                this.Ptr    = memoryHandle;
+                this.Memory = memory;
             }
             #endregion
 
-            #region internal GetBitmapIndex()
-            internal BitmapIndex GetBitmapIndex(Level[] levels) {
-                ref var level = ref levels[this.Level];
-                var temp = this.Address / level.BlockSize;
-                return new BitmapIndex(
-                    level.BitmapIndex + (temp >> 6),
-                    unchecked((byte)(temp % 64)));
+            #region Equals()
+            public bool Equals(PtrExtended other) {
+                return this.Ptr == other.Ptr; // && this.Memory == other.Memory
             }
-            internal readonly ref struct BitmapIndex {
-                public readonly int BitmapsIndex;
-                public readonly byte Shift; // bitshift within ulong
+            public override bool Equals(object obj) {
+                if(obj is PtrExtended x)
+                    return this.Equals(x);
+                return false;
+            }
 
-                public BitmapIndex(int bitmapsIndex, byte shift) : this() {
-                    this.BitmapsIndex = bitmapsIndex;
-                    this.Shift        = shift;
-                }
+            public static bool operator ==(PtrExtended x, PtrExtended y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(PtrExtended x, PtrExtended y) {
+                return !(x == y);
+            }
+            #endregion
+            #region GetHashCode()
+            public override int GetHashCode() {
+                return (this.Ptr).GetHashCode(); // , this.Memory
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return this.Ptr.ToString();
+            }
+            #endregion
+        }
+        /// <summary>
+        /// MemoryHandle / Pointer
+        /// </summary>
+        public readonly struct Ptr : IEquatable<Ptr> {
+            internal readonly int ChunkIdAndLevel;
+            public readonly int Address;
+
+            internal int Level => this.ChunkIdAndLevel >> 24;          // the allocated size
+            internal int ChunkID => this.ChunkIdAndLevel & 0x00FFFFFF; // the level containing the memory
+
+            #region constructors
+            internal Ptr(int level, int chunkID, int address) : this() {
+                this.ChunkIdAndLevel = (chunkID & 0x00FFFFFF) | ((level & 0xFF) << 24);
+                this.Address         = address;
             }
             #endregion
             
             #region Equals()
             public bool Equals(Ptr other) {
-                return this.Address == other.Address && this.Level == other.Level;
+                return this.Address == other.Address && this.ChunkIdAndLevel == other.ChunkIdAndLevel;
             }
             public override bool Equals(object obj) {
                 if(obj is Ptr x)
@@ -502,38 +688,85 @@ namespace System.Collections.Specialized
             #endregion
             #region GetHashCode()
             public override int GetHashCode() {
-                return (this.Address, this.Level).GetHashCode();
+                return (this.Address, this.ChunkIdAndLevel).GetHashCode();
             }
             #endregion
             #region ToString()
             public override string ToString() {
-                return string.Format("[{0}] {1}",
+                return string.Format("[level:{0}, chunk:{1}] {2}",
                     this.Level.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    this.ChunkID.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     this.Address.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
             #endregion
         }
 
         internal struct Level {
+            /// <summary>
+            /// Index in m_bitmaps where this level blocks bitarray starts
+            /// </summary>
             public readonly int BitmapIndex;
+            /// <summary>
+            /// The size of blocks (ie: allocated size)
+            /// </summary>
             public readonly int BlockSize;
+            /// <summary>
+            /// Number of blocks
+            /// </summary>
             public readonly int BlockCount;
-            public int FreeCount;
+            /// <summary>
+            /// The first index in m_chunks where chunk.Length >= BlockSize
+            /// </summary>
+            public readonly int ChunkID;
+
+            /// <summary>
+            /// Number of free blocks
+            /// </summary>
+            public int FreeBlocks;
 
             #region constructors
-            public Level(int bitmap_index, int block_size, int block_count) : this() {
+            public Level(int bitmap_index, int block_size, int block_count, int chunkID, int free_blocks) : this() {
                 this.BitmapIndex = bitmap_index;
                 this.BlockSize   = block_size;
                 this.BlockCount  = block_count;
-                //this.FreeCount = 0;
-            }
-            public Level(int bitmap_index, int block_size, int block_count, int free_count) : this(bitmap_index, block_size, block_count) {
-                this.FreeCount = free_count;
+                this.ChunkID     = chunkID;
+                this.FreeBlocks  = free_blocks;
             }
             #endregion
             #region ToString()
             public override string ToString() {
-                return $"[{this.FreeCount}x {this.BlockSize} bytes] free ({this.BlockCount} blocks)";
+                return $"[{this.FreeBlocks}x {this.BlockSize} bytes] free ({this.BlockCount} blocks)";
+            }
+            #endregion
+        }
+        private readonly struct MemoryChunk {
+            public readonly byte[] Memory;
+            /// <summary>
+            /// The cumulative position within the memory chunks.
+            /// Essentially sum(previous_chunks.Length)
+            /// </summary>
+            public readonly int MemoryPosition;
+            /// <summary>
+            /// Memory.Length
+            /// </summary>
+            public readonly int Length;
+
+            #region constructors
+            public MemoryChunk(byte[] memory, int memory_position) {
+                this.Memory         = memory;
+                this.Length         = memory.Length;
+                this.MemoryPosition = memory_position;
+            }
+            #endregion
+            #region Contains()
+            public bool Contains(int memory_position, int length) {
+                return memory_position >= this.MemoryPosition && 
+                    memory_position + length < this.MemoryPosition + this.Length;
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return $"@{this.MemoryPosition} ({this.Length} bytes)";
             }
             #endregion
         }
