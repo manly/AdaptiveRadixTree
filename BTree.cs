@@ -858,8 +858,43 @@ namespace System.Collections.Specialized
             //}
         }
         #endregion
-        #region StartsWith()
-        // check extensions
+        #region internal static BTree<string, TValue>.StartsWith()
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        /// </summary>
+        internal static IEnumerable<BTree<string, TValue>.KeyValuePair> StartsWith(BTree<string, TValue> tree, string key) {
+            if(tree.Count == 0)
+                yield break;
+ 
+            var search_start = new BTree<string, TValue>.BinarySearchResult_Storeable(tree.BinarySearch(key));
+            var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
+
+            int max                = search_start.Node.Value.Count;
+            var search_start_items = search_start.Items;
+            for(int i = index_start; i < max; i++) {
+                var item = search_start_items[i];
+                if(item.Key.Length < key.Length || string.CompareOrdinal(item.Key, 0, key, 0, key.Length) != 0)
+                    yield break;
+                yield return item;
+            }
+
+            var node = search_start.Node;
+            
+            // if the node.Next() is too slow (ie: often requesting large ranges of results)
+            // then consider using tree.m_tree.Range(key, tree.m_tree.MaxKey) instead
+            
+            while((node = node.Next()) != null) {
+                max       = node.Value.Count;
+                var items = node.Value.Items;
+
+                for(int i = 0; i < max; i++) {
+                    var item = items[i];
+                    if(item.Key.Length < key.Length || string.CompareOrdinal(item.Key, 0, key, 0, key.Length) != 0)
+                        yield break;
+                    yield return item;
+                }
+            }
+        }
         #endregion
         #region GetAppender()
         /// <summary>
@@ -2114,8 +2149,43 @@ namespace System.Collections.Specialized
             //}
         }
         #endregion
-        #region StartsWith()
-        // check extensions
+        #region internal static BTree<string>.StartsWith()
+        /// <summary>
+        ///     O(log n + m)   m = number of items returned
+        /// </summary>
+        internal static IEnumerable<string> StartsWith(BTree<string> tree, string key) {
+            if(tree.Count == 0)
+                yield break;
+ 
+            var search_start = new BTree<string>.BinarySearchResult_Storeable(tree.BinarySearch(key));
+            var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
+
+            int max                = search_start.Node.Value.Count;
+            var search_start_items = search_start.Items;
+            for(int i = index_start; i < max; i++) {
+                var item = search_start_items[i];
+                if(item.Length < key.Length || string.CompareOrdinal(item, 0, key, 0, key.Length) != 0)
+                    yield break;
+                yield return item;
+            }
+
+            var node = search_start.Node;
+
+            // if the node.Next() is too slow (ie: often requesting large ranges of results)
+            // then consider using tree.m_tree.Range(key, tree.m_tree.MaxKey) instead
+            
+            while((node = node.Next()) != null) {
+                max       = node.Value.Count;
+                var items = node.Value.Items;
+
+                for(int i = 0; i < max; i++) {
+                    var item = items[i];
+                    if(item.Length < key.Length || string.CompareOrdinal(item, 0, key, 0, key.Length) != 0)
+                        yield break;
+                    yield return item;
+                }
+            }
+        }
         #endregion
         #region GetAppender()
         /// <summary>
@@ -2646,37 +2716,7 @@ namespace System.Collections.Specialized
         ///     O(log n + m)   m = number of items returned
         /// </summary>
         public static IEnumerable<string> StartsWith(BTree<string> tree, string key) {
-            if(tree.Count == 0)
-                yield break;
- 
-            var search_start = new BTree<string>.BinarySearchResult_Storeable(tree.BinarySearch(key));
-            var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
-
-            int max                = search_start.Node.Value.Count;
-            var search_start_items = search_start.Items;
-            for(int i = index_start; i < max; i++) {
-                var item = search_start_items[i];
-                if(item.Length < key.Length || string.CompareOrdinal(item, 0, key, 0, key.Length) != 0)
-                    yield break;
-                yield return item;
-            }
-
-            var node = search_start.Node;
-
-            // if the node.Next() is too slow (ie: often requesting large ranges of results)
-            // then consider using tree.m_tree.Range(key, tree.m_tree.MaxKey) instead
-            
-            while((node = node.Next()) != null) {
-                max       = node.Value.Count;
-                var items = node.Value.Items;
-
-                for(int i = 0; i < max; i++) {
-                    var item = items[i];
-                    if(item.Length < key.Length || string.CompareOrdinal(item, 0, key, 0, key.Length) != 0)
-                        yield break;
-                    yield return item;
-                }
-            }
+            return BTree<string>.StartsWith(tree, key);
         }
         #endregion
         #region static BTree<string, TValue>.StartsWith()
@@ -2684,37 +2724,7 @@ namespace System.Collections.Specialized
         ///     O(log n + m)   m = number of items returned
         /// </summary>
         public static IEnumerable<BTree<string, TValue>.KeyValuePair> StartsWith<TValue>(BTree<string, TValue> tree, string key) {
-            if(tree.Count == 0)
-                yield break;
- 
-            var search_start = new BTree<string, TValue>.BinarySearchResult_Storeable(tree.BinarySearch(key));
-            var index_start  = search_start.Index < 0 ? ~search_start.Index : search_start.Index;
-
-            int max                = search_start.Node.Value.Count;
-            var search_start_items = search_start.Items;
-            for(int i = index_start; i < max; i++) {
-                var item = search_start_items[i];
-                if(item.Key.Length < key.Length || string.CompareOrdinal(item.Key, 0, key, 0, key.Length) != 0)
-                    yield break;
-                yield return item;
-            }
-
-            var node = search_start.Node;
-            
-            // if the node.Next() is too slow (ie: often requesting large ranges of results)
-            // then consider using tree.m_tree.Range(key, tree.m_tree.MaxKey) instead
-            
-            while((node = node.Next()) != null) {
-                max       = node.Value.Count;
-                var items = node.Value.Items;
-
-                for(int i = 0; i < max; i++) {
-                    var item = items[i];
-                    if(item.Key.Length < key.Length || string.CompareOrdinal(item.Key, 0, key, 0, key.Length) != 0)
-                        yield break;
-                    yield return item;
-                }
-            }
+            return BTree<string, TValue>.StartsWith(tree, key);
         }
         #endregion
     }
