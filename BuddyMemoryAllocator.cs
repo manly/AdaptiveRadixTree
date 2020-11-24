@@ -78,12 +78,14 @@ namespace System.Collections.Specialized
                     var current_free_address = allocated_address + level_instance.BlockSize;
 
                     for(int i = bigger_level - 1; i >= level; i--) {
-                        level_instance        = ref m_levels[i];
-                        current_free_address -= level_instance.BlockSize;
-                        var bitmap_index      = GetBitmapIndex(current_free_address, level_instance);
-                        ref var bitmap        = ref m_bitmaps[bitmap_index.BitmapsIndex];
-                        bitmap               |= (ulong)1 << bitmap_index.Shift;
-                        m_freeBlockCache.Add(i, (bitmap_index.BitmapsIndex << 6) + bitmap_index.Shift);
+                        level_instance                = ref m_levels[i];
+                        current_free_address         -= level_instance.BlockSize;
+                        var temp                      = current_free_address / level_instance.BlockSize;
+                        var bitmap_index_BitmapsIndex = level_instance.BitmapIndex + (temp >> 6);
+                        var bitmap_index_Shift        = temp % 64;
+                        ref var bitmap                = ref m_bitmaps[bitmap_index_BitmapsIndex];
+                        bitmap                       |= (ulong)1 << bitmap_index_Shift;
+                        m_freeBlockCache.Add(i, (bitmap_index_BitmapsIndex << 6) + bitmap_index_Shift);
                         level_instance.FreeBlocks++; // = 1?
                     }
 
@@ -185,10 +187,12 @@ namespace System.Collections.Specialized
             var chunk   = chunks[chunkID];
 
             while(true) {
-                ref var level  = ref levels[memoryHandle.Level];
-                var index      = GetBitmapIndex(chunk.MemoryPosition + memoryHandle.Address, level);
-                ref var bitmap = ref bitmaps[index.BitmapsIndex];
-                var is_free    = ((bitmap >> index.Shift) & 1) == 1;
+                ref var level          = ref levels[memoryHandle.Level];
+                var temp               = (chunk.MemoryPosition + memoryHandle.Address) / level.BlockSize;
+                var index_BitmapsIndex = level.BitmapIndex + (temp >> 6);
+                var index_Shift        = temp % 64;
+                ref var bitmap         = ref bitmaps[index_BitmapsIndex];
+                var is_free            = ((bitmap >> index_Shift) & 1) == 1;
 
                 // if freeing already free'd memory, ignore
                 if(is_free)
@@ -196,8 +200,8 @@ namespace System.Collections.Specialized
 
                 // if top level, dont recurse
                 if(memoryHandle.Level == levels.Length - 1) {
-                    bitmap |= (ulong)1 << index.Shift;
-                    freeBlockCache.Add(memoryHandle.Level, (index.BitmapsIndex << 6) + index.Shift);
+                    bitmap |= (ulong)1 << index_Shift;
+                    freeBlockCache.Add(memoryHandle.Level, (index_BitmapsIndex << 6) + index_Shift);
                     level.FreeBlocks++;
                     return;
                 }
@@ -207,16 +211,18 @@ namespace System.Collections.Specialized
                 var is_buddy_in_same_chunk = chunk.Contains(buddy_memory_position, level.BlockSize);
 
                 if(is_buddy_in_same_chunk) {
-                    var buddy_index      = GetBitmapIndex(buddy_memory_position, level);
-                    ref var buddy_bitmap = ref bitmaps[buddy_index.BitmapsIndex];
-                    var buddy_is_free    = ((buddy_bitmap >> buddy_index.Shift) & 1) == 1;
+                    temp                         = buddy_memory_position / level.BlockSize;
+                    var buddy_index_BitmapsIndex = level.BitmapIndex + (temp >> 6);
+                    var buddy_index_Shift        = temp % 64;
+                    ref var buddy_bitmap         = ref bitmaps[buddy_index_BitmapsIndex];
+                    var buddy_is_free            = ((buddy_bitmap >> buddy_index_Shift) & 1) == 1;
 
                     if(buddy_is_free) {
                         // if both current and buddy is free, then we need to free one level up instead
 
                         // mark buddy as used
-                        buddy_bitmap &= ~((ulong)1 << buddy_index.Shift);
-                        freeBlockCache.Remove(memoryHandle.Level + 1, (buddy_index.BitmapsIndex << 6) + buddy_index.Shift);
+                        buddy_bitmap &= ~((ulong)1 << buddy_index_Shift);
+                        freeBlockCache.Remove(memoryHandle.Level, (buddy_index_BitmapsIndex << 6) + buddy_index_Shift);
                         level.FreeBlocks--;
                         // recurse (eg: compaction)
                         memoryHandle = new Ptr(
@@ -229,8 +235,8 @@ namespace System.Collections.Specialized
 
                 // case "buddy_is_free == false"
                 // mark as free and were done, no compaction
-                bitmap |= (ulong)1 << index.Shift;
-                freeBlockCache.Add(memoryHandle.Level, (index.BitmapsIndex << 6) + index.Shift);
+                bitmap |= (ulong)1 << index_Shift;
+                freeBlockCache.Add(memoryHandle.Level, (index_BitmapsIndex << 6) + index_Shift);
                 level.FreeBlocks++;
                 // no compaction needed
                 return;
@@ -502,25 +508,6 @@ namespace System.Collections.Specialized
             return (int)1 << (level + MIN_LEVEL);
         }
         #endregion
-        #region private static GetBitmapIndex()
-        private static BitmapIndex GetBitmapIndex(int memory_position, in Level level) {
-            //ref var level = ref levels[ptr.Level];
-            //ref var chunk = ref chunks[ptr.ChunkID];
-            var temp = memory_position / level.BlockSize;
-            return new BitmapIndex(
-                level.BitmapIndex + (temp >> 6),
-                unchecked((byte)(temp % 64)));
-        }
-        private readonly ref struct BitmapIndex {
-            public readonly int BitmapsIndex;
-            public readonly byte Shift; // bitshift within ulong
-
-            public BitmapIndex(int bitmapsIndex, byte shift) : this() {
-                this.BitmapsIndex = bitmapsIndex;
-                this.Shift        = shift;
-            }
-        }
-        #endregion
 
         #region private static BitScanReverse()
         /// <summary>
@@ -580,8 +567,8 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-        #region internal static Test()
-        internal static void Test(int loops, int seed = unchecked((int)0xBADC0FFE)) {
+        #region static Test()
+        public static void Test(int loops, int seed = unchecked((int)0xBADC0FFE)) {
             int sequence  = 0;
             var random    = new Random(seed);
             var allocator = new BuddyMemoryAllocator();
@@ -590,7 +577,7 @@ namespace System.Collections.Specialized
             //allocator.EnsureCapacity(100000);
             //allocator.Alloc(100000);
 
-            var start = DateTime.MinValue;
+            var start = DateTime.UtcNow;
 
             for(int i = 0; i < loops; i++) {
                 if(i % 1000 == 0) {
@@ -621,6 +608,16 @@ namespace System.Collections.Specialized
                 foreach(var item in reference) {
                     var read_value = Decode(item.Value);
                     if(read_value != item.Key)
+                        return false;
+                }
+                // check cache
+                foreach(var item in allocator.m_freeBlockCache.GetItems()) {
+                    var level_instance  = allocator.m_levels[item.level];
+                    var memory_position = (item.cached_block - (level_instance.BitmapIndex << 6)) * level_instance.BlockSize;
+
+                    var bitmap  = allocator.m_bitmaps[item.cached_block >> 6]; // level_instance.BitmapIndex + ...
+                    var is_free = (bitmap & ((ulong)1 << (item.cached_block % 64))) != 0;
+                    if(!is_free)
                         return false;
                 }
                 return true;
@@ -767,6 +764,13 @@ namespace System.Collections.Specialized
                     }
                 }
                 return -1;
+            }
+            internal System.Collections.Generic.IEnumerable<(int level, int cached_block)> GetItems() {
+                for(int i = 0; i < m_cache.Length; i++) {
+                    var x = m_cache[i];
+                    if(x >= 0)
+                        yield return (i / FREE_BLOCKS_CACHE_PER_LEVEL, x);
+                }
             }
         }
         #endregion
