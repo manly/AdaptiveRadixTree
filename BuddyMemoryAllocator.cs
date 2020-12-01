@@ -401,7 +401,8 @@ namespace System.Collections.Specialized
             // note that if you need consecutive memory, which this will not do, Alloc() will take care of that
             
             while(this.Capacity < capacity) {
-                var chunk_size = this.CalculateNewChunkSize(0); // level doesnt really matter much here
+                // by setting level 0, we're indicating that we dont need to reach a specific blocksize, but just give a standard capacity increase
+                var chunk_size = this.CalculateNewChunkSize(0);
                 this.IncreaseCapacityBy(chunk_size);
             }
         }
@@ -412,6 +413,7 @@ namespace System.Collections.Specialized
         /// </summary>
         private void IncreaseCapacityUntilOneFreeLevelExists(int level) {
             do {
+                // try to increase to the requested level (ie: keep increasing capacity until the one block of the requested size exists
                 var chunk_size = this.CalculateNewChunkSize(level);
                 this.IncreaseCapacityBy(chunk_size);
             } while(m_levels.Length < level);
@@ -832,8 +834,40 @@ namespace System.Collections.Specialized
                 this.ChunkIdAndLevel = (chunkID & 0x00FFFFFF) | ((level & 0xFF) << 24);
                 this.Address         = address;
             }
+            private Ptr(int chunkIDAndLevel, int address) : this() {
+                this.ChunkIdAndLevel = chunkIDAndLevel;
+                this.Address         = address;
+            }
             #endregion
-            
+
+            #region static Read()
+            public static Ptr Read(byte[] buffer, int index) {
+                var chunkIdAndLevel = 
+                    (buffer[index + 0] << 0) |
+                    (buffer[index + 1] << 8) |
+                    (buffer[index + 2] << 16) |
+                    (buffer[index + 3] << 24);
+                var address = 
+                    (buffer[index + 4] << 0) |
+                    (buffer[index + 5] << 8) |
+                    (buffer[index + 6] << 16) |
+                    (buffer[index + 7] << 24);
+                return new Ptr(chunkIdAndLevel, address);
+            }
+            #endregion
+            #region Write()
+            public void Write(byte[] buffer, int index) {
+                buffer[index + 0] = unchecked((byte)((this.ChunkIdAndLevel >> 0) & 0xFF));
+                buffer[index + 1] = unchecked((byte)((this.ChunkIdAndLevel >> 8) & 0xFF));
+                buffer[index + 2] = unchecked((byte)((this.ChunkIdAndLevel >> 16) & 0xFF));
+                buffer[index + 3] = unchecked((byte)((this.ChunkIdAndLevel >> 24) & 0xFF));
+                buffer[index + 4] = unchecked((byte)((this.Address >> 0) & 0xFF));
+                buffer[index + 5] = unchecked((byte)((this.Address >> 8) & 0xFF));
+                buffer[index + 6] = unchecked((byte)((this.Address >> 16) & 0xFF));
+                buffer[index + 7] = unchecked((byte)((this.Address >> 24) & 0xFF));
+            }
+            #endregion
+
             #region Equals()
             public bool Equals(Ptr other) {
                 return this.Address == other.Address && this.ChunkIdAndLevel == other.ChunkIdAndLevel;
