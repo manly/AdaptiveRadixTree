@@ -228,7 +228,7 @@ namespace System.Collections.Specialized
                         throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
             } else
-                node = CreateRootNodeRare(key, value);
+                node = this.CreateRootNodeRare(key, value);
 
             this.Count++;
             return node;
@@ -1285,38 +1285,6 @@ namespace System.Collections.Specialized
         }
         #endregion
  
-        #region private static RotateLeft()
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void RotateLeft(ref Node node) {
-            var right    = node.Right;
-            var parent   = node.Parent;
- 
-            right.Parent = parent;
-            node.Parent  = right;
-            if(right.Left != null)
-                right.Left.Parent = node;
- 
-            node.Right = right.Left;
-            right.Left = node;
-            node       = right;
-        }
-        #endregion
-        #region private static RotateRight()
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void RotateRight(ref Node node) {
-            var left    = node.Left;
-            var parent  = node.Parent;
- 
-            left.Parent = parent;
-            node.Parent = left;
-            if(left.Right != null)
-                left.Right.Parent = node;
- 
-            node.Left  = left.Right;
-            left.Right = node;
-            node       = left;
-        }
-        #endregion
         #region private static BalanceLeft()
         private static void BalanceLeft(ref Node node) {
             var left = node.Left;
@@ -1401,6 +1369,38 @@ namespace System.Collections.Specialized
                     RotateLeft(ref node);
                     break;
             }
+        }
+        #endregion
+        #region private static RotateLeft()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void RotateLeft(ref Node node) {
+            var right    = node.Right;
+            var parent   = node.Parent;
+ 
+            right.Parent = parent;
+            node.Parent  = right;
+            if(right.Left != null)
+                right.Left.Parent = node;
+ 
+            node.Right = right.Left;
+            right.Left = node;
+            node       = right;
+        }
+        #endregion
+        #region private static RotateRight()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void RotateRight(ref Node node) {
+            var left    = node.Left;
+            var parent  = node.Parent;
+ 
+            left.Parent = parent;
+            node.Parent = left;
+            if(left.Right != null)
+                left.Right.Parent = node;
+ 
+            node.Left  = left.Right;
+            left.Right = node;
+            node       = left;
         }
         #endregion
  
@@ -1834,7 +1834,7 @@ namespace System.Collections.Specialized
                         throw new ArgumentException($"Duplicate key ({key}).", nameof(key));
                 }
             } else
-                node = CreateRootNodeRare(key);
+                node = this.CreateRootNodeRare(key);
 
             this.Count++;
             return node;
@@ -2860,38 +2860,6 @@ namespace System.Collections.Specialized
         }
         #endregion
  
-        #region private static RotateLeft()
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void RotateLeft(ref Node node) {
-            var right    = node.Right;
-            var parent   = node.Parent;
- 
-            right.Parent = parent;
-            node.Parent  = right;
-            if(right.Left != null)
-                right.Left.Parent = node;
- 
-            node.Right = right.Left;
-            right.Left = node;
-            node       = right;
-        }
-        #endregion
-        #region private static RotateRight()
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void RotateRight(ref Node node) {
-            var left    = node.Left;
-            var parent  = node.Parent;
- 
-            left.Parent = parent;
-            node.Parent = left;
-            if(left.Right != null)
-                left.Right.Parent = node;
- 
-            node.Left  = left.Right;
-            left.Right = node;
-            node       = left;
-        }
-        #endregion
         #region private static BalanceLeft()
         private static void BalanceLeft(ref Node node) {
             var left = node.Left;
@@ -2976,6 +2944,38 @@ namespace System.Collections.Specialized
                     RotateLeft(ref node);
                     break;
             }
+        }
+        #endregion
+        #region private static RotateLeft()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void RotateLeft(ref Node node) {
+            var right    = node.Right;
+            var parent   = node.Parent;
+ 
+            right.Parent = parent;
+            node.Parent  = right;
+            if(right.Left != null)
+                right.Left.Parent = node;
+ 
+            node.Right = right.Left;
+            right.Left = node;
+            node       = right;
+        }
+        #endregion
+        #region private static RotateRight()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void RotateRight(ref Node node) {
+            var left    = node.Left;
+            var parent  = node.Parent;
+ 
+            left.Parent = parent;
+            node.Parent = left;
+            if(left.Right != null)
+                left.Right.Parent = node;
+ 
+            node.Left  = left.Right;
+            left.Right = node;
+            node       = left;
         }
         #endregion
  
