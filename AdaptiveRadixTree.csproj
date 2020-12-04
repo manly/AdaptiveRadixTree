@@ -76,10 +76,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MRUCache.cs" />
     <Compile Include="FastMemoryStream.cs" />
     <Compile Include="BTree.cs" />
     <Compile Include="AvlTree.cs" />
     <Compile Include="BoyerMoore.cs" />
+    <Compile Include="BuddyMemoryAllocator.cs" />
     <Compile Include="WildcardRegex.cs" />
     <Compile Include="MultiNGramIndex.cs" />
     <Compile Include="PriorityQueue.cs" />
