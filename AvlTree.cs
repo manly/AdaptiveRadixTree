@@ -234,30 +234,30 @@ namespace System.Collections.Specialized
             return node;
         }
 
-        private static Node CreateLeftNodeRare(in TKey key, TValue value, Node node) {
+        private static Node CreateLeftNodeRare(in TKey key, TValue value, Node parent) {
             var _new = new Node(key, value){
-                Parent  = node,
+                Parent  = parent,
                 Balance = State.Balanced,
             };
-            node.Left = _new;
+            parent.Left = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
-            if(m_header.Left == node)
+            if(m_header.Left == parent)
                 m_header.Left = _new;
 #endif
-            BalanceSet(node, Direction.Left);
+            BalanceSet(parent, Direction.Left);
             return _new;
         }
-        private static Node CreateRightNodeRare(in TKey key, TValue value, Node node) {
+        private static Node CreateRightNodeRare(in TKey key, TValue value, Node parent) {
             var _new = new Node(key, value){
-                Parent  = node,
+                Parent  = parent,
                 Balance = State.Balanced,
             };
-            node.Right = _new;
+            parent.Right = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
-            if(m_header.Right == node)
+            if(m_header.Right == parent)
                 m_header.Right = _new;
 #endif
-            BalanceSet(node, Direction.Right);
+            BalanceSet(parent, Direction.Right);
             return _new;
         }
         private Node CreateRootNodeRare(in TKey key, TValue value) {
@@ -1840,30 +1840,30 @@ namespace System.Collections.Specialized
             return node;
         }
 
-        private static Node CreateLeftNodeRare(in TKey key, Node node) {
+        private static Node CreateLeftNodeRare(in TKey key, Node parent) {
             var _new = new Node(key){
-                Parent  = node,
+                Parent  = parent,
                 Balance = State.Balanced,
             };
-            node.Left = _new;
+            parent.Left = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
-            if(m_header.Left == node)
+            if(m_header.Left == parent)
                 m_header.Left = _new;
 #endif
-            BalanceSet(node, Direction.Left);
+            BalanceSet(parent, Direction.Left);
             return _new;
         }
-        private static Node CreateRightNodeRare(in TKey key, Node node) {
+        private static Node CreateRightNodeRare(in TKey key, Node parent) {
             var _new = new Node(key){
-                Parent  = node,
+                Parent  = parent,
                 Balance = State.Balanced,
             };
-            node.Right = _new;
+            parent.Right = _new;
 #if MAINTAIN_MINIMUM_AND_MAXIMUM
-            if(m_header.Right == node)
+            if(m_header.Right == parent)
                 m_header.Right = _new;
 #endif
-            BalanceSet(node, Direction.Right);
+            BalanceSet(parent, Direction.Right);
             return _new;
         }
         private Node CreateRootNodeRare(in TKey key) {
