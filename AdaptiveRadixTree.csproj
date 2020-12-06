@@ -77,6 +77,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MRUCache.cs" />
+    <Compile Include="AvlTreeMemoryAllocator.cs" />
     <Compile Include="FastMemoryStream.cs" />
     <Compile Include="BTree.cs" />
     <Compile Include="AvlTree.cs" />
