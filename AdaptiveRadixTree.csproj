@@ -76,6 +76,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MemoryAllocator.cs" />
     <Compile Include="MRUCache.cs" />
     <Compile Include="AvlTreeMemoryAllocator.cs" />
     <Compile Include="FastMemoryStream.cs" />
