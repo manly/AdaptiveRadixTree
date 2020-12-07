@@ -67,7 +67,7 @@
             internal readonly int ChunkIdAndAllocator;
             public readonly int Address;
 
-            internal bool Allocator => (this.ChunkIdAndAllocator & 0x80000000) != 0;
+            internal bool Allocator => unchecked((this.ChunkIdAndAllocator & (int)0x80000000) != 0);
             internal int ChunkID => this.ChunkIdAndAllocator & 0x7FFFFFFF;
 
             #region constructors
