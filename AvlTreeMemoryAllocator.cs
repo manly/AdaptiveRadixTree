@@ -1,13 +1,11 @@
-﻿//#define ALLOW_CPU_INTRINSICS
-
-// performance optimisation
+﻿// performance optimisation
 // see IMPLEMENTATION NOTES for details
 #define USE_UNCOMMITTED_WRITES
 
-// if reading non-null AVL Node property (.Left/.Right/.Parent) then bump those nodes up in the MRU
-// will lead to a better usage of MRU cache at the cost of extra O(1) bookkeeping
-#define BUMP_CACHED_NODES_ON_ACCESS_IN_MRU_CACHE
-
+#if DEBUG
+// enable only for debugging
+//#define THROW_WHEN_WRITING_ON_EVICTED_NODE
+#endif
 
 using System.Linq;
 using System.Collections.Generic;
@@ -145,6 +143,32 @@ namespace System.Collections.Specialized
         //       those issues are solved if you use caching dict<address, node>, which is option #2.
         //       
         //       if you want to support non-memory storage, then this would work immediately.
+        //
+        // About NODE_CACHE_CAPACITY
+        // 
+        //    This value must be >= 256. 
+        //    
+        //    NODE_CACHE_CAPACITY >= avl_tree_height * 3 + extra_nodes_read_on_rebalance
+        //    extra_nodes_read_on_rebalance = unknown max
+        //
+        //    AVL tree height:   Math.Log(n + 2, 1.6180339887) - 1.3277       max possible height of the AVL tree (binary tree)
+        //                           29 for 1M   items
+        //                           34 for 10M  items
+        //                           ...
+        //                           64 for 30 000 000 000 000 items
+        //                           ...
+        //                           256 for 10^53 items
+        // 
+        //    The NODE_CACHE_CAPACITY must be >= to the max number of nodes read for one operation. This includes:
+        //       - the path to a node (avl_tree_height)
+        //       - the left/right nodes for each node in the path (hence the * 3)
+        //       - the extra nodes read for rebalancing
+        //
+        //    While I do not have a good estimate for accessed nodes on a rebalance, instead I opted for simply choosing safe margins.
+        //    
+        //    Any value smaller than that run the risk of a alloc()/free() using a copy of an evicted node, which would result in uncommitted writes.
+        //
+        //    THROW_WHEN_WRITING_ON_EVICTED_NODE will detect that case
         #endregion
 
         private const int NODE_CACHE_CAPACITY = 256;
@@ -157,6 +181,10 @@ namespace System.Collections.Specialized
         private readonly AvlNodeMRUCache m_cache;
 
         #region constructors
+        static AvlTreeMemoryAllocator() {
+            if(NODE_CACHE_CAPACITY < 256)
+                throw new ArgumentOutOfRangeException(nameof(NODE_CACHE_CAPACITY), "The value must be >= 256. See implementation notes for details.");
+        }
         public AvlTreeMemoryAllocator(int capacity = 4096) {
             m_cache          = new AvlNodeMRUCache(this, NODE_CACHE_CAPACITY);
             m_avl            = new AvlTree(this);
@@ -1300,9 +1328,15 @@ namespace System.Collections.Specialized
         ///     Bumps up the node in MRU cache.
         /// </summary>
         private void BumpNodeInCache(in MemoryPtr address) {
-#if BUMP_CACHED_NODES_ON_ACCESS_IN_MRU_CACHE
+            // if reading non-null AVLNode property (.Left/.Right/.Parent), bump those nodes up in the MRU
+            // leads to a better usage of MRU cache at the cost of extra O(1) bookkeeping
+            //
+            // this code is actually necessary to maintain integrity, otherwise the ordering of evicted items
+            // could mean an old un-bumped node gets evicted that is part of the path were currently modifying
+            // and the code writes to the evicted node properties without knowing it was evicted, leading to 
+            // uncommitted writes
+
             m_cache.Bump(address);
-#endif
         }
         #endregion
 
@@ -1629,6 +1663,10 @@ namespace System.Collections.Specialized
             /// </summary>
             public int Key;
 
+#if THROW_WHEN_WRITING_ON_EVICTED_NODE
+            private bool m_evicted = false;
+#endif
+
             public Node Left {
                 get {
                     if(m_left == null && !AvlIsNull(m_leftPtr))
@@ -1644,6 +1682,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteLeftPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
             public Node Right {
@@ -1661,6 +1700,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteRightPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
             public Node Parent {
@@ -1678,6 +1718,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteParentPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
             public State Balance {
@@ -1692,6 +1733,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteBalance();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
             public MemoryPtr LeftPtr {
@@ -1702,6 +1744,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteLeftPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
             public MemoryPtr RightPtr {
@@ -1712,6 +1755,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteRightPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
 
@@ -1723,6 +1767,7 @@ namespace System.Collections.Specialized
 #if !USE_UNCOMMITTED_WRITES
                     this.WriteParentPtr();
 #endif
+                    this.ThrowIfEvicted();
                 }
             }
 
@@ -1757,14 +1802,34 @@ namespace System.Collections.Specialized
                     m_left.m_parent = null;
                 if(m_right != null) 
                     m_right.m_parent = null;
+
+#if THROW_WHEN_WRITING_ON_EVICTED_NODE
+                m_evicted = true;
+#endif
             }
             #endregion
 
+            [System.Diagnostics.Conditional("THROW_WHEN_WRITING_ON_EVICTED_NODE")]
+            private void ThrowIfEvicted() {
+#if THROW_WHEN_WRITING_ON_EVICTED_NODE
+                if(m_evicted) {
+                    //m_owner.m_cache.Add(this.Address, this);
+                    throw new NotSupportedException();
+                }
+#endif
+            }
+
             #region ToString()
             public override string ToString() {
-                if(this.Balance == State.Header)
-                    return "{header}";
-                return this.Key.ToString();
+                return string.Format("{{{0} left:{1} right:{2} parent:{3} state:{4}}}",
+                    ToStringPtr(this.Address),
+                    ToStringPtr(m_leftPtr),
+                    ToStringPtr(m_rightPtr),
+                    ToStringPtr(m_parentPtr),
+                    this.Balance.ToString());
+                string ToStringPtr(MemoryPtr ptr) {
+                    return $"[chunk:{ptr.ChunkID} @{ptr.Address}]";
+                }
             }
             #endregion
 
@@ -1801,6 +1866,7 @@ namespace System.Collections.Specialized
                     
                 // cant write this.Key
             }
+#if !USE_UNCOMMITTED_WRITES
             public void WriteLeftPtr() {
                 var buffer = m_owner.m_chunks[m_address.ChunkID].Memory;
                 var index  = m_address.Address;
@@ -1828,6 +1894,7 @@ namespace System.Collections.Specialized
                 left_ptr.Write(buffer, index);
                 right_ptr.Write(buffer, index + MemoryPtr.SIZEOF);
             }
+#endif
         }
         #endregion
 

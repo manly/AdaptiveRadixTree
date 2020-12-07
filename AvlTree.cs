@@ -1284,7 +1284,7 @@ namespace System.Collections.Specialized
             }
         }
         #endregion
- 
+
         #region private static BalanceLeft()
         private static void BalanceLeft(ref Node node) {
             var left = node.Left;
@@ -3163,6 +3163,30 @@ namespace System.Collections.Specialized
 
 
     public static class AvlTreeExtensions {
+        #region static CalculateTreeHeight()
+        /// <summary>
+        ///     Calculates the possible AVL tree height ranges for a given item count.
+        /// </summary>
+        public static HeightRange CalculateTreeHeight(int item_count) {
+            const double golden_ratio_phi = 1.6180339887;
+
+            return new HeightRange(){
+                Min = Math.Log(item_count + 1, 2) - 1,
+                Max = Math.Log(item_count + 2, golden_ratio_phi) - 1.3277,
+            };
+        }
+        public struct HeightRange {
+            /// <summary>
+            /// Inclusive
+            /// </summary>
+            public double Min;
+            /// <summary>
+            /// Exclusive
+            /// </summary>
+            public double Max;
+        }
+        #endregion
+
         #region static AvlTree<string>.StartsWith()
         /// <summary>
         ///     O(log n + m)   m = number of items returned
