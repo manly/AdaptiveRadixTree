@@ -891,49 +891,6 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-
-        /// <summary>
-        /// MemoryHandle / Pointer and its associated memory.
-        /// </summary>
-        public readonly struct PtrExtended : IEquatable<PtrExtended> {
-            public readonly Ptr Ptr;
-            public readonly byte[] Memory;
-
-            #region constructors
-            internal PtrExtended(Ptr memoryHandle, byte[] memory) : this() {
-                this.Ptr    = memoryHandle;
-                this.Memory = memory;
-            }
-            #endregion
-
-            #region Equals()
-            public bool Equals(PtrExtended other) {
-                return this.Ptr == other.Ptr; // && this.Memory == other.Memory;
-            }
-            public override bool Equals(object obj) {
-                if(obj is PtrExtended x)
-                    return this.Equals(x);
-                return false;
-            }
-
-            public static bool operator ==(PtrExtended x, PtrExtended y) {
-                return x.Equals(y);
-            }
-            public static bool operator !=(PtrExtended x, PtrExtended y) {
-                return !(x == y);
-            }
-            #endregion
-            #region GetHashCode()
-            public override int GetHashCode() {
-                return (this.Ptr).GetHashCode(); // , this.Memory
-            }
-            #endregion
-            #region ToString()
-            public override string ToString() {
-                return this.Ptr.ToString();
-            }
-            #endregion
-        }
         /// <summary>
         /// MemoryHandle / Pointer
         /// </summary>
@@ -1003,6 +960,48 @@ namespace System.Collections.Specialized
                 return string.Format("[{0}] {1}",
                     this.ChunkID.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     this.Address.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            #endregion
+        }
+        /// <summary>
+        /// MemoryHandle / Pointer and its associated memory.
+        /// </summary>
+        public readonly struct PtrExtended : IEquatable<PtrExtended> {
+            public readonly Ptr Ptr;
+            public readonly byte[] Memory;
+
+            #region constructors
+            internal PtrExtended(Ptr memoryHandle, byte[] memory) : this() {
+                this.Ptr    = memoryHandle;
+                this.Memory = memory;
+            }
+            #endregion
+
+            #region Equals()
+            public bool Equals(PtrExtended other) {
+                return this.Ptr == other.Ptr; // && this.Memory == other.Memory;
+            }
+            public override bool Equals(object obj) {
+                if(obj is PtrExtended x)
+                    return this.Equals(x);
+                return false;
+            }
+
+            public static bool operator ==(PtrExtended x, PtrExtended y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(PtrExtended x, PtrExtended y) {
+                return !(x == y);
+            }
+            #endregion
+            #region GetHashCode()
+            public override int GetHashCode() {
+                return (this.Ptr).GetHashCode(); // , this.Memory
+            }
+            #endregion
+            #region ToString()
+            public override string ToString() {
+                return this.Ptr.ToString();
             }
             #endregion
         }
