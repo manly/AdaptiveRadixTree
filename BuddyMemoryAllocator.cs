@@ -880,7 +880,6 @@ namespace System.Collections.Specialized
                     return this.Equals(x);
                 return false;
             }
-
             public static bool operator ==(PtrExtended x, PtrExtended y) {
                 return x.Equals(y);
             }

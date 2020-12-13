@@ -115,6 +115,7 @@ namespace System.Collections.Specialized
         //
         //    1- write unsafe code  (ie: read/writes nodes directly to/from storage)
         //       this means casting directly byte[] -> NodeStruct, and "NodeStruct.Balance = x" would directly write to storage
+        //       if you do this, remove AvlNodeMRUCache since you would just read/write directly the memory
         //
         //    2- run a cache that maps addresses with Node instances and do writes only on evicts
         //       ie: Dictionary<address, Node> 

@@ -91,7 +91,7 @@ namespace System.Collections.Specialized
         // As a consequence of this, all keys must go through EscapeLeafKeyTerminator() to 'silently' escape out LEAF_NODE_KEY_TERMINATOR
         // As a result of all this, the code runs entirely "devoid" of structs and reads/writes directly to binary data
         //
-        // All operations follow an MVCC (multiversion concurrency control) approach, where changes are done on a copy of the node.
+        // All operations follow an MVCC (multiversion concurrency control) approach, with COW (Copy On Write) on any changes.
         //
         // No node may contain "partial_length==0" except for the root node.
         #endregion
@@ -132,19 +132,19 @@ namespace System.Collections.Specialized
         public int Count => unchecked((int)Math.Min(this.LongCount, int.MaxValue));
         public long LongCount { get; private set; }
     
-        protected readonly Buffer m_keyBuffer;
-        protected readonly Buffer m_valueBuffer;
+        protected readonly GenericEncoding.Buffer m_keyBuffer;
+        protected readonly GenericEncoding.Buffer m_valueBuffer;
     
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        protected readonly Action<TKey, Buffer>           m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
-        protected readonly Action<TValue, Buffer>         m_valueEncoder; // see GetDefaultEncoder()
-        protected readonly Func<byte[], int, int, TKey>   m_keyDecoder;   // see GetDefaultDecoder()
-        protected readonly Func<byte[], int, int, TValue> m_valueDecoder; // see GetDefaultDecoder()
+        protected readonly Action<TKey, GenericEncoding.Buffer>   m_keyEncoder;
+        protected readonly Action<TValue, GenericEncoding.Buffer> m_valueEncoder;
+        protected readonly Func<byte[], int, int, TKey>           m_keyDecoder;
+        protected readonly Func<byte[], int, int, TValue>         m_valueDecoder;
 #else
-        protected readonly Action<object, Buffer>         m_keyEncoder;   // see GetDefaultEncoder(), can return LEAF_NODE_KEY_TERMINATOR
-        protected readonly Action<object, Buffer>         m_valueEncoder; // see GetDefaultEncoder()
-        protected readonly Func<byte[], int, int, object> m_keyDecoder;   // see GetDefaultDecoder()
-        protected readonly Func<byte[], int, int, object> m_valueDecoder; // see GetDefaultDecoder()
+        protected readonly Action<object, GenericEncoding.Buffer> m_keyEncoder;
+        protected readonly Action<object, GenericEncoding.Buffer> m_valueEncoder;
+        protected readonly Func<byte[], int, int, object>         m_keyDecoder;
+        protected readonly Func<byte[], int, int, object>         m_valueDecoder;
 #endif
     
         #region constructors
@@ -184,15 +184,15 @@ namespace System.Collections.Specialized
         /// If using memory backing of any kind, consider using a minimum capacity at or above 85000 bytes to avoid GC.Collect() calls on data that is likely to be long-lived.
         /// Also, make sure the stream is efficient at appending.
         /// </param>
-        /// <param name="keyEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
-        /// <param name="valueEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
-        /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
-        /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+        /// <param name="keyEncoder">Default: null. Will use the default encoder if null.</param>
+        /// <param name="valueEncoder">Default: null. Will use the default encoder if null.</param>
+        /// <param name="keyDecoder">Default: null. Will use the default decoder if null.</param>
+        /// <param name="valueDecoder">Default: null. Will use the default decoder if null.</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public AdaptiveRadixTree(Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) 
+        public AdaptiveRadixTree(Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) 
             : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
 #else
-        public AdaptiveRadixTree(Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder)
+        public AdaptiveRadixTree(Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder)
             : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
 #endif
             if(storageStream != null && storageStream.Length != 0)
@@ -209,14 +209,14 @@ namespace System.Collections.Specialized
         /// If using memory backing of any kind, consider using a minimum capacity at or above 85000 bytes to avoid GC.Collect() calls on data that is likely to be long-lived.
         /// Also, make sure the stream is efficient at appending.
         /// </param>
-        /// <param name="keyEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
-        /// <param name="valueEncoder">Default: null. Will use the default encoder if null. See GetDefaultEncoder().</param>
-        /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
-        /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
+        /// <param name="keyEncoder">Default: null. Will use the default encoder if null.</param>
+        /// <param name="valueEncoder">Default: null. Will use the default encoder if null.</param>
+        /// <param name="keyDecoder">Default: null. Will use the default decoder if null.</param>
+        /// <param name="valueDecoder">Default: null. Will use the default decoder if null.</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
 #else
-        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
 #endif
             if(m_buffer.Length != BUFFER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), $"{nameof(m_buffer)}.Length must equal {nameof(BUFFER_SIZE)}");
@@ -235,13 +235,13 @@ namespace System.Collections.Specialized
             // use default capacity >= 85k to avoid GC.Collect() since this memory is meant to be long-lived
             this.Stream = storageStream ?? new FastMemoryStream(); // new MemoryStream(131072);
     
-            m_keyEncoder   = keyEncoder   ?? GetDefaultEncoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyEncoder),   $"The key encoder {nameof(TKey)}={typeof(TKey).Name} has no encoder specified. You must provide one or use a primitive/string/byte[].");
-            m_valueEncoder = valueEncoder ?? GetDefaultEncoder<TValue>() ?? throw new ArgumentNullException(nameof(valueEncoder), $"The value encoder {nameof(TValue)}={typeof(TValue).Name} has no encoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
-            m_keyDecoder   = keyDecoder   ?? GetDefaultDecoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyDecoder),   $"The key decoder {nameof(TKey)}={typeof(TKey).Name} has no decoder specified. You must provide one or use a primitive/string/byte[].");
-            m_valueDecoder = valueDecoder ?? GetDefaultDecoder<TValue>() ?? throw new ArgumentNullException(nameof(valueDecoder), $"The value decoder {nameof(TValue)}={typeof(TValue).Name} has no decoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
+            m_keyEncoder   = keyEncoder   ?? GenericEncoding.GetDefaultEncoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyEncoder),   $"The key encoder {nameof(TKey)}={typeof(TKey).Name} has no encoder specified. You must provide one or use a primitive/string/byte[].");
+            m_valueEncoder = valueEncoder ?? GenericEncoding.GetDefaultEncoder<TValue>() ?? throw new ArgumentNullException(nameof(valueEncoder), $"The value encoder {nameof(TValue)}={typeof(TValue).Name} has no encoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
+            m_keyDecoder   = keyDecoder   ?? GenericEncoding.GetDefaultDecoder<TKey>()   ?? throw new ArgumentNullException(nameof(keyDecoder),   $"The key decoder {nameof(TKey)}={typeof(TKey).Name} has no decoder specified. You must provide one or use a primitive/string/byte[].");
+            m_valueDecoder = valueDecoder ?? GenericEncoding.GetDefaultDecoder<TValue>() ?? throw new ArgumentNullException(nameof(valueDecoder), $"The value decoder {nameof(TValue)}={typeof(TValue).Name} has no decoder specified. You must provide one or use a primitive/string/byte[]. If you require storing live/non-immutable data, store instead an int/long/identifier.");
                 
-            m_keyBuffer   = new Buffer();
-            m_valueBuffer = new Buffer();
+            m_keyBuffer   = new GenericEncoding.Buffer();
+            m_valueBuffer = new GenericEncoding.Buffer();
         }
         #endregion
     
@@ -254,9 +254,9 @@ namespace System.Collections.Specialized
         /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
         /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<TKey, Buffer> keyEncoder, Action<TValue, Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
 #else
-        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<object, Buffer> keyEncoder, Action<object, Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
 #endif
             if(storageStream == null)
                 throw new ArgumentNullException(nameof(storageStream));
@@ -414,10 +414,9 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    use this.SetValueUnsafe() if you care mostly about speed.
-        ///    
-        ///    Throws KeyNotFoundException.
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public TValue this[in TKey key] {
             get{
                 if(!this.TryGetValue(in key, out var value))
@@ -435,8 +434,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters of minimal key)
         ///    Could be used as a pseudo priority queue.
-        ///    Throws KeyNotFoundException when empty.
         /// </summary>
+        /// <exception cref="KeyNotFoundException">Empty key.</exception>
         public TKey MinimumKey {
             get {
                 if(!this.TryGetMinimumLeaf(out var res))
@@ -449,8 +448,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters of maximal key)
         ///    Could be used as a pseudo priority queue.
-        ///    Throws KeyNotFoundException when empty.
         /// </summary>
+        /// <exception cref="KeyNotFoundException">Empty key.</exception>
         public TKey MaximumKey {
             get {
                 if(!this.TryGetMaximumLeaf(out var res))
@@ -463,10 +462,8 @@ namespace System.Collections.Specialized
         #region Add()
         /// <summary>
         ///     O(k)    (k = # of characters)
-        ///     
-        ///     Throws ArgumentException on empty/duplicate key.
         /// </summary>
-        /// <exception cref="ArgumentException" />
+        /// <exception cref="ArgumentException">Empty key or duplicate key</exception>
         public void Add(in TKey key, in TValue value) {
             var path = this.TryGetPath(in key, false, true);
     
@@ -477,10 +474,8 @@ namespace System.Collections.Specialized
         #region AddRange()
         /// <summary>
         ///     O(m k)    (k = # of characters)
-        ///     
-        ///     Throws ArgumentException on empty/duplicate key.
         /// </summary>
-        /// <exception cref="ArgumentException" />
+        /// <exception cref="ArgumentException">Empty key or duplicate key</exception>
         public void AddRange(IEnumerable<KeyValuePair<TKey, TValue>> values) {
             foreach(var value in values)
                 this.Add(value.Key, value.Value);
@@ -489,9 +484,8 @@ namespace System.Collections.Specialized
         #region Remove()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key</exception>
         public bool Remove(in TKey key) {
             var path = this.TryGetPath(in key, false, true);
     
@@ -501,9 +495,8 @@ namespace System.Collections.Specialized
         #region RemoveRange()
         /// <summary>
         ///     O(m k)    (k = # of characters)
-        ///     
-        ///     Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key</exception>
         public void RemoveRange(IEnumerable<TKey> keys) {
             foreach(var key in keys)
                 this.Remove(key);
@@ -539,9 +532,9 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    Returns true if the item was added, false if existing.
-        ///    Throws ArgumentException on empty key.
         /// </summary>
-        public bool TryAdd(TKey key, TValue value) {
+        /// <exception cref="ArgumentException">Empty key.</exception>
+        public bool TryAdd(in TKey key, in TValue value) {
             var path = this.TryGetPath(in key, false, true);
             return !this.TryAddItem(path, in key, in value);
         }
@@ -549,9 +542,8 @@ namespace System.Collections.Specialized
         #region TryGetValue()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public bool TryGetValue(in TKey key, out TValue value) {
             return this.TryGetLeaf(in key, false, out value);
         }
@@ -559,9 +551,8 @@ namespace System.Collections.Specialized
         #region ContainsKey()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public bool ContainsKey(in TKey key) {
             return this.TryGetLeaf(in key, false, out _);
         }
@@ -570,9 +561,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    Returns true if the combination of {key, value} is found.
-        ///     
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public bool Contains(in TKey key, in TValue value) {
             if(!this.TryGetValue(key, out var read_value))
                 return false;
@@ -585,10 +575,9 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    use this.SetValueUnsafe() if you care mostly about speed.
-        ///    
-        ///    Throws KeyNotFoundException.
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        /// <exception cref="ArgumentException">Empty key.</exception>
         [MethodImpl(AggressiveInlining)]
         public void SetValue(in TKey key, in TValue value) {
             this.SetValue(in key, in value, false);
@@ -596,15 +585,14 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    
-        ///    Throws KeyNotFoundException.
-        ///    Throws ArgumentException on empty key.
-        ///    
         ///    Same as this[key] = value, except that this will run faster as it overwrites the value directly without re-creating the node 
         ///    (when possible, ie: anytime the value storage is smaller or of equal size).
         ///     
         ///    This method is intended for update-heavy scenarios where non-transactional writes are acceptable 
         ///    (ie: possible loss of data integrity in case of crashes).
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        /// <exception cref="ArgumentException">Empty key.</exception>
         [MethodImpl(AggressiveInlining)]
         private void SetValue(in TKey key, in TValue value, bool allow_in_place_write) {
             var path               = this.TryGetPath(in key, false, true);
@@ -638,7 +626,7 @@ namespace System.Collections.Specialized
                 }
             }
         }
-        private void SetValueInPlaceRare(Path path, NodeData last, Buffer valueBuffer) {
+        private void SetValueInPlaceRare(Path path, NodeData last, GenericEncoding.Buffer valueBuffer) {
             // if we can replace the value directly, then we do so
             var value_length_encoded_size          = CalculateVarUInt64Length(unchecked((ulong)valueBuffer.Length));
             var original_value_length_encoded_size = CalculateVarUInt64Length(unchecked((ulong)last.ValueLength));
@@ -681,15 +669,14 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    
-        ///    Throws KeyNotFoundException.
-        ///    Throws ArgumentException on empty key.
-        ///    
         ///    Same as this[key] = value, except that this will run faster as it overwrites the value directly without re-creating the node 
         ///    (when possible, ie: anytime the value storage is smaller or of equal size).
         ///     
         ///    This method is intended for update-heavy scenarios where non-transactional writes are acceptable 
         ///    (ie: possible loss of data integrity in case of crashes).
         /// </summary>
+        /// <exception cref="KeyNotFoundException" />
+        /// <exception cref="ArgumentException">Empty key.</exception>
         [MethodImpl(AggressiveInlining)]
         public void SetValueUnsafe(in TKey key, in TValue value) {
             this.SetValue(in key, in value, true);
@@ -701,9 +688,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(k)    (k = # of characters)
         ///     Returns all leafs starting with the given key.
-        ///     
-        ///     Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<TKey> StartsWith(TKey key) {
             var path = this.TryGetPath(in key, false, false);
     
@@ -784,9 +770,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(k)    (k = # of characters)
         ///     Returns all leafs starting with the given key.
-        ///     
-        ///     Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<TValue> StartsWithValues(TKey key) {
             var path = this.TryGetPath(in key, true, false);
     
@@ -815,9 +800,8 @@ namespace System.Collections.Specialized
         /// <summary>
         ///     O(k)    (k = # of characters)
         ///     Returns all leafs starting with the given key.
-        ///     
-        ///     Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<KeyValuePair<TKey, TValue>> StartsWithItems(TKey key) {
             var path = this.TryGetPath(in key, true, false);
     
@@ -970,9 +954,8 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
+        /// <exception cref="FormatException" />
         public IEnumerable<TKey> RegExpMatch(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1172,9 +1155,8 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
+        /// <exception cref="FormatException" />
         public IEnumerable<TValue> RegExpMatchValues(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1205,9 +1187,8 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
+        /// <exception cref="FormatException" />
         public IEnumerable<KeyValuePair<TKey, TValue>> RegExpMatchItems(string regexpPattern, SearchOption match = SearchOption.ExactMatch) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1242,10 +1223,9 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
+        /// <exception cref="FormatException" />
         public IEnumerable<TKey> RegExpNearNeighbors(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1278,10 +1258,9 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
+        /// <exception cref="FormatException" />
         public IEnumerable<TValue> RegExpNearNeighborsValues(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1314,10 +1293,9 @@ namespace System.Collections.Specialized
         ///                      '[', ']' and '\' need to be backspaced (ie '\[', '\]', '\\').
         ///                      '[*]' is special and signifies a wildcard (all characters)
         ///                      '[*a]' is not special and the characters '*' and 'a' will be searched for
-        ///     
-        ///     Throws FormatException.
         /// </summary>
         /// <param name="hammingDistance">The Hamming distance; indicates how many characters are allowed to differ. 0 = exact match. 1 = 1 character may differ, etc. Do not specify a negative value.</param>
+        /// <exception cref="FormatException" />
         public IEnumerable<KeyValuePair<TKey, TValue>> RegExpNearNeighborsItems(string regexpPattern, int hammingDistance, int hammingCostPerMissingCharacter = 1, int hammingCostPerExtraCharacter = 1) {
             var bitArray = ParseRegExpFormat(regexpPattern);
     
@@ -1386,7 +1364,7 @@ namespace System.Collections.Specialized
                 yield break;
             }
     
-            Buffer convertedStart = null;
+            GenericEncoding.Buffer convertedStart = null;
             if(start != default) {
                 convertedStart = m_keyBuffer;
                 m_keyEncoder(start, convertedStart);
@@ -1396,9 +1374,9 @@ namespace System.Collections.Specialized
                     convertedStart = null;
             }
     
-            Buffer convertedEnd = null;
+            GenericEncoding.Buffer convertedEnd = null;
             if(end != default) {
-                convertedEnd = new Buffer();
+                convertedEnd = new GenericEncoding.Buffer();
                 m_keyEncoder(end, convertedEnd);
                 if(convertedEnd.Length != 0)
                     EscapeLeafKeyTerminator(convertedEnd);
@@ -1655,12 +1633,12 @@ namespace System.Collections.Specialized
         ///     
         ///     Returns the keys that are found along the path.
         ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
-        ///     Throws ArgumentException on empty path.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<TKey> GetLeafsInPath(TKey path) {
             foreach(var leaf in this.TryGetLeafs(path, false)) {
                 int length = leaf.length;
-                var key    = leaf.keyBuffer.GetPartialKeyWithoutWrite(this, ref length);
+                var key    = GetPartialKeyWithoutWrite(leaf.keyBuffer, ref length);
                 yield return key;
             }
         }
@@ -1671,8 +1649,8 @@ namespace System.Collections.Specialized
         ///     
         ///     Returns the keys that are found along the path.
         ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
-        ///     Throws ArgumentException on empty path.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<TValue> GetLeafValuesInPath(TKey path) {
             foreach(var leaf in this.TryGetLeafs(path, true))
                 yield return leaf.value;
@@ -1684,12 +1662,12 @@ namespace System.Collections.Specialized
         ///     
         ///     Returns the keys that are found along the path.
         ///     ex: 'abcd'  will return {'a', 'ab', 'abc', 'abcd'} if those are leafs.
-        ///     Throws ArgumentException on empty path.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         public IEnumerable<KeyValuePair<TKey, TValue>> GetLeafItemsInPath(TKey path) {
             foreach(var leaf in this.TryGetLeafs(path, true)) {
                 int length = leaf.length;
-                var key    = leaf.keyBuffer.GetPartialKeyWithoutWrite(this, ref length);
+                var key    = GetPartialKeyWithoutWrite(leaf.keyBuffer, ref length);
                 yield return new KeyValuePair<TKey, TValue>(key, leaf.value);
             }
         }
@@ -1723,7 +1701,7 @@ namespace System.Collections.Specialized
             var oldAddressesOrdered      = new (long _old, long _oldStart, long _new)[this.Count];
             int oldAddressesOrderedCount = 0;
             bool first                   = true;
-            var rawValueBuffer           = new Buffer();
+            var rawValueBuffer           = new GenericEncoding.Buffer();
             long alloc_position          = NODE_POINTER_BYTE_SIZE;
     
             foreach(var path in items) {
@@ -1758,14 +1736,14 @@ namespace System.Collections.Specialized
     
                     // just to be sure, dont toy with the valuebuffer even if it should be fine
                     // this is in order to avoid potential future issues with code changes
-                    Buffer bufferValue;
+                    GenericEncoding.Buffer bufferValue;
                     if(last.ValueIndex != 0) {
                         bufferValue        = rawValueBuffer;
                         rawValueBuffer.EnsureCapacity(last.ValueLength);
                         bufferValue.Length = last.ValueLength;
                         BlockCopy(last.ValueBuffer, last.ValueIndex, bufferValue.Content, 0, last.ValueLength);
                     } else
-                        bufferValue = new Buffer(last.ValueBuffer) { Length = last.ValueLength };
+                        bufferValue = new GenericEncoding.Buffer(last.ValueBuffer) { Length = last.ValueLength };
     
                     newAddress = res.CreateLeafNode(last.GetKeyRaw(path), bufferValue, alloc_size => { var temp = alloc_position; alloc_position += alloc_size; return temp; });
                 }
@@ -1851,7 +1829,7 @@ namespace System.Collections.Specialized
             for(int i = 0; i < uniqueTrailStart; i++)
                 uniqueLength += path.Trail[i].PartialKeyLength;
                 
-            result = encodedKey.GetPartialKey(this, ref uniqueLength);
+            result = GetPartialKey(encodedKey, ref uniqueLength);
             return true;
         }
         #endregion
@@ -2080,9 +2058,9 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    Returns true if the item was added, false if existing.
-        ///    Throws ArgumentException on empty key.
         /// </summary>
         /// <param name="key">Only used if path = null.</param>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         private bool TryAddItem(Path path, in TKey key, in TValue value) {
             if(path != null && path.IsKeyExactMatch())
                 // key already exists
@@ -2636,8 +2614,8 @@ namespace System.Collections.Specialized
         #region private static BinarySearchInsert()
         /// <summary>
         ///     Returns the insert position relative to min.
-        ///     Throws ArgumentException on existing/duplicate key.
         /// </summary>
+        /// <exception cref="ArgumentException">Existing / duplicate key.</exception>
         [MethodImpl(AggressiveInlining)]
         private static int BinarySearchInsert(byte[] array, int min, int length, byte value) {
             var index = BinarySearch(array, min, length, value);
@@ -2662,9 +2640,9 @@ namespace System.Collections.Specialized
         /// <summary>
         ///    O(k)    (k = # of characters)
         ///    Returns true if the item was removed, false if not found.
-        ///    Throws ArgumentException on empty key.
         /// </summary>
         /// <param name="key">Only used if path = null.</param>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         private bool TryRemoveItem(Path path) {
             if(path == null || !path.IsKeyExactMatch())
                 // key isnt found
@@ -2964,10 +2942,9 @@ namespace System.Collections.Specialized
         #region protected TryGetPath()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
         /// <param name="throwOnEmptyKey">Default: true</param>
+        /// <exception cref="ArgumentException">Empty key</exception>
         protected Path TryGetPath(in TKey key, bool fetchValue, bool throwOnEmptyKey) {
             if(m_rootPointer == 0)
                 return null;
@@ -3121,7 +3098,7 @@ namespace System.Collections.Specialized
             ///     Also this key went through EscapeLeafKeyTerminator().
             ///     This always matches the search key, and not the trail keys.
             /// </summary>
-            public Buffer EncodedSearchKey;
+            public GenericEncoding.Buffer EncodedSearchKey;
     
             /// <summary>
             ///     If set, means it contains the last node start data.
@@ -3177,7 +3154,7 @@ namespace System.Collections.Specialized
             /// <summary>
             ///     Combines [EncodedSearchKey] + [Items.Last().PartialKeyLength after PartialKeyMatchLength]
             /// </summary>
-            public void ReadPathEntireKey(AdaptiveRadixTree<TKey, TValue> owner, Buffer pathKey) {
+            public void ReadPathEntireKey(AdaptiveRadixTree<TKey, TValue> owner, GenericEncoding.Buffer pathKey) {
                 if(this.Trail.Count == 0) {
                     pathKey.Length = 0;
                     return;
@@ -3292,9 +3269,8 @@ namespace System.Collections.Specialized
         #region protected TryGetLeaf()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
+        /// <exception cref="ArgumentException">Empty key.</exception>
         protected bool TryGetLeaf(in TKey key, bool fetchValue, out TValue value) {
             value = default;
     
@@ -3376,10 +3352,9 @@ namespace System.Collections.Specialized
         #region protected TryGetLeafs()
         /// <summary>
         ///    O(k)    (k = # of characters)
-        ///    
-        ///    Throws ArgumentException on empty key.
         /// </summary>
-        protected IEnumerable<(int length, TValue value, Buffer keyBuffer)> TryGetLeafs(TKey key, bool fetchValue) {
+        /// <exception cref="ArgumentException">Empty key.</exception>
+        protected IEnumerable<(int length, TValue value, GenericEncoding.Buffer keyBuffer)> TryGetLeafs(TKey key, bool fetchValue) {
             var current = m_rootPointer;
             if(current == 0)
                 yield break;
@@ -3495,7 +3470,7 @@ namespace System.Collections.Specialized
         ///     Returns the address.
         /// </summary>
         /// <param name="remainingEncodedKey">Excludes LEAF_NODE_KEY_TERMINATOR</param>
-        private long CreateLeafNode(in ReadOnlySpan<byte> remainingEncodedKey, Buffer encodedValue, Func<long, long> custom_alloc = null) {
+        private long CreateLeafNode(in ReadOnlySpan<byte> remainingEncodedKey, GenericEncoding.Buffer encodedValue, Func<long, long> custom_alloc = null) {
             // leaf
             // **************************************
             // byte                  node_type
@@ -3553,7 +3528,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareNodeKey()
-        private static bool CompareNodeKey(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
+        private static bool CompareNodeKey(byte[] buffer, GenericEncoding.Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
     
             // the only place this would make sense would be on the root node
@@ -3577,7 +3552,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareNodeKey_LongestCommonPrefix()
-        private static byte CompareNodeKey_LongestCommonPrefix(byte[] buffer, Buffer encodedKey, ref int compareIndex) {
+        private static byte CompareNodeKey_LongestCommonPrefix(byte[] buffer, GenericEncoding.Buffer encodedKey, ref int compareIndex) {
             var partial_length = buffer[2];
     
             System.Diagnostics.Debug.Assert(partial_length <= MAX_PREFIX_LEN);
@@ -3597,7 +3572,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareLeafKey()
-        private static bool CompareLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
+        private static bool CompareLeafKey(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, GenericEncoding.Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
             var partial_length = ReadVarInt64(buffer, ref bufferIndex);
             value_length       = ReadVarInt64(buffer, ref bufferIndex);
             if(partial_length != encodedKey.Length + 1 - compareIndex)
@@ -3640,7 +3615,7 @@ namespace System.Collections.Specialized
         ///     Returns the number of characters matched
         ///     Returns -1 if no match.
         /// </summary>
-        private static int CompareLeafKeyOrShorter(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
+        private static int CompareLeafKeyOrShorter(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, GenericEncoding.Buffer encodedKey, int compareIndex, int value_prefetch, out long value_length) {
             var partial_length = ReadVarInt64(buffer, ref bufferIndex);
             value_length       = ReadVarInt64(buffer, ref bufferIndex);
             if(partial_length > encodedKey.Length + 1 - compareIndex)
@@ -3681,7 +3656,7 @@ namespace System.Collections.Specialized
         }
         #endregion
         #region private static CompareLeafKey_LongestCommonPrefix()
-        private static int CompareLeafKey_LongestCommonPrefix(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, Buffer encodedKey, int compareIndex, int value_prefetch, out int partial_length, out int value_length, out bool bufferChanged) {
+        private static int CompareLeafKey_LongestCommonPrefix(byte[] buffer, ref int bufferIndex, ref int bufferRead, Stream stream, GenericEncoding.Buffer encodedKey, int compareIndex, int value_prefetch, out int partial_length, out int value_length, out bool bufferChanged) {
             bufferChanged  = false;
             partial_length = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
             value_length   = unchecked((int)ReadVarInt64(buffer, ref bufferIndex));
@@ -5811,802 +5786,36 @@ namespace System.Collections.Specialized
         }
         #endregion
     
-        // default encoders
-        #region public static GetDefaultEncoder<T>()
-#if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public static Action<T, Buffer> GetDefaultEncoder<T>() {
-            if(typeof(T) == typeof(string))   return Unsafe.As<Action<T, Buffer>>(new Action<string, Buffer>(EncodeString));
-            if(typeof(T) == typeof(char))     return Unsafe.As<Action<T, Buffer>>(new Action<char, Buffer>(EncodeChar));
-            if(typeof(T) == typeof(sbyte))    return Unsafe.As<Action<T, Buffer>>(new Action<sbyte, Buffer>(EncodeInt8));
-            if(typeof(T) == typeof(short))    return Unsafe.As<Action<T, Buffer>>(new Action<short, Buffer>(EncodeInt16));
-            if(typeof(T) == typeof(int))      return Unsafe.As<Action<T, Buffer>>(new Action<int, Buffer>(EncodeInt32));
-            if(typeof(T) == typeof(long))     return Unsafe.As<Action<T, Buffer>>(new Action<long, Buffer>(EncodeInt64));
-            if(typeof(T) == typeof(byte))     return Unsafe.As<Action<T, Buffer>>(new Action<byte, Buffer>(EncodeUInt8));
-            if(typeof(T) == typeof(ushort))   return Unsafe.As<Action<T, Buffer>>(new Action<ushort, Buffer>(EncodeUInt16));
-            if(typeof(T) == typeof(uint))     return Unsafe.As<Action<T, Buffer>>(new Action<uint, Buffer>(EncodeUInt32));
-            if(typeof(T) == typeof(ulong))    return Unsafe.As<Action<T, Buffer>>(new Action<ulong, Buffer>(EncodeUInt64));
-            if(typeof(T) == typeof(bool))     return Unsafe.As<Action<T, Buffer>>(new Action<bool, Buffer>(EncodeBool));
-            if(typeof(T) == typeof(float))    return Unsafe.As<Action<T, Buffer>>(new Action<float, Buffer>(BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<float, Buffer>)EncodeFloat));
-            if(typeof(T) == typeof(double))   return Unsafe.As<Action<T, Buffer>>(new Action<double, Buffer>(EncodeDouble));
-            if(typeof(T) == typeof(decimal))  return Unsafe.As<Action<T, Buffer>>(new Action<decimal, Buffer>(EncodeDecimal));
-            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Action<T, Buffer>>(new Action<DateTime, Buffer>(EncodeDateTime));
-            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Action<T, Buffer>>(new Action<TimeSpan, Buffer>(EncodeTimeSpan));
-            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Action<T, Buffer>>(new Action<byte[], Buffer>(EncodeByteArray));
-    
-            // note: if you need to store live values that can change, store an index to it instead
-            // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-                
-            return null;
-    
-            void EncodeString(string key, Buffer res) {
-                var count  = Encoding.UTF8.GetMaxByteCount(key.Length); //Encoding.UTF8.GetByteCount(key);
-                res.EnsureCapacity(count);
-                res.Length = Encoding.UTF8.GetBytes(key, 0, key.Length, res.Content, 0);
-                // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
-            }
-            void EncodeChar(char key, Buffer res) {
-                var item   = new char[1] { (char)key };
-                res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
-            }
-            void EncodeInt8(sbyte key, Buffer res) {
-                res.Length     = 1;
-                res.Content[0] = unchecked((byte)key);
-            }
-            void EncodeInt16(short key, Buffer res) {
-                res.Length     = 2;
-                res.Content[0] = unchecked((byte)(key & 0xFF));
-                res.Content[1] = unchecked((byte)(key >> 8));
-            }
-            void EncodeInt32(int key, Buffer res) {
-                res.Length = 4;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(key & 0xFF));
-                buffer[1]  = unchecked((byte)((key >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
-            }
-            void EncodeInt64(long key, Buffer res) {
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(key & 0xFF));
-                buffer[1]  = unchecked((byte)((key >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((key >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((key >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((key >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((key >> 56) & 0xFF));
-            }
-            void EncodeUInt8(byte key, Buffer res) {
-                res.Length     = 1;
-                res.Content[0] = key;
-            }
-            void EncodeUInt16(ushort key, Buffer res) {
-                res.Length     = 2;
-                res.Content[0] = unchecked((byte)(key & 0xFF));
-                res.Content[1] = unchecked((byte)(key >> 8));
-            }
-            void EncodeUInt32(uint key, Buffer res) {
-                res.Length = 4;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(key & 0xFF));
-                buffer[1]  = unchecked((byte)((key >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
-            }
-            void EncodeUInt64(ulong key, Buffer res) {
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(key & 0xFF));
-                buffer[1]  = unchecked((byte)((key >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((key >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((key >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((key >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((key >> 56) & 0xFF));
-            }
-            void EncodeBool(bool key, Buffer res) {
-                res.Length = 1;
-                // avoid using LEAF_NODE_KEY_TERMINATOR
-                res.Content[0] = LEAF_NODE_KEY_TERMINATOR >= 2 ?
-                    (key ? (byte)1 : (byte)0) :
-                    (key ? (byte)254 : (byte)255);
-            }
-            void EncodeFloatLE(float key, Buffer res) {
-                res.Length     = 4;
-                var buffer     = res.Content;
-                var value_uint = new UnionFloat() { Value = key }.Binary;
-                buffer[0] = unchecked((byte)(value_uint & 0xFF));
-                buffer[1] = unchecked((byte)((value_uint >> 8) & 0xFF));
-                buffer[2] = unchecked((byte)((value_uint >> 16) & 0xFF));
-                buffer[3] = unchecked((byte)((value_uint >> 24) & 0xFF));
-            }
-            void EncodeFloat(float key, Buffer res) {
-                res.Length = 4;
-                var buffer = res.Content;
-                var value = BitConverter.GetBytes(key);
-                buffer[0] = value[0];
-                buffer[1] = value[1];
-                buffer[2] = value[2];
-                buffer[3] = value[3];
-            }
-            void EncodeDouble(double key, Buffer res) {
-                var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits(key));
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeDecimal(decimal key, Buffer res) {
-                res.Length = 16;
-                var buffer = res.Content;
-                var bits   = decimal.GetBits(key);
-    
-                // technically could be compressed since theres some unused ranges
-                // int[3] bits [30-24] and [0-15] are always zero
-    
-                int bit = bits[0];
-                buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[2] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[3] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[1];
-                buffer[4] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[5] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[6] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[7] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[2];
-                buffer[8] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[9] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[10] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[11] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[3];
-                buffer[12] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[13] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[14] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[15] = unchecked((byte)((bit >> 24) & 0xFF));
-            }
-            void EncodeDateTime(DateTime key, Buffer res) {
-                var item   = unchecked((ulong)key.Ticks);
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeTimeSpan(TimeSpan key, Buffer res) {
-                var item   = unchecked((ulong)key.Ticks);
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeByteArray(byte[] key, Buffer res) {
-                res.Length = key.Length;
-                BlockCopy(key, 0, res.Content, 0, key.Length);
+        #region private GetPartialKey()
+        //private TKey BufferExtensions_GetKey(GenericEncoding.Buffer buffer) {
+        //    UnescapeLeafKeyTerminator(buffer.Content, 0, ref buffer.Length);
+        //    return (TKey)m_keyDecoder(buffer.Content, 0, buffer.Length);
+        //}
+        private TKey GetPartialKey(GenericEncoding.Buffer buffer, ref int length) {
+            UnescapeLeafKeyTerminator(buffer.Content, 0, ref buffer.Length, ref length);
+            return (TKey)m_keyDecoder(buffer.Content, 0, length);
+        }
+        /// <summary>
+        ///     Returns the partial key without modifying the current class.
+        ///     This is inherently slower as data needs to be copied.
+        /// </summary>
+        private TKey GetPartialKeyWithoutWrite(GenericEncoding.Buffer buffer, ref int length) {
+            if(buffer.Content.Length - buffer.Length >= length) {
+                BlockCopy(buffer.Content, 0, buffer.Content, buffer.Length, length);
+                int maxLength = buffer.Length;
+                UnescapeLeafKeyTerminator(buffer.Content, buffer.Length, ref maxLength, ref length);
+                return (TKey)m_keyDecoder(buffer.Content, buffer.Length, length);
+            } else {
+                var temp = new byte[length];
+                BlockCopy(buffer.Content, 0, temp, 0, length);
+                int maxLength = length;
+                UnescapeLeafKeyTerminator(temp, 0, ref maxLength, ref length);
+                return (TKey)m_keyDecoder(temp, 0, length);
             }
         }
-#else
-        public static Action<object, Buffer> GetDefaultEncoder<T>() {
-            if(typeof(T) == typeof(string))   return EncodeString;
-            if(typeof(T) == typeof(char))     return EncodeChar;
-            if(typeof(T) == typeof(sbyte))    return EncodeInt8;
-            if(typeof(T) == typeof(short))    return EncodeInt16;
-            if(typeof(T) == typeof(int))      return EncodeInt32;
-            if(typeof(T) == typeof(long))     return EncodeInt64;
-            if(typeof(T) == typeof(byte))     return EncodeUInt8;
-            if(typeof(T) == typeof(ushort))   return EncodeUInt16;
-            if(typeof(T) == typeof(uint))     return EncodeUInt32;
-            if(typeof(T) == typeof(ulong))    return EncodeUInt64;
-            if(typeof(T) == typeof(bool))     return EncodeBool;
-            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<object, Buffer>)EncodeFloat;
-            if(typeof(T) == typeof(double))   return EncodeDouble;
-            if(typeof(T) == typeof(decimal))  return EncodeDecimal;
-            if(typeof(T) == typeof(DateTime)) return EncodeDateTime;
-            if(typeof(T) == typeof(TimeSpan)) return EncodeTimeSpan;
-            if(typeof(T) == typeof(byte[]))   return EncodeByteArray;
-    
-            // note: if you need to store live values that can change, store an index to it instead
-            // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-                
-            return null;
-    
-            void EncodeString(object key, Buffer res) {
-                var item   = (string)key;
-                var count  = Encoding.UTF8.GetMaxByteCount(item.Length);//Encoding.UTF8.GetByteCount(item);
-                res.EnsureCapacity(count);
-                res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
-                // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
-            }
-            void EncodeChar(object key, Buffer res) {
-                var item   = new char[1] { (char)key };
-                res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
-            }
-            void EncodeInt8(object key, Buffer res) {
-                var item       = (sbyte)key;
-                res.Length     = 1;
-                res.Content[0] = unchecked((byte)item);
-            }
-            void EncodeInt16(object key, Buffer res) {
-                var item       = (short)key;
-                res.Length     = 2;
-                res.Content[0] = unchecked((byte)(item & 0xFF));
-                res.Content[1] = unchecked((byte)(item >> 8));
-            }
-            void EncodeInt32(object key, Buffer res) {
-                var item   = (int)key;
-                res.Length = 4;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-            }
-            void EncodeInt64(object key, Buffer res) {
-                var item   = (long)key;
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeUInt8(object key, Buffer res) {
-                var item       = (byte)key;
-                res.Length     = 1;
-                res.Content[0] = item;
-            }
-            void EncodeUInt16(object key, Buffer res) {
-                var item       = (ushort)key;
-                res.Length     = 2;
-                res.Content[0] = unchecked((byte)(item & 0xFF));
-                res.Content[1] = unchecked((byte)(item >> 8));
-            }
-            void EncodeUInt32(object key, Buffer res) {
-                var item   = (uint)key;
-                res.Length = 4;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-            }
-            void EncodeUInt64(object key, Buffer res) {
-                var item   = (ulong)key;
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeBool(object key, Buffer res) {
-                var item   = (bool)key;
-                res.Length = 1;
-                // avoid using LEAF_NODE_KEY_TERMINATOR
-                res.Content[0] = LEAF_NODE_KEY_TERMINATOR >= 2 ?
-                    (item ? (byte)1 : (byte)0) :
-                    (item ? (byte)254 : (byte)255);
-            }
-            void EncodeFloatLE(object key, Buffer res) {
-                var item       = (float)key;
-                res.Length     = 4;
-                var buffer     = res.Content;
-                var value_uint = new UnionFloat() { Value = item }.Binary;
-                buffer[0]      = unchecked((byte)(value_uint & 0xFF));
-                buffer[1]      = unchecked((byte)((value_uint >> 8) & 0xFF));
-                buffer[2]      = unchecked((byte)((value_uint >> 16) & 0xFF));
-                buffer[3]      = unchecked((byte)((value_uint >> 24) & 0xFF));
-            }
-            void EncodeFloat(object key, Buffer res) {
-                var item   = (float)key;
-                res.Length = 4;
-                var buffer = res.Content;
-                var value  = BitConverter.GetBytes(item);
-                buffer[0]  = value[0];
-                buffer[1]  = value[1];
-                buffer[2]  = value[2];
-                buffer[3]  = value[3];
-            }
-            void EncodeDouble(object key, Buffer res) {
-                var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits((double)key));
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeDecimal(object key, Buffer res) {
-                var item   = (decimal)key;
-                res.Length = 16;
-                var buffer = res.Content;
-                var bits   = decimal.GetBits(item);
-    
-                // technically could be compressed since theres some unused ranges
-                // int[3] bits [30-24] and [0-15] are always zero
-    
-                int bit = bits[0];
-                buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[2] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[3] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[1];
-                buffer[4] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[5] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[6] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[7] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[2];
-                buffer[8] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[9] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[10] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[11] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[3];
-                buffer[12] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[13] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[14] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[15] = unchecked((byte)((bit >> 24) & 0xFF));
-            }
-            void EncodeDateTime(object key, Buffer res) {
-                var item   = unchecked((ulong)((DateTime)key).Ticks);
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeTimeSpan(object key, Buffer res) {
-                var item   = unchecked((ulong)((TimeSpan)key).Ticks);
-                res.Length = 8;
-                var buffer = res.Content;
-                buffer[0]  = unchecked((byte)(item & 0xFF));
-                buffer[1]  = unchecked((byte)((item >> 8) & 0xFF));
-                buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
-                buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
-                buffer[4]  = unchecked((byte)((item >> 32) & 0xFF));
-                buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
-                buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
-                buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
-            }
-            void EncodeByteArray(object key, Buffer res) {
-                var item   = (byte[])key;
-                res.Length = item.Length;
-                BlockCopy(item, 0, res.Content, 0, item.Length);
-            }
-        }
-#endif
-        [StructLayout(LayoutKind.Explicit)]
-        private struct UnionFloat {
-            [FieldOffset(0)] public float Value; // only works with BitConverter.IsLittleEndian
-            [FieldOffset(0)] public uint Binary;
-        }
-        #endregion
-        #region public static GetDefaultDecoder<T>()
-#if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public static Func<byte[], int, int, T> GetDefaultDecoder<T>() {
-            if(typeof(T) == typeof(string))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, string>(DecodeString));
-            if(typeof(T) == typeof(char))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, char>(DecodeChar));
-            if(typeof(T) == typeof(sbyte))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, sbyte>(DecodeInt8));
-            if(typeof(T) == typeof(short))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, short>(DecodeInt16));
-            if(typeof(T) == typeof(int))      return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, int>(DecodeInt32));
-            if(typeof(T) == typeof(long))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, long>(DecodeInt64));
-            if(typeof(T) == typeof(byte))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte>(DecodeUInt8));
-            if(typeof(T) == typeof(ushort))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, ushort>(DecodeUInt16));
-            if(typeof(T) == typeof(uint))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, uint>(DecodeUInt32));
-            if(typeof(T) == typeof(ulong))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, ulong>(DecodeUInt64));
-            if(typeof(T) == typeof(bool))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, bool>(DecodeBool));
-            if(typeof(T) == typeof(float))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, float>(BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, float>)DecodeFloat));
-            if(typeof(T) == typeof(double))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, double>(DecodeDouble));
-            if(typeof(T) == typeof(decimal))  return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, decimal>(DecodeDecimal));
-            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, DateTime>(DecodeDateTime));
-            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, TimeSpan>(DecodeTimeSpan));
-            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte[]>(DecodeByteArray));
-    
-            // note: if you need to store live values that can change, store an index to it instead
-            // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-                
-            return null;
-    
-            string DecodeString(byte[] buffer, int start, int len) {
-                return Encoding.UTF8.GetString(buffer, start, len);
-            }
-            char DecodeChar(byte[] buffer, int start, int len) {
-                var temp = new char[1];
-                Encoding.UTF8.GetChars(buffer, start, len, temp, 0);
-                return temp[0];
-            }
-            sbyte DecodeInt8(byte[] buffer, int start, int len) {
-                return unchecked((sbyte)buffer[start]);
-            }
-            short DecodeInt16(byte[] buffer, int start, int len) {
-                return unchecked((short)(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8)));
-            }
-            int DecodeInt32(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8) |
-                    (buffer[start + 2] << 16) |
-                    (buffer[start + 3] << 24));
-            }
-            long DecodeInt64(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56));
-            }
-            byte DecodeUInt8(byte[] buffer, int start, int len) {
-                return buffer[start];
-            }
-            ushort DecodeUInt16(byte[] buffer, int start, int len) {
-                return unchecked((ushort)(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8)));
-            }
-            uint DecodeUInt32(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((uint)buffer[start + 1] << 8) |
-                    ((uint)buffer[start + 2] << 16) |
-                    ((uint)buffer[start + 3] << 24));
-            }
-            ulong DecodeUInt64(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((ulong)buffer[start + 1] << 8) |
-                    ((ulong)buffer[start + 2] << 16) |
-                    ((ulong)buffer[start + 3] << 24) |
-                    ((ulong)buffer[start + 4] << 32) |
-                    ((ulong)buffer[start + 5] << 40) |
-                    ((ulong)buffer[start + 6] << 48) |
-                    ((ulong)buffer[start + 7] << 56));
-            }
-            bool DecodeBool(byte[] buffer, int start, int len) {
-                var b = buffer[start];
-                // avoid using LEAF_NODE_KEY_TERMINATOR
-                return LEAF_NODE_KEY_TERMINATOR >= 2 ?
-                    b != 0 :
-                    b != 255;
-            }
-            float DecodeFloatLE(byte[] buffer, int start, int len) {
-                var value_uint = unchecked(
-                    buffer[start + 0] |
-                    ((uint)buffer[start + 1] << 8) |
-                    ((uint)buffer[start + 2] << 16) |
-                    ((uint)buffer[start + 3] << 24));
-    
-                return new UnionFloat() { Binary = value_uint }.Value;
-            }
-            float DecodeFloat(byte[] buffer, int start, int len) {
-                return BitConverter.ToSingle(buffer, start);
-            }
-            double DecodeDouble(byte[] buffer, int start, int len) {
-                return BitConverter.Int64BitsToDouble(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56) ));
-            }
-            decimal DecodeDecimal(byte[] buffer, int start, int len) {
-                var bits = new int[4];
-    
-                bits[0] =
-                    (buffer[start + 0] << 0) |
-                    (buffer[start + 1] << 8) |
-                    (buffer[start + 2] << 16) |
-                    (buffer[start + 3] << 24);
-                bits[1] =
-                    (buffer[start + 4] << 0) |
-                    (buffer[start + 5] << 8) |
-                    (buffer[start + 6] << 16) |
-                    (buffer[start + 7] << 24);
-                bits[2] =
-                    (buffer[start + 8] << 0) |
-                    (buffer[start + 9] << 8) |
-                    (buffer[start + 10] << 16) |
-                    (buffer[start + 11] << 24);
-                bits[3] =
-                    (buffer[start + 12] << 0) |
-                    (buffer[start + 13] << 8) |
-                    (buffer[start + 14] << 16) |
-                    (buffer[start + 15] << 24);
-    
-                return new decimal(bits);
-            }
-            DateTime DecodeDateTime(byte[] buffer, int start, int len) {
-                return new DateTime(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56)));
-            }
-            TimeSpan DecodeTimeSpan(byte[] buffer, int start, int len) {
-                return new TimeSpan(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56)));
-            }
-            byte[] DecodeByteArray(byte[] buffer, int start, int len) {
-                var res = new byte[len];
-                BlockCopy(buffer, start, res, 0, len);
-                return res;
-            }
-        }
-#else
-        public static Func<byte[], int, int, object> GetDefaultDecoder<T>() {
-            if(typeof(T) == typeof(string))   return DecodeString;
-            if(typeof(T) == typeof(char))     return DecodeChar;
-            if(typeof(T) == typeof(sbyte))    return DecodeInt8;
-            if(typeof(T) == typeof(short))    return DecodeInt16;
-            if(typeof(T) == typeof(int))      return DecodeInt32;
-            if(typeof(T) == typeof(long))     return DecodeInt64;
-            if(typeof(T) == typeof(byte))     return DecodeUInt8;
-            if(typeof(T) == typeof(ushort))   return DecodeUInt16;
-            if(typeof(T) == typeof(uint))     return DecodeUInt32;
-            if(typeof(T) == typeof(ulong))    return DecodeUInt64;
-            if(typeof(T) == typeof(bool))     return DecodeBool;
-            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, object>)DecodeFloat;
-            if(typeof(T) == typeof(double))   return DecodeDouble;
-            if(typeof(T) == typeof(decimal))  return DecodeDecimal;
-            if(typeof(T) == typeof(DateTime)) return DecodeDateTime;
-            if(typeof(T) == typeof(TimeSpan)) return DecodeTimeSpan;
-            if(typeof(T) == typeof(byte[]))   return DecodeByteArray;
-    
-            // note: if you need to store live values that can change, store an index to it instead
-            // ie: AdaptiveRadixTree<string, class_a> -> AdaptiveRadixTree<string, int> + Dictionary<int, class_a>
-                
-            return null;
-    
-            object DecodeString(byte[] buffer, int start, int len) {
-                return Encoding.UTF8.GetString(buffer, start, len);
-            }
-            object DecodeChar(byte[] buffer, int start, int len) {
-                var temp = new char[1];
-                Encoding.UTF8.GetChars(buffer, start, len, temp, 0);
-                return temp[0];
-            }
-            object DecodeInt8(byte[] buffer, int start, int len) {
-                return unchecked((sbyte)buffer[start]);
-            }
-            object DecodeInt16(byte[] buffer, int start, int len) {
-                return unchecked((short)(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8)));
-            }
-            object DecodeInt32(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8) |
-                    (buffer[start + 2] << 16) |
-                    (buffer[start + 3] << 24));
-            }
-            object DecodeInt64(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56));
-            }
-            object DecodeUInt8(byte[] buffer, int start, int len) {
-                return buffer[start];
-            }
-            object DecodeUInt16(byte[] buffer, int start, int len) {
-                return unchecked((ushort)(
-                    buffer[start + 0] |
-                    (buffer[start + 1] << 8)));
-            }
-            object DecodeUInt32(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((uint)buffer[start + 1] << 8) |
-                    ((uint)buffer[start + 2] << 16) |
-                    ((uint)buffer[start + 3] << 24));
-            }
-            object DecodeUInt64(byte[] buffer, int start, int len) {
-                return unchecked(
-                    buffer[start + 0] |
-                    ((ulong)buffer[start + 1] << 8) |
-                    ((ulong)buffer[start + 2] << 16) |
-                    ((ulong)buffer[start + 3] << 24) |
-                    ((ulong)buffer[start + 4] << 32) |
-                    ((ulong)buffer[start + 5] << 40) |
-                    ((ulong)buffer[start + 6] << 48) |
-                    ((ulong)buffer[start + 7] << 56));
-            }
-            object DecodeBool(byte[] buffer, int start, int len) {
-                var b = buffer[start];
-                // avoid using LEAF_NODE_KEY_TERMINATOR
-                return LEAF_NODE_KEY_TERMINATOR >= 2 ?
-                    b != 0 :
-                    b != 255;
-            }
-            object DecodeFloatLE(byte[] buffer, int start, int len) {
-                var value_uint = unchecked(
-                    buffer[start + 0] |
-                    ((uint)buffer[start + 1] << 8) |
-                    ((uint)buffer[start + 2] << 16) |
-                    ((uint)buffer[start + 3] << 24));
-    
-                return new UnionFloat() { Binary = value_uint }.Value;
-            }
-            object DecodeFloat(byte[] buffer, int start, int len) {
-                return BitConverter.ToSingle(buffer, start);
-            }
-            object DecodeDouble(byte[] buffer, int start, int len) {
-                return BitConverter.Int64BitsToDouble(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56) ));
-            }
-            object DecodeDecimal(byte[] buffer, int start, int len) {
-                var bits = new int[4];
-    
-                bits[0] =
-                    (buffer[start + 0] << 0) |
-                    (buffer[start + 1] << 8) |
-                    (buffer[start + 2] << 16) |
-                    (buffer[start + 3] << 24);
-                bits[1] =
-                    (buffer[start + 4] << 0) |
-                    (buffer[start + 5] << 8) |
-                    (buffer[start + 6] << 16) |
-                    (buffer[start + 7] << 24);
-                bits[2] =
-                    (buffer[start + 8] << 0) |
-                    (buffer[start + 9] << 8) |
-                    (buffer[start + 10] << 16) |
-                    (buffer[start + 11] << 24);
-                bits[3] =
-                    (buffer[start + 12] << 0) |
-                    (buffer[start + 13] << 8) |
-                    (buffer[start + 14] << 16) |
-                    (buffer[start + 15] << 24);
-    
-                return new decimal(bits);
-            }
-            object DecodeDateTime(byte[] buffer, int start, int len) {
-                return new DateTime(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56)));
-            }
-            object DecodeTimeSpan(byte[] buffer, int start, int len) {
-                return new TimeSpan(unchecked(
-                    buffer[start + 0] |
-                    ((long)buffer[start + 1] << 8) |
-                    ((long)buffer[start + 2] << 16) |
-                    ((long)buffer[start + 3] << 24) |
-                    ((long)buffer[start + 4] << 32) |
-                    ((long)buffer[start + 5] << 40) |
-                    ((long)buffer[start + 6] << 48) |
-                    ((long)buffer[start + 7] << 56)));
-            }
-            object DecodeByteArray(byte[] buffer, int start, int len) {
-                var res = new byte[len];
-                BlockCopy(buffer, start, res, 0, len);
-                return res;
-            }
-        }
-#endif
-        #endregion
-        #region public class Buffer
-        public sealed class Buffer {
-            private const int DEFAULT_CAPACITY = 32;
-    
-            public byte[] Content;
-            public int Length;
-    
-            public Buffer(int capacity = DEFAULT_CAPACITY) : this(new byte[capacity]){ }
-            public Buffer(byte[] buffer) {
-                this.Content = buffer ?? throw new ArgumentNullException(nameof(buffer));
-            }
-    
-            /// <summary>
-            ///     Ensures the buffer can contain the capacity requested.
-            /// </summary>
-            public void EnsureCapacity(int capacity) {
-                if(this.Content.Length < capacity)
-                    Array.Resize(ref this.Content, capacity);
-            }
-    
-            public TKey GetKey(AdaptiveRadixTree<TKey, TValue> owner) {
-                UnescapeLeafKeyTerminator(this.Content, 0, ref this.Length);
-                return (TKey)owner.m_keyDecoder(this.Content, 0, this.Length);
-            }
-            internal TKey GetPartialKey(AdaptiveRadixTree<TKey, TValue> owner, ref int length) {
-                UnescapeLeafKeyTerminator(this.Content, 0, ref this.Length, ref length);
-                return (TKey)owner.m_keyDecoder(this.Content, 0, length);
-            }
-            /// <summary>
-            ///     Returns the partial key without modifying the current class.
-            ///     This is inherently slower as data needs to be copied.
-            /// </summary>
-            internal TKey GetPartialKeyWithoutWrite(AdaptiveRadixTree<TKey, TValue> owner, ref int length) {
-                if(this.Content.Length - this.Length >= length) {
-                    BlockCopy(this.Content, 0, this.Content, this.Length, length);
-                    int maxLength = this.Length;
-                    UnescapeLeafKeyTerminator(this.Content, this.Length, ref maxLength, ref length);
-                    return (TKey)owner.m_keyDecoder(this.Content, this.Length, length);
-                } else {
-                    var temp = new byte[length];
-                    BlockCopy(this.Content, 0, temp, 0, length);
-                    int maxLength = length;
-                    UnescapeLeafKeyTerminator(temp, 0, ref maxLength, ref length);
-                    return (TKey)owner.m_keyDecoder(temp, 0, length);
-                }
-            }
-            public TValue GetValue(AdaptiveRadixTree<TKey, TValue> owner) {
-                return (TValue)owner.m_valueDecoder(this.Content, 0, this.Length);
-            }
-        }
+        //private TValue BufferExtensions_GetValue(GenericEncoding.Buffer buffer) {
+        //    return (TValue)m_valueDecoder(buffer.Content, 0, buffer.Length);
+        //}
         #endregion
         #region private static EscapeLeafKeyTerminator()
         /// <summary>
@@ -6615,7 +5824,7 @@ namespace System.Collections.Specialized
         ///     This is expected to be only used by KeyEncoder  (and not valueencoder).
         /// </summary>
         [MethodImpl(AggressiveInlining)]
-        private static void EscapeLeafKeyTerminator(Buffer result) {
+        private static void EscapeLeafKeyTerminator(GenericEncoding.Buffer result) {
             // LEAF_NODE_KEY_ESCAPE_CHAR = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR
             // LEAF_NODE_KEY_TERMINATOR  = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR2
     
@@ -6655,7 +5864,6 @@ namespace System.Collections.Specialized
         ///     Unescapes LEAF_NODE_KEY_TERMINATOR
         ///     Call this whenever KeyEncoder called EscapeLeafKeyTerminator()
         ///     This is expected to be only used by KeyDecoder (and not valueDecoder).
-        ///     Returns the number of missing bytes to complete current.
         /// </summary>
         [MethodImpl(AggressiveInlining)]
         private static void UnescapeLeafKeyTerminator(byte[] buffer, int start, ref int len) {
@@ -6668,7 +5876,6 @@ namespace System.Collections.Specialized
         ///     Unescapes LEAF_NODE_KEY_TERMINATOR
         ///     Call this whenever KeyEncoder called EscapeLeafKeyTerminator()
         ///     This is expected to be only used by KeyDecoder (and not valueDecoder).
-        ///     Returns the number of missing bytes to complete current.
         /// </summary>
         /// <param name="stopAt">Should be smaller or equal to len. Specifies the stopping point, but allows it to increase up to len if it ends on an encoded character.</param>
         [MethodImpl(AggressiveInlining)]
@@ -6742,10 +5949,6 @@ namespace System.Collections.Specialized
                 this.Target  = target;
             }
     
-            public override int GetHashCode() {
-                return (this.Address, this.Target).GetHashCode();
-            }
-    
             public bool Equals(NodePointer other) {
                 return other.Address == this.Address && other.Target == this.Target;
             }
@@ -6754,7 +5957,16 @@ namespace System.Collections.Specialized
                     return false;
                 return this.Equals((NodePointer)obj);
             }
-    
+            public static bool operator ==(NodePointer x, NodePointer y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(NodePointer x, NodePointer y) {
+                return !(x == y);
+            }
+
+            public override int GetHashCode() {
+                return (this.Address, this.Target).GetHashCode();
+            }
             public override string ToString() {
                 return $"(@{this.Address}) -> {this.Target}";
             }
