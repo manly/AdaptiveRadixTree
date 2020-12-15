@@ -1813,6 +1813,7 @@ namespace System.Collections.Specialized
         ///    Returns the shortest length within encodedKey that makes the key uniquely identifiable.
         ///    Returns at least one character even if the key shares no branches (ex: items=abc (and no other items)  shortestkey(abc)=a).
         /// </summary>
+        /// <exception cref="KeyNotFoundException">Empty key.</exception>
         public bool CalculateShortestUniqueKey(in TKey key, out TKey result) {
             var path = this.TryGetPath(in key, false, true);
     
@@ -2925,11 +2926,11 @@ namespace System.Collections.Specialized
             switch(nodeType) {
                 case NodeType.Node4:   return 0; // 0 prevents trying to downsize
                 case NodeType.Node8:   return 3;
-                case NodeType.Node16:  return 7;
-                case NodeType.Node32:  return 13;
-                case NodeType.Node64:  return 25;
-                case NodeType.Node128: return 49;
-                case NodeType.Node256: return 97;
+                case NodeType.Node16:  return 6;
+                case NodeType.Node32:  return 12;
+                case NodeType.Node64:  return 28;
+                case NodeType.Node128: return 56;
+                case NodeType.Node256: return 120;
             }
     
             // dont throw as it prevents inlining
