@@ -1816,6 +1816,8 @@ namespace System.Collections.Specialized
         /// <exception cref="KeyNotFoundException">Empty key.</exception>
         public bool CalculateShortestUniqueKey(in TKey key, out TKey result) {
             var path = this.TryGetPath(in key, false, true);
+
+            // note: this code could support shortest unique key without requiring the key to find the item
     
             // if no root or not found
             if(path == null || !path.IsKeyExactMatch()) {
@@ -4483,6 +4485,8 @@ namespace System.Collections.Specialized
         private static NodePointer GetMinChild(byte[] buffer, long address) {
             var nodeType = (NodeType)buffer[0];
             var index    = CalculateKeysIndex(nodeType);
+
+            // note: this doesnt skip LEAF_NODE_KEY_TERMINATOR
     
             if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                 var pos = index + MaxChildCount(nodeType) + 0 * NODE_POINTER_BYTE_SIZE;
@@ -4510,6 +4514,8 @@ namespace System.Collections.Specialized
         private static NodePointer GetMaxChild(byte[] buffer, long address) {
             var nodeType = (NodeType)buffer[0];
             var index    = CalculateKeysIndex(nodeType);
+
+            // note: this doesnt skip LEAF_NODE_KEY_TERMINATOR
     
             if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                 byte num_children = buffer[1];
@@ -4543,6 +4549,9 @@ namespace System.Collections.Specialized
             var current   = m_rootPointer;
             var keyBuffer = new byte[32];
             int keySize   = 0;
+
+            // note: the current code doesnt do the proper behavior
+            // it should always pick LEAF_NODE_KEY_TERMINATOR subkey if found, and otherwise the smallest value
     
             while(current != 0) {
                 this.Stream.Position = current;
@@ -4587,6 +4596,9 @@ namespace System.Collections.Specialized
             var current   = m_rootPointer;
             var keyBuffer = new byte[32];
             int keySize   = 0;
+
+            // note: the current code doesnt do the proper behavior
+            // it should always pick the highest subkey *that isnt LEAF_NODE_KEY_TERMINATOR*, and if no other keys are found, then LEAF_NODE_KEY_TERMINATOR
     
             while(current != 0) {
                 this.Stream.Position = current;
@@ -5458,7 +5470,7 @@ namespace System.Collections.Specialized
                 ///     Do not return any negative values.
                 ///     No safeguards are in place if you do.
                 /// </remarks>
-                public int HammingDistance = 0; // 0 = exact match, 1 = 1 character may differ, etc. Dont put negative values in there.
+                public int HammingDistance = 0;
             }
     
             private sealed class InternalNode {
@@ -5473,17 +5485,16 @@ namespace System.Collections.Specialized
                     this.Hamming     = hamming;
                 }
             }
+            public enum ValidationContext {
+                Node,
+                Leaf,
+                NodeChild,
+            }
             public sealed class FilterItem {
                 public byte[] EncodedKey; // normally you want to call UnescapeLeafKeyTerminator() on this
                 public int KeyLength;
                 public int LastAcceptedLength;
-                /// <summary>
-                ///     Values:
-                ///     false = currently validating a node
-                ///     true  = currently validating a leaf
-                ///     null  = currently validating a node.child
-                /// </summary>
-                public bool? IsLeaf;
+                public ValidationContext ValidationContext;
     
                 /// <summary>
                 ///     Mostly there only for debugging purposes.
@@ -5541,14 +5552,14 @@ namespace System.Collections.Specialized
                     int readBytes = stream.Read(m_buffer, 1, CalculateNodePrefetchSize(nodeType) - 1) + 1;
     
                     if(nodeType == NodeType.Leaf) {
-                        int start           = 1;
-                        int partial_length2 = unchecked((int)ReadVarInt64(m_buffer, ref start));
-                        int value_length    = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int start                = 1;
+                        int partial_length2      = unchecked((int)ReadVarInt64(m_buffer, ref start));
+                        int value_length         = unchecked((int)ReadVarInt64(m_buffer, ref start));
                         ReadLeafKey(m_buffer, ref start, ref readBytes, stream, partial_length2, ref m_key, ref keySize, LEAF_NODE_VALUE_PREFETCH_SIZE);
-                        res.Key             = m_key;
-                        filter.EncodedKey   = m_key;
-                        filter.IsLeaf       = true;
-                        filter.KeyLength    = keySize;
+                        res.Key                  = m_key;
+                        filter.EncodedKey        = m_key;
+                        filter.ValidationContext = ValidationContext.Leaf;
+                        filter.KeyLength         = keySize;
     
                         if(filter.LastAcceptedLength >= keySize || (hamming -= calculateHammingDistance(filter)) >= 0) {
                             res.KeyLength       = keySize;
@@ -5588,16 +5599,16 @@ namespace System.Collections.Specialized
                     res.KeyLength     = partial_length;
     
     
-                    filter.IsLeaf    = false;
-                    filter.KeyLength = keySize;
+                    filter.ValidationContext = ValidationContext.Node;
+                    filter.KeyLength         = keySize;
                     if(filter.KeyLength > filter.LastAcceptedLength && (hamming -= calculateHammingDistance(filter)) < 0)
                         continue;
     
     
-                    var index        = CalculateKeysIndex(nodeType);
-                    var writePos     = keySize; // filter.last_accepted_len + partial_length; // keySize
-                    filter.KeyLength = keySize + 1;
-                    filter.IsLeaf    = null;
+                    var index                = CalculateKeysIndex(nodeType);
+                    var writePos             = keySize; // filter.last_accepted_len + partial_length; // keySize
+                    filter.KeyLength         = keySize + 1;
+                    filter.ValidationContext = ValidationContext.NodeChild;
     
                     if(nodeType >= NodeType.Node4 && nodeType <= NodeType.Node32) {
                         // note: potentially consider calling calculateHammingDistance() in proper order for the children
