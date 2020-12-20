@@ -1411,19 +1411,16 @@ namespace System.Collections.Specialized
                             else if(c1 > c2)
                                 break;
                         }
-                        bool all_equal = true;
                         max = Math.Min(o.KeyLength, convertedEnd.Length);
                         for(int i = 0; i < max; i++) { // "int i = o.LastAcceptedLength" if tree-like filtered
                             var c1 = o.EncodedKey[i];
                             var c2 = convertedEnd.Content[i];
                             if(c1 > c2)
                                 return 1; // ie: prune > end branches
-                            if(c1 < c2) {
-                                all_equal = false;
-                                break;
-                            }
+                            if(c1 < c2)
+                                return 0;
                         }
-                        if(all_equal && o.KeyLength > convertedEnd.Length)
+                        if(o.KeyLength > convertedEnd.Length)
                             return 1;
                         return 0;
                     });
@@ -1438,19 +1435,16 @@ namespace System.Collections.Specialized
                             else if(c1 > c2)
                                 break;
                         }
-                        bool all_equal = true;
                         max = Math.Min(o.KeyLength, convertedEnd.Length);
                         for(int i = o.LastAcceptedLength; i < max; i++) {
                             var c1 = o.EncodedKey[i];
                             var c2 = convertedEnd.Content[i];
                             if(c1 > c2)
                                 return 1; // ie: prune > end branches
-                            if(c1 < c2) {
-                                all_equal = false;
-                                break;
-                            }
+                            if(c1 < c2)
+                                return 0;
                         }
-                        if(all_equal && o.KeyLength > convertedEnd.Length)
+                        if(o.KeyLength > convertedEnd.Length)
                             return 1;
                         return 0;
                     });
@@ -1486,37 +1480,31 @@ namespace System.Collections.Specialized
             } else if(convertedStart == null && convertedEnd != null) {
                 if(option == RangeOption.Alphabetical) {
                     filterOptions.CalculateHammingDistance = new Func<FilterablePathEnumerator.FilterItem, int>(o => {
-                        bool all_equal = true;
                         int max = Math.Min(o.KeyLength, convertedEnd.Length);
                         for(int i = 0; i < max; i++) { // "int i = o.LastAcceptedLength" if tree-like filtered
                             var c1 = o.EncodedKey[i];
                             var c2 = convertedEnd.Content[i];
                             if(c1 > c2)
                                 return 1; // ie: prune > end branches
-                            if(c1 < c2) {
-                                all_equal = false;
-                                break;
-                            }
+                            if(c1 < c2)
+                                return 0;
                         }
-                        if(all_equal && o.KeyLength > convertedEnd.Length)
+                        if(o.KeyLength > convertedEnd.Length)
                             return 1;
                         return 0;
                     });
                 } else {
                     filterOptions.CalculateHammingDistance = new Func<FilterablePathEnumerator.FilterItem, int>(o => {
-                        bool all_equal = true;
                         int max = Math.Min(o.KeyLength, convertedEnd.Length);
                         for(int i = o.LastAcceptedLength; i < max; i++) {
                             var c1 = o.EncodedKey[i];
                             var c2 = convertedEnd.Content[i];
                             if(c1 > c2)
                                 return 1; // ie: prune > end branches
-                            if(c1 < c2) {
-                                all_equal = false;
-                                break;
-                            }
+                            if(c1 < c2)
+                                return 0;
                         }
-                        if(all_equal && o.KeyLength > convertedEnd.Length)
+                        if(o.KeyLength > convertedEnd.Length)
                             return 1;
                         return 0;
                     });
@@ -1541,7 +1529,7 @@ namespace System.Collections.Specialized
                     if(item.KeyLength < convertedStart.Length) {
                         // if shorter, then the key must be > to consider listing
                         bool all_equal = true;
-                        int max = Math.Min(item.KeyLength, convertedStart.Length);
+                        int max = item.KeyLength;
                         for(int i = 0; i < max; i++) {
                             var c1 = item.Key[i];
                             var c2 = convertedStart.Content[i];
@@ -5687,7 +5675,7 @@ namespace System.Collections.Specialized
                 return node;
             }
     
-            public sealed class Node : AdaptiveRadixTree<TKey, TValue>.Node {
+            public sealed class Node : AdaptiveRadixTree<TKey, TValue>.Node, ICloneable {
                 /// <summary>
                 ///     Remaining hamming distance.
                 /// </summary>
