@@ -13,7 +13,7 @@ namespace System.Collections.Specialized
     /// Fast and efficient encoding of base types.
     /// </summary>
     public static class GenericEncoding {
-        #region public static GetDefaultEncoder<T>()
+        #region static GetDefaultEncoder<T>()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         public static Action<Buffer, T> GetDefaultEncoder<T>() {
             if(typeof(T) == typeof(string))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, string>(EncodeString));
@@ -220,24 +220,28 @@ namespace System.Collections.Specialized
         }
 #else
         public static Action<Buffer, object> GetDefaultEncoder<T>() {
-            if(typeof(T) == typeof(string))   return EncodeString;
-            if(typeof(T) == typeof(int))      return EncodeInt32;
-            if(typeof(T) == typeof(long))     return EncodeInt64;
-            if(typeof(T) == typeof(double))   return EncodeDouble;
-            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloat;
-            if(typeof(T) == typeof(DateTime)) return EncodeDateTime;
-            if(typeof(T) == typeof(TimeSpan)) return EncodeTimeSpan;
-            if(typeof(T) == typeof(byte[]))   return EncodeByteArray;
-            if(typeof(T) == typeof(uint))     return EncodeUInt32;
-            if(typeof(T) == typeof(ulong))    return EncodeUInt64;
-            if(typeof(T) == typeof(char))     return EncodeChar;
-            if(typeof(T) == typeof(sbyte))    return EncodeInt8;
-            if(typeof(T) == typeof(short))    return EncodeInt16;
-            if(typeof(T) == typeof(byte))     return EncodeUInt8;
-            if(typeof(T) == typeof(ushort))   return EncodeUInt16;
-            if(typeof(T) == typeof(bool))     return EncodeBool;
-            if(typeof(T) == typeof(decimal))  return EncodeDecimal;
-            if(typeof(T) == typeof(Guid))     return EncodeGUID;
+            return GetDefaultEncoder(typeof(T));
+        }
+#endif
+        public static Action<Buffer, object> GetDefaultEncoder(Type type) {
+            if(type == typeof(string))   return EncodeString;
+            if(type == typeof(int))      return EncodeInt32;
+            if(type == typeof(long))     return EncodeInt64;
+            if(type == typeof(double))   return EncodeDouble;
+            if(type == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloat;
+            if(type == typeof(DateTime)) return EncodeDateTime;
+            if(type == typeof(TimeSpan)) return EncodeTimeSpan;
+            if(type == typeof(byte[]))   return EncodeByteArray;
+            if(type == typeof(uint))     return EncodeUInt32;
+            if(type == typeof(ulong))    return EncodeUInt64;
+            if(type == typeof(char))     return EncodeChar;
+            if(type == typeof(sbyte))    return EncodeInt8;
+            if(type == typeof(short))    return EncodeInt16;
+            if(type == typeof(byte))     return EncodeUInt8;
+            if(type == typeof(ushort))   return EncodeUInt16;
+            if(type == typeof(bool))     return EncodeBool;
+            if(type == typeof(decimal))  return EncodeDecimal;
+            if(type == typeof(Guid))     return EncodeGUID;
                 
             return null;
     
@@ -437,14 +441,13 @@ namespace System.Collections.Specialized
                     dest[i] = item[i];
             }
         }
-#endif
         [StructLayout(LayoutKind.Explicit)]
         private struct UnionFloat {
             [FieldOffset(0)] public float Value; // only works with BitConverter.IsLittleEndian
             [FieldOffset(0)] public uint Binary;
         }
         #endregion
-        #region public static GetDefaultDecoder<T>()
+        #region static GetDefaultDecoder<T>()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         public static Func<byte[], int, int, T> GetDefaultDecoder<T>() {
             if(typeof(T) == typeof(string))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, string>(DecodeString));
@@ -634,24 +637,28 @@ namespace System.Collections.Specialized
         }
 #else
         public static Func<byte[], int, int, object> GetDefaultDecoder<T>() {
-            if(typeof(T) == typeof(string))   return DecodeString;
-            if(typeof(T) == typeof(char))     return DecodeChar;
-            if(typeof(T) == typeof(sbyte))    return DecodeInt8;
-            if(typeof(T) == typeof(short))    return DecodeInt16;
-            if(typeof(T) == typeof(int))      return DecodeInt32;
-            if(typeof(T) == typeof(long))     return DecodeInt64;
-            if(typeof(T) == typeof(byte))     return DecodeUInt8;
-            if(typeof(T) == typeof(ushort))   return DecodeUInt16;
-            if(typeof(T) == typeof(uint))     return DecodeUInt32;
-            if(typeof(T) == typeof(ulong))    return DecodeUInt64;
-            if(typeof(T) == typeof(bool))     return DecodeBool;
-            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, object>)DecodeFloat;
-            if(typeof(T) == typeof(double))   return DecodeDouble;
-            if(typeof(T) == typeof(decimal))  return DecodeDecimal;
-            if(typeof(T) == typeof(DateTime)) return DecodeDateTime;
-            if(typeof(T) == typeof(TimeSpan)) return DecodeTimeSpan;
-            if(typeof(T) == typeof(Guid))     return DecodeGUID;
-            if(typeof(T) == typeof(byte[]))   return DecodeByteArray;
+            return GetDefaultDecoder(typeof(T));
+        }
+#endif
+        public static Func<byte[], int, int, object> GetDefaultDecoder(Type type) {
+            if(type == typeof(string))   return DecodeString;
+            if(type == typeof(char))     return DecodeChar;
+            if(type == typeof(sbyte))    return DecodeInt8;
+            if(type == typeof(short))    return DecodeInt16;
+            if(type == typeof(int))      return DecodeInt32;
+            if(type == typeof(long))     return DecodeInt64;
+            if(type == typeof(byte))     return DecodeUInt8;
+            if(type == typeof(ushort))   return DecodeUInt16;
+            if(type == typeof(uint))     return DecodeUInt32;
+            if(type == typeof(ulong))    return DecodeUInt64;
+            if(type == typeof(bool))     return DecodeBool;
+            if(type == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, object>)DecodeFloat;
+            if(type == typeof(double))   return DecodeDouble;
+            if(type == typeof(decimal))  return DecodeDecimal;
+            if(type == typeof(DateTime)) return DecodeDateTime;
+            if(type == typeof(TimeSpan)) return DecodeTimeSpan;
+            if(type == typeof(Guid))     return DecodeGUID;
+            if(type == typeof(byte[]))   return DecodeByteArray;
                 
             return null;
     
@@ -818,7 +825,6 @@ namespace System.Collections.Specialized
                 return res;
             }
         }
-#endif
         #endregion
 
         public sealed class Buffer {
