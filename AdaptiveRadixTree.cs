@@ -136,13 +136,13 @@ namespace System.Collections.Specialized
         protected readonly GenericEncoding.Buffer m_valueBuffer;
     
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        protected readonly Action<TKey, GenericEncoding.Buffer>   m_keyEncoder;
-        protected readonly Action<TValue, GenericEncoding.Buffer> m_valueEncoder;
+        protected readonly Action<GenericEncoding.Buffer, TKey>   m_keyEncoder;
+        protected readonly Action<GenericEncoding.Buffer, TValue> m_valueEncoder;
         protected readonly Func<byte[], int, int, TKey>           m_keyDecoder;
         protected readonly Func<byte[], int, int, TValue>         m_valueDecoder;
 #else
-        protected readonly Action<object, GenericEncoding.Buffer> m_keyEncoder;
-        protected readonly Action<object, GenericEncoding.Buffer> m_valueEncoder;
+        protected readonly Action<GenericEncoding.Buffer, object> m_keyEncoder;
+        protected readonly Action<GenericEncoding.Buffer, object> m_valueEncoder;
         protected readonly Func<byte[], int, int, object>         m_keyDecoder;
         protected readonly Func<byte[], int, int, object>         m_valueDecoder;
 #endif
@@ -189,10 +189,10 @@ namespace System.Collections.Specialized
         /// <param name="keyDecoder">Default: null. Will use the default decoder if null.</param>
         /// <param name="valueDecoder">Default: null. Will use the default decoder if null.</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public AdaptiveRadixTree(Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) 
+        public AdaptiveRadixTree(Stream storageStream, Action<GenericEncoding.Buffer, TKey> keyEncoder, Action<GenericEncoding.Buffer, TValue> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) 
             : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
 #else
-        public AdaptiveRadixTree(Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder)
+        public AdaptiveRadixTree(Stream storageStream, Action<GenericEncoding.Buffer, object> keyEncoder, Action<GenericEncoding.Buffer, object> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder)
             : this(new MemoryManager(), storageStream, keyEncoder, valueEncoder, keyDecoder, valueDecoder) {
 #endif
             if(storageStream != null && storageStream.Length != 0)
@@ -214,9 +214,9 @@ namespace System.Collections.Specialized
         /// <param name="keyDecoder">Default: null. Will use the default decoder if null.</param>
         /// <param name="valueDecoder">Default: null. Will use the default decoder if null.</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<GenericEncoding.Buffer, TKey> keyEncoder, Action<GenericEncoding.Buffer, TValue> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
 #else
-        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+        protected AdaptiveRadixTree(MemoryManager memoryManager, Stream storageStream, Action<GenericEncoding.Buffer, object> keyEncoder, Action<GenericEncoding.Buffer, object> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
 #endif
             if(m_buffer.Length != BUFFER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(BUFFER_SIZE), $"{nameof(m_buffer)}.Length must equal {nameof(BUFFER_SIZE)}");
@@ -254,9 +254,9 @@ namespace System.Collections.Specialized
         /// <param name="keyDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
         /// <param name="valueDecoder">Default: null. Will use the default decoder if null. See GetDefaultDecoder().</param>
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<TKey, GenericEncoding.Buffer> keyEncoder, Action<TValue, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<GenericEncoding.Buffer, TKey> keyEncoder, Action<GenericEncoding.Buffer, TValue> valueEncoder, Func<byte[], int, int, TKey> keyDecoder, Func<byte[], int, int, TValue> valueDecoder) {
 #else
-        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<object, GenericEncoding.Buffer> keyEncoder, Action<object, GenericEncoding.Buffer> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
+        public static AdaptiveRadixTree<TKey, TValue> Load(Stream storageStream, Action<GenericEncoding.Buffer, object> keyEncoder, Action<GenericEncoding.Buffer, object> valueEncoder, Func<byte[], int, int, object> keyDecoder, Func<byte[], int, int, object> valueDecoder) {
 #endif
             if(storageStream == null)
                 throw new ArgumentNullException(nameof(storageStream));
@@ -603,7 +603,7 @@ namespace System.Collections.Specialized
                 var last = path.Trail[path.Trail.Count - 1];
     
                 var valueBuffer = m_valueBuffer;
-                m_valueEncoder(value, valueBuffer);
+                m_valueEncoder(valueBuffer, value);
 
                 // if(path.LastBuffer != null) it means were guaranteed that its content is the start
                 // of the leaf node. More than likely, it is the entire leaf node
@@ -1367,7 +1367,7 @@ namespace System.Collections.Specialized
             GenericEncoding.Buffer convertedStart = null;
             if(start != default) {
                 convertedStart = m_keyBuffer;
-                m_keyEncoder(start, convertedStart);
+                m_keyEncoder(convertedStart, start);
                 if(convertedStart.Length != 0)
                     EscapeLeafKeyTerminator(convertedStart);
                 else
@@ -1377,7 +1377,7 @@ namespace System.Collections.Specialized
             GenericEncoding.Buffer convertedEnd = null;
             if(end != default) {
                 convertedEnd = new GenericEncoding.Buffer();
-                m_keyEncoder(end, convertedEnd);
+                m_keyEncoder(convertedEnd, end);
                 if(convertedEnd.Length != 0)
                     EscapeLeafKeyTerminator(convertedEnd);
                 else
@@ -1408,7 +1408,7 @@ namespace System.Collections.Specialized
                             var c2 = convertedStart.Content[i];
                             if(c1 < c2)
                                 return 1; // ie: prune < start branches
-                            else if(c1 > c2)
+                            if(c1 > c2)
                                 break;
                         }
                         max = Math.Min(o.KeyLength, convertedEnd.Length);
@@ -1432,7 +1432,7 @@ namespace System.Collections.Specialized
                             var c2 = convertedStart.Content[i];
                             if(c1 < c2)
                                 return 1; // ie: prune < start branches
-                            else if(c1 > c2)
+                            if(c1 > c2)
                                 break;
                         }
                         max = Math.Min(o.KeyLength, convertedEnd.Length);
@@ -1458,7 +1458,7 @@ namespace System.Collections.Specialized
                             var c2 = convertedStart.Content[i];
                             if(c1 < c2)
                                 return 1; // ie: prune < start branches
-                            else if(c1 > c2)
+                            if(c1 > c2)
                                 break;
                         }
                         return 0;
@@ -1471,7 +1471,7 @@ namespace System.Collections.Specialized
                             var c2 = convertedStart.Content[i];
                             if(c1 < c2)
                                 return 1; // ie: prune < start branches
-                            else if(c1 > c2)
+                            if(c1 > c2)
                                 break;
                         }
                         return 0;
@@ -2058,7 +2058,7 @@ namespace System.Collections.Specialized
                 return false;
     
             var valueBuffer = m_valueBuffer;
-            m_valueEncoder(value, valueBuffer);
+            m_valueEncoder(valueBuffer, value);
     
             if(path != null) {
                 var encodedKeySpan = new ReadOnlySpan<byte>(path.EncodedSearchKey.Content, 0, path.EncodedSearchKey.Length);
@@ -2124,7 +2124,7 @@ namespace System.Collections.Specialized
 
                 // if theres no root (m_rootPointer == 0)
                 var keyBuffer = m_keyBuffer;
-                m_keyEncoder(key, keyBuffer); 
+                m_keyEncoder(keyBuffer, key); 
                 if(keyBuffer.Length == 0)
                     throw new ArgumentException(nameof(key));
                 EscapeLeafKeyTerminator(keyBuffer);
@@ -2943,7 +2943,7 @@ namespace System.Collections.Specialized
             var current      = new NodePointer(0, m_rootPointer);
             int compareIndex = 0;
             var keyBuffer    = m_keyBuffer;
-            m_keyEncoder(key, keyBuffer);
+            m_keyEncoder(keyBuffer, key);
     
             if(keyBuffer.Length == 0) {
                 if(throwOnEmptyKey)
@@ -3271,7 +3271,7 @@ namespace System.Collections.Specialized
     
             int compareIndex = 0;
             var keyBuffer    = m_keyBuffer;
-            m_keyEncoder(key, keyBuffer);
+            m_keyEncoder(keyBuffer, key);
     
             if(keyBuffer.Length == 0)
                 throw new ArgumentException(nameof(key));
@@ -3352,7 +3352,7 @@ namespace System.Collections.Specialized
     
             int compareIndex = 0;
             var keyBuffer    = m_keyBuffer;
-            m_keyEncoder(key, keyBuffer);
+            m_keyEncoder(keyBuffer, key);
     
             if(keyBuffer.Length == 0)
                 throw new ArgumentException(nameof(key));
@@ -6068,7 +6068,7 @@ namespace System.Collections.Specialized
             return this.Items.GetEnumerator();
         }
     
-        object ICollection.SyncRoot => this; // very cheap
+        object ICollection.SyncRoot => m_memoryManager;
         bool ICollection.IsSynchronized => false;
     
 #if IMPLEMENT_DICTIONARY_INTERFACES

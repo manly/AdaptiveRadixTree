@@ -15,53 +15,53 @@ namespace System.Collections.Specialized
     public static class GenericEncoding {
         #region public static GetDefaultEncoder<T>()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
-        public static Action<T, Buffer> GetDefaultEncoder<T>() {
-            if(typeof(T) == typeof(string))   return Unsafe.As<Action<T, Buffer>>(new Action<string, Buffer>(EncodeString));
-            if(typeof(T) == typeof(char))     return Unsafe.As<Action<T, Buffer>>(new Action<char, Buffer>(EncodeChar));
-            if(typeof(T) == typeof(sbyte))    return Unsafe.As<Action<T, Buffer>>(new Action<sbyte, Buffer>(EncodeInt8));
-            if(typeof(T) == typeof(short))    return Unsafe.As<Action<T, Buffer>>(new Action<short, Buffer>(EncodeInt16));
-            if(typeof(T) == typeof(int))      return Unsafe.As<Action<T, Buffer>>(new Action<int, Buffer>(EncodeInt32));
-            if(typeof(T) == typeof(long))     return Unsafe.As<Action<T, Buffer>>(new Action<long, Buffer>(EncodeInt64));
-            if(typeof(T) == typeof(byte))     return Unsafe.As<Action<T, Buffer>>(new Action<byte, Buffer>(EncodeUInt8));
-            if(typeof(T) == typeof(ushort))   return Unsafe.As<Action<T, Buffer>>(new Action<ushort, Buffer>(EncodeUInt16));
-            if(typeof(T) == typeof(uint))     return Unsafe.As<Action<T, Buffer>>(new Action<uint, Buffer>(EncodeUInt32));
-            if(typeof(T) == typeof(ulong))    return Unsafe.As<Action<T, Buffer>>(new Action<ulong, Buffer>(EncodeUInt64));
-            if(typeof(T) == typeof(bool))     return Unsafe.As<Action<T, Buffer>>(new Action<bool, Buffer>(EncodeBool));
-            if(typeof(T) == typeof(float))    return Unsafe.As<Action<T, Buffer>>(new Action<float, Buffer>(BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<float, Buffer>)EncodeFloat));
-            if(typeof(T) == typeof(double))   return Unsafe.As<Action<T, Buffer>>(new Action<double, Buffer>(EncodeDouble));
-            if(typeof(T) == typeof(decimal))  return Unsafe.As<Action<T, Buffer>>(new Action<decimal, Buffer>(EncodeDecimal));
-            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Action<T, Buffer>>(new Action<DateTime, Buffer>(EncodeDateTime));
-            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Action<T, Buffer>>(new Action<TimeSpan, Buffer>(EncodeTimeSpan));
-            if(typeof(T) == typeof(Guid))     return Unsafe.As<Action<T, Buffer>>(new Action<Guid, Buffer>(EncodeGUID));
-            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Action<T, Buffer>>(new Action<byte[], Buffer>(EncodeByteArray));
+        public static Action<Buffer, T> GetDefaultEncoder<T>() {
+            if(typeof(T) == typeof(string))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, string>(EncodeString));
+            if(typeof(T) == typeof(int))      return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, int>(EncodeInt32));
+            if(typeof(T) == typeof(long))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, long>(EncodeInt64));
+            if(typeof(T) == typeof(double))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, double>(EncodeDouble));
+            if(typeof(T) == typeof(float))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, float>(BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, float>)EncodeFloat));
+            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, DateTime>(EncodeDateTime));
+            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, TimeSpan>(EncodeTimeSpan));
+            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, byte[]>(EncodeByteArray));
+            if(typeof(T) == typeof(uint))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, uint>(EncodeUInt32));
+            if(typeof(T) == typeof(ulong))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, ulong>(EncodeUInt64));
+            if(typeof(T) == typeof(char))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, char>(EncodeChar));
+            if(typeof(T) == typeof(sbyte))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, sbyte>(EncodeInt8));
+            if(typeof(T) == typeof(short))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, short>(EncodeInt16));
+            if(typeof(T) == typeof(byte))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, byte>(EncodeUInt8));
+            if(typeof(T) == typeof(ushort))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, ushort>(EncodeUInt16));
+            if(typeof(T) == typeof(bool))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, bool>(EncodeBool));
+            if(typeof(T) == typeof(decimal))  return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, decimal>(EncodeDecimal));
+            if(typeof(T) == typeof(Guid))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, Guid>(EncodeGUID));
                 
             return null;
     
-            void EncodeString(string key, Buffer res) {
+            void EncodeString(Buffer res, string key) {
                 var count  = Encoding.UTF8.GetMaxByteCount(key.Length); //Encoding.UTF8.GetByteCount(key);
                 res.EnsureCapacity(count);
                 res.Length = Encoding.UTF8.GetBytes(key, 0, key.Length, res.Content, 0);
                 // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
             }
-            void EncodeChar(char key, Buffer res) {
+            void EncodeChar(Buffer res, char key) {
                 if(key <= 0x7F) {
                     res.Content[0] = (byte)key;
                     res.Length = 1;
                 } else {
-                    var item   = new char[1] { (char)key };
+                    var item   = new char[1] { key };
                     res.Length = Encoding.UTF8.GetBytes(item, 0, 1, res.Content, 0);
                 }
             }
-            void EncodeInt8(sbyte key, Buffer res) {
+            void EncodeInt8(Buffer res, sbyte key) {
                 res.Length     = 1;
                 res.Content[0] = unchecked((byte)key);
             }
-            void EncodeInt16(short key, Buffer res) {
+            void EncodeInt16(Buffer res, short key) {
                 res.Length     = 2;
                 res.Content[0] = unchecked((byte)((key >> 0) & 0xFF));
                 res.Content[1] = unchecked((byte)((key >> 8) & 0xFF));
             }
-            void EncodeInt32(int key, Buffer res) {
+            void EncodeInt32(Buffer res, int key) {
                 res.Length = 4;
                 var buffer = res.Content;
                 buffer[0]  = unchecked((byte)((key >> 0) & 0xFF));
@@ -69,7 +69,7 @@ namespace System.Collections.Specialized
                 buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
                 buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
             }
-            void EncodeInt64(long key, Buffer res) {
+            void EncodeInt64(Buffer res, long key) {
                 res.Length = 8;
                 var buffer = res.Content;
                 buffer[0]  = unchecked((byte)((key >> 0) & 0xFF));
@@ -81,16 +81,16 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((key >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((key >> 56) & 0xFF));
             }
-            void EncodeUInt8(byte key, Buffer res) {
+            void EncodeUInt8(Buffer res, byte key) {
                 res.Length     = 1;
                 res.Content[0] = key;
             }
-            void EncodeUInt16(ushort key, Buffer res) {
+            void EncodeUInt16(Buffer res, ushort key) {
                 res.Length     = 2;
                 res.Content[0] = unchecked((byte)((key >> 0) & 0xFF));
                 res.Content[1] = unchecked((byte)((key >> 8) & 0xFF));
             }
-            void EncodeUInt32(uint key, Buffer res) {
+            void EncodeUInt32(Buffer res, uint key) {
                 res.Length = 4;
                 var buffer = res.Content;
                 buffer[0]  = unchecked((byte)((key >> 0) & 0xFF));
@@ -98,7 +98,7 @@ namespace System.Collections.Specialized
                 buffer[2]  = unchecked((byte)((key >> 16) & 0xFF));
                 buffer[3]  = unchecked((byte)((key >> 24) & 0xFF));
             }
-            void EncodeUInt64(ulong key, Buffer res) {
+            void EncodeUInt64(Buffer res, ulong key) {
                 res.Length = 8;
                 var buffer = res.Content;
                 buffer[0]  = unchecked((byte)((key >> 0) & 0xFF));
@@ -110,11 +110,11 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((key >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((key >> 56) & 0xFF));
             }
-            void EncodeBool(bool key, Buffer res) {
+            void EncodeBool(Buffer res, bool key) {
                 res.Length = 1;
                 res.Content[0] = key ? (byte)1 : (byte)0;
             }
-            void EncodeFloatLE(float key, Buffer res) {
+            void EncodeFloatLE(Buffer res, float key) {
                 res.Length     = 4;
                 var buffer     = res.Content;
                 var value_uint = new UnionFloat() { Value = key }.Binary;
@@ -123,16 +123,16 @@ namespace System.Collections.Specialized
                 buffer[2] = unchecked((byte)((value_uint >> 16) & 0xFF));
                 buffer[3] = unchecked((byte)((value_uint >> 24) & 0xFF));
             }
-            void EncodeFloat(float key, Buffer res) {
+            void EncodeFloat(Buffer res, float key) {
                 res.Length = 4;
                 var buffer = res.Content;
-                var value = BitConverter.GetBytes(key);
-                buffer[0] = value[0];
-                buffer[1] = value[1];
-                buffer[2] = value[2];
-                buffer[3] = value[3];
+                var value  = BitConverter.GetBytes(key);
+                buffer[0]  = value[0];
+                buffer[1]  = value[1];
+                buffer[2]  = value[2];
+                buffer[3]  = value[3];
             }
-            void EncodeDouble(double key, Buffer res) {
+            void EncodeDouble(Buffer res, double key) {
                 var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits(key));
                 res.Length = 8;
                 var buffer = res.Content;
@@ -145,7 +145,7 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeDecimal(decimal key, Buffer res) {
+            void EncodeDecimal(Buffer res, decimal key) {
                 res.Length = 16;
                 var buffer = res.Content;
                 var bits   = decimal.GetBits(key);
@@ -153,28 +153,28 @@ namespace System.Collections.Specialized
                 // technically could be compressed since theres some unused ranges
                 // int[3] bits [30-24] and [0-15] are always zero
     
-                int bit = bits[0];
-                buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[2] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[3] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[1];
-                buffer[4] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[5] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[6] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[7] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[2];
-                buffer[8] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[9] = unchecked((byte)((bit >> 8) & 0xFF));
+                int bit    = bits[0];
+                buffer[0]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[1]  = unchecked((byte)((bit >> 8) & 0xFF));
+                buffer[2]  = unchecked((byte)((bit >> 16) & 0xFF));
+                buffer[3]  = unchecked((byte)((bit >> 24) & 0xFF));
+                bit        = bits[1];
+                buffer[4]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[5]  = unchecked((byte)((bit >> 8) & 0xFF));
+                buffer[6]  = unchecked((byte)((bit >> 16) & 0xFF));
+                buffer[7]  = unchecked((byte)((bit >> 24) & 0xFF));
+                bit        = bits[2];
+                buffer[8]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[9]  = unchecked((byte)((bit >> 8) & 0xFF));
                 buffer[10] = unchecked((byte)((bit >> 16) & 0xFF));
                 buffer[11] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[3];
+                bit        = bits[3];
                 buffer[12] = unchecked((byte)((bit >> 0) & 0xFF));
                 buffer[13] = unchecked((byte)((bit >> 8) & 0xFF));
                 buffer[14] = unchecked((byte)((bit >> 16) & 0xFF));
                 buffer[15] = unchecked((byte)((bit >> 24) & 0xFF));
             }
-            void EncodeDateTime(DateTime key, Buffer res) {
+            void EncodeDateTime(Buffer res, DateTime key) {
                 var item   = unchecked((ulong)key.Ticks);
                 res.Length = 8;
                 var buffer = res.Content;
@@ -187,7 +187,7 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeTimeSpan(TimeSpan key, Buffer res) {
+            void EncodeTimeSpan(Buffer res, TimeSpan key) {
                 var item   = unchecked((ulong)key.Ticks);
                 res.Length = 8;
                 var buffer = res.Content;
@@ -200,47 +200,47 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeGUID(Guid key, Buffer res) {
+            void EncodeGUID(Buffer res, Guid key) {
                 res.Length  = 16;
                 //res.Content = key.ToByteArray();
                 BlockCopy(key.ToByteArray(), 0, res.Content, 0, 16);
             }
-            void EncodeByteArray(byte[] key, Buffer res) {
+            void EncodeByteArray(Buffer res, byte[] key) {
                 res.Length = key.Length;
                 BlockCopy(key, 0, res.Content, 0, key.Length);
             }
         }
 #else
-        public static Action<object, Buffer> GetDefaultEncoder<T>() {
+        public static Action<Buffer, object> GetDefaultEncoder<T>() {
             if(typeof(T) == typeof(string))   return EncodeString;
+            if(typeof(T) == typeof(int))      return EncodeInt32;
+            if(typeof(T) == typeof(long))     return EncodeInt64;
+            if(typeof(T) == typeof(double))   return EncodeDouble;
+            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloat;
+            if(typeof(T) == typeof(DateTime)) return EncodeDateTime;
+            if(typeof(T) == typeof(TimeSpan)) return EncodeTimeSpan;
+            if(typeof(T) == typeof(byte[]))   return EncodeByteArray;
+            if(typeof(T) == typeof(uint))     return EncodeUInt32;
+            if(typeof(T) == typeof(ulong))    return EncodeUInt64;
             if(typeof(T) == typeof(char))     return EncodeChar;
             if(typeof(T) == typeof(sbyte))    return EncodeInt8;
             if(typeof(T) == typeof(short))    return EncodeInt16;
-            if(typeof(T) == typeof(int))      return EncodeInt32;
-            if(typeof(T) == typeof(long))     return EncodeInt64;
             if(typeof(T) == typeof(byte))     return EncodeUInt8;
             if(typeof(T) == typeof(ushort))   return EncodeUInt16;
-            if(typeof(T) == typeof(uint))     return EncodeUInt32;
-            if(typeof(T) == typeof(ulong))    return EncodeUInt64;
             if(typeof(T) == typeof(bool))     return EncodeBool;
-            if(typeof(T) == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<object, Buffer>)EncodeFloat;
-            if(typeof(T) == typeof(double))   return EncodeDouble;
             if(typeof(T) == typeof(decimal))  return EncodeDecimal;
-            if(typeof(T) == typeof(DateTime)) return EncodeDateTime;
-            if(typeof(T) == typeof(TimeSpan)) return EncodeTimeSpan;
             if(typeof(T) == typeof(Guid))     return EncodeGUID;
-            if(typeof(T) == typeof(byte[]))   return EncodeByteArray;
                 
             return null;
     
-            void EncodeString(object key, Buffer res) {
+            void EncodeString(Buffer res, object key) {
                 var item   = (string)key;
                 var count  = Encoding.UTF8.GetMaxByteCount(item.Length);//Encoding.UTF8.GetByteCount(item);
                 res.EnsureCapacity(count);
                 res.Length = Encoding.UTF8.GetBytes(item, 0, item.Length, res.Content, 0);
                 // could use Encoding.UTF8.GetEncoder().Convert() to avoid GetByteCount()
             }
-            void EncodeChar(object key, Buffer res) {
+            void EncodeChar(Buffer res, object key) {
                 var item = (char)key;
                 if(item <= 0x7F) {
                     res.Content[0] = (byte)item;
@@ -250,18 +250,18 @@ namespace System.Collections.Specialized
                     res.Length = Encoding.UTF8.GetBytes(temp, 0, 1, res.Content, 0);
                 }
             }
-            void EncodeInt8(object key, Buffer res) {
+            void EncodeInt8(Buffer res, object key) {
                 var item       = (sbyte)key;
                 res.Length     = 1;
                 res.Content[0] = unchecked((byte)item);
             }
-            void EncodeInt16(object key, Buffer res) {
+            void EncodeInt16(Buffer res, object key) {
                 var item       = (short)key;
                 res.Length     = 2;
                 res.Content[0] = unchecked((byte)((item >> 0) & 0xFF));
                 res.Content[1] = unchecked((byte)((item >> 8) & 0xFF));
             }
-            void EncodeInt32(object key, Buffer res) {
+            void EncodeInt32(Buffer res, object key) {
                 var item   = (int)key;
                 res.Length = 4;
                 var buffer = res.Content;
@@ -270,7 +270,7 @@ namespace System.Collections.Specialized
                 buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
                 buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
             }
-            void EncodeInt64(object key, Buffer res) {
+            void EncodeInt64(Buffer res, object key) {
                 var item   = (long)key;
                 res.Length = 8;
                 var buffer = res.Content;
@@ -283,18 +283,18 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeUInt8(object key, Buffer res) {
+            void EncodeUInt8(Buffer res, object key) {
                 var item       = (byte)key;
                 res.Length     = 1;
                 res.Content[0] = item;
             }
-            void EncodeUInt16(object key, Buffer res) {
+            void EncodeUInt16(Buffer res, object key) {
                 var item       = (ushort)key;
                 res.Length     = 2;
                 res.Content[0] = unchecked((byte)((item >> 0) & 0xFF));
                 res.Content[1] = unchecked((byte)((item >> 8) & 0xFF));
             }
-            void EncodeUInt32(object key, Buffer res) {
+            void EncodeUInt32(Buffer res, object key) {
                 var item   = (uint)key;
                 res.Length = 4;
                 var buffer = res.Content;
@@ -303,7 +303,7 @@ namespace System.Collections.Specialized
                 buffer[2]  = unchecked((byte)((item >> 16) & 0xFF));
                 buffer[3]  = unchecked((byte)((item >> 24) & 0xFF));
             }
-            void EncodeUInt64(object key, Buffer res) {
+            void EncodeUInt64(Buffer res, object key) {
                 var item   = (ulong)key;
                 res.Length = 8;
                 var buffer = res.Content;
@@ -316,12 +316,12 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeBool(object key, Buffer res) {
+            void EncodeBool(Buffer res, object key) {
                 var item   = (bool)key;
                 res.Length = 1;
                 res.Content[0] = item ? (byte)1 : (byte)0;
             }
-            void EncodeFloatLE(object key, Buffer res) {
+            void EncodeFloatLE(Buffer res, object key) {
                 var item       = (float)key;
                 res.Length     = 4;
                 var buffer     = res.Content;
@@ -331,7 +331,7 @@ namespace System.Collections.Specialized
                 buffer[2]      = unchecked((byte)((value_uint >> 16) & 0xFF));
                 buffer[3]      = unchecked((byte)((value_uint >> 24) & 0xFF));
             }
-            void EncodeFloat(object key, Buffer res) {
+            void EncodeFloat(Buffer res, object key) {
                 var item   = (float)key;
                 res.Length = 4;
                 var buffer = res.Content;
@@ -341,7 +341,7 @@ namespace System.Collections.Specialized
                 buffer[2]  = value[2];
                 buffer[3]  = value[3];
             }
-            void EncodeDouble(object key, Buffer res) {
+            void EncodeDouble(Buffer res, object key) {
                 var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits((double)key));
                 res.Length = 8;
                 var buffer = res.Content;
@@ -354,7 +354,7 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeDecimal(object key, Buffer res) {
+            void EncodeDecimal(Buffer res, object key) {
                 var item   = (decimal)key;
                 res.Length = 16;
                 var buffer = res.Content;
@@ -363,28 +363,28 @@ namespace System.Collections.Specialized
                 // technically could be compressed since theres some unused ranges
                 // int[3] bits [30-24] and [0-15] are always zero
     
-                int bit = bits[0];
-                buffer[0] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[1] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[2] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[3] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[1];
-                buffer[4] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[5] = unchecked((byte)((bit >> 8) & 0xFF));
-                buffer[6] = unchecked((byte)((bit >> 16) & 0xFF));
-                buffer[7] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[2];
-                buffer[8] = unchecked((byte)((bit >> 0) & 0xFF));
-                buffer[9] = unchecked((byte)((bit >> 8) & 0xFF));
+                int bit    = bits[0];
+                buffer[0]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[1]  = unchecked((byte)((bit >> 8) & 0xFF));
+                buffer[2]  = unchecked((byte)((bit >> 16) & 0xFF));
+                buffer[3]  = unchecked((byte)((bit >> 24) & 0xFF));
+                bit        = bits[1];
+                buffer[4]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[5]  = unchecked((byte)((bit >> 8) & 0xFF));
+                buffer[6]  = unchecked((byte)((bit >> 16) & 0xFF));
+                buffer[7]  = unchecked((byte)((bit >> 24) & 0xFF));
+                bit        = bits[2];
+                buffer[8]  = unchecked((byte)((bit >> 0) & 0xFF));
+                buffer[9]  = unchecked((byte)((bit >> 8) & 0xFF));
                 buffer[10] = unchecked((byte)((bit >> 16) & 0xFF));
                 buffer[11] = unchecked((byte)((bit >> 24) & 0xFF));
-                bit = bits[3];
+                bit        = bits[3];
                 buffer[12] = unchecked((byte)((bit >> 0) & 0xFF));
                 buffer[13] = unchecked((byte)((bit >> 8) & 0xFF));
                 buffer[14] = unchecked((byte)((bit >> 16) & 0xFF));
                 buffer[15] = unchecked((byte)((bit >> 24) & 0xFF));
             }
-            void EncodeDateTime(object key, Buffer res) {
+            void EncodeDateTime(Buffer res, object key) {
                 var item   = unchecked((ulong)((DateTime)key).Ticks);
                 res.Length = 8;
                 var buffer = res.Content;
@@ -397,7 +397,7 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeTimeSpan(object key, Buffer res) {
+            void EncodeTimeSpan(Buffer res, object key) {
                 var item   = unchecked((ulong)((TimeSpan)key).Ticks);
                 res.Length = 8;
                 var buffer = res.Content;
@@ -410,12 +410,12 @@ namespace System.Collections.Specialized
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
             }
-            void EncodeGUID(object key, Buffer res) {
+            void EncodeGUID(Buffer res, object key) {
                 res.Length  = 16;
                 //res.Content = ((Guid)key).ToByteArray();
                 BlockCopy(((Guid)key).ToByteArray(), 0, res.Content, 0, 16);
             }
-            void EncodeByteArray(object key, Buffer res) {
+            void EncodeByteArray(Buffer res, object key) {
                 var item   = (byte[])key;
                 res.Length = item.Length;
                 BlockCopy(item, 0, res.Content, 0, item.Length);
