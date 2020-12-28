@@ -19,8 +19,8 @@ namespace System.Collections.Specialized
             if(typeof(T) == typeof(string))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, string>(EncodeString));
             if(typeof(T) == typeof(int))      return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, int>(EncodeInt32));
             if(typeof(T) == typeof(long))     return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, long>(EncodeInt64));
-            if(typeof(T) == typeof(double))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, double>(EncodeDouble));
-            if(typeof(T) == typeof(float))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, float>(BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, float>)EncodeFloat));
+            if(typeof(T) == typeof(double))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, double>(BitConverter.IsLittleEndian ? EncodeDoubleLE : (Action<Buffer, double>)EncodeDoubleBE));
+            if(typeof(T) == typeof(float))    return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, float>(BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, float>)EncodeFloatBE));
             if(typeof(T) == typeof(DateTime)) return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, DateTime>(EncodeDateTime));
             if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, TimeSpan>(EncodeTimeSpan));
             if(typeof(T) == typeof(byte[]))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, byte[]>(EncodeByteArray));
@@ -123,16 +123,16 @@ namespace System.Collections.Specialized
                 buffer[2] = unchecked((byte)((value_uint >> 16) & 0xFF));
                 buffer[3] = unchecked((byte)((value_uint >> 24) & 0xFF));
             }
-            void EncodeFloat(Buffer res, float key) {
-                res.Length = 4;
-                var buffer = res.Content;
-                var value  = BitConverter.GetBytes(key);
-                buffer[0]  = value[0];
-                buffer[1]  = value[1];
-                buffer[2]  = value[2];
-                buffer[3]  = value[3];
+            void EncodeFloatBE(Buffer res, float key) {
+                res.Length     = 4;
+                var buffer     = res.Content;
+                var value_uint = new UnionFloat() { Value = key }.Binary;
+                buffer[0] = unchecked((byte)((value_uint >> 24) & 0xFF));
+                buffer[1] = unchecked((byte)((value_uint >> 16) & 0xFF));
+                buffer[2] = unchecked((byte)((value_uint >> 8) & 0xFF));
+                buffer[3] = unchecked((byte)((value_uint >> 0) & 0xFF));
             }
-            void EncodeDouble(Buffer res, double key) {
+            void EncodeDoubleLE(Buffer res, double key) {
                 var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits(key));
                 res.Length = 8;
                 var buffer = res.Content;
@@ -144,6 +144,19 @@ namespace System.Collections.Specialized
                 buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
+            }
+            void EncodeDoubleBE(Buffer res, double key) {
+                var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits(key));
+                res.Length = 8;
+                var buffer = res.Content;
+                buffer[0]  = unchecked((byte)((item >> 56) & 0xFF));
+                buffer[1]  = unchecked((byte)((item >> 48) & 0xFF));
+                buffer[2]  = unchecked((byte)((item >> 40) & 0xFF));
+                buffer[3]  = unchecked((byte)((item >> 32) & 0xFF));
+                buffer[4]  = unchecked((byte)((item >> 24) & 0xFF));
+                buffer[5]  = unchecked((byte)((item >> 16) & 0xFF));
+                buffer[6]  = unchecked((byte)((item >> 8) & 0xFF));
+                buffer[7]  = unchecked((byte)((item >> 0) & 0xFF));
             }
             void EncodeDecimal(Buffer res, decimal key) {
                 res.Length = 16;
@@ -227,8 +240,8 @@ namespace System.Collections.Specialized
             if(type == typeof(string))   return EncodeString;
             if(type == typeof(int))      return EncodeInt32;
             if(type == typeof(long))     return EncodeInt64;
-            if(type == typeof(double))   return EncodeDouble;
-            if(type == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloat;
+            if(type == typeof(double))   return BitConverter.IsLittleEndian ? EncodeDoubleLE : (Action<Buffer, object>)EncodeDoubleBE;
+            if(type == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloatBE;
             if(type == typeof(DateTime)) return EncodeDateTime;
             if(type == typeof(TimeSpan)) return EncodeTimeSpan;
             if(type == typeof(byte[]))   return EncodeByteArray;
@@ -343,17 +356,17 @@ namespace System.Collections.Specialized
                 buffer[2]      = unchecked((byte)((value_uint >> 16) & 0xFF));
                 buffer[3]      = unchecked((byte)((value_uint >> 24) & 0xFF));
             }
-            void EncodeFloat(Buffer res, object key) {
-                var item   = (float)key;
-                res.Length = 4;
-                var buffer = res.Content;
-                var value  = BitConverter.GetBytes(item);
-                buffer[0]  = value[0];
-                buffer[1]  = value[1];
-                buffer[2]  = value[2];
-                buffer[3]  = value[3];
+            void EncodeFloatBE(Buffer res, object key) {
+                var item       = (float)key;
+                res.Length     = 4;
+                var buffer     = res.Content;
+                var value_uint = new UnionFloat() { Value = item }.Binary;
+                buffer[0]      = unchecked((byte)((value_uint >> 24) & 0xFF));
+                buffer[1]      = unchecked((byte)((value_uint >> 16) & 0xFF));
+                buffer[2]      = unchecked((byte)((value_uint >> 8) & 0xFF));
+                buffer[3]      = unchecked((byte)((value_uint >> 0) & 0xFF));
             }
-            void EncodeDouble(Buffer res, object key) {
+            void EncodeDoubleLE(Buffer res, object key) {
                 var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits((double)key));
                 res.Length = 8;
                 var buffer = res.Content;
@@ -365,6 +378,19 @@ namespace System.Collections.Specialized
                 buffer[5]  = unchecked((byte)((item >> 40) & 0xFF));
                 buffer[6]  = unchecked((byte)((item >> 48) & 0xFF));
                 buffer[7]  = unchecked((byte)((item >> 56) & 0xFF));
+            }
+            void EncodeDoubleBE(Buffer res, object key) {
+                var item   = unchecked((ulong)BitConverter.DoubleToInt64Bits((double)key));
+                res.Length = 8;
+                var buffer = res.Content;
+                buffer[0]  = unchecked((byte)((item >> 56) & 0xFF));
+                buffer[1]  = unchecked((byte)((item >> 48) & 0xFF));
+                buffer[2]  = unchecked((byte)((item >> 40) & 0xFF));
+                buffer[3]  = unchecked((byte)((item >> 32) & 0xFF));
+                buffer[4]  = unchecked((byte)((item >> 24) & 0xFF));
+                buffer[5]  = unchecked((byte)((item >> 16) & 0xFF));
+                buffer[6]  = unchecked((byte)((item >> 8) & 0xFF));
+                buffer[7]  = unchecked((byte)((item >> 0) & 0xFF));
             }
             void EncodeDecimal(Buffer res, object key) {
                 var item   = (decimal)key;
@@ -451,23 +477,24 @@ namespace System.Collections.Specialized
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         public static Func<byte[], int, int, T> GetDefaultDecoder<T>() {
             if(typeof(T) == typeof(string))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, string>(DecodeString));
+            if(typeof(T) == typeof(int))      return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, int>(DecodeInt32));
+            if(typeof(T) == typeof(long))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, long>(DecodeInt64));
+            if(typeof(T) == typeof(double))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, double>(BitConverter.IsLittleEndian ? DecodeDoubleLE : (Func<byte[], int, int, double>)DecodeDoubleBE));
+            if(typeof(T) == typeof(float))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, float>(BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, float>)DecodeFloatBE));
+            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, DateTime>(DecodeDateTime));
+            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, TimeSpan>(DecodeTimeSpan));
+            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte[]>(DecodeByteArray));
+            if(typeof(T) == typeof(uint))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, uint>(DecodeUInt32));
+            if(typeof(T) == typeof(ulong))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, ulong>(DecodeUInt64));
             if(typeof(T) == typeof(char))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, char>(DecodeChar));
             if(typeof(T) == typeof(sbyte))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, sbyte>(DecodeInt8));
             if(typeof(T) == typeof(short))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, short>(DecodeInt16));
-            if(typeof(T) == typeof(int))      return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, int>(DecodeInt32));
-            if(typeof(T) == typeof(long))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, long>(DecodeInt64));
             if(typeof(T) == typeof(byte))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte>(DecodeUInt8));
             if(typeof(T) == typeof(ushort))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, ushort>(DecodeUInt16));
-            if(typeof(T) == typeof(uint))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, uint>(DecodeUInt32));
-            if(typeof(T) == typeof(ulong))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, ulong>(DecodeUInt64));
             if(typeof(T) == typeof(bool))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, bool>(DecodeBool));
-            if(typeof(T) == typeof(float))    return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, float>(BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, float>)DecodeFloat));
-            if(typeof(T) == typeof(double))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, double>(DecodeDouble));
             if(typeof(T) == typeof(decimal))  return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, decimal>(DecodeDecimal));
-            if(typeof(T) == typeof(DateTime)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, DateTime>(DecodeDateTime));
-            if(typeof(T) == typeof(TimeSpan)) return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, TimeSpan>(DecodeTimeSpan));
             if(typeof(T) == typeof(Guid))     return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, Guid>(DecodeGUID));
-            if(typeof(T) == typeof(byte[]))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, byte[]>(DecodeByteArray));
+            
     
             return null;
     
@@ -488,19 +515,19 @@ namespace System.Collections.Specialized
             }
             short DecodeInt16(byte[] buffer, int start, int len) {
                 return unchecked((short)(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8)));
             }
             int DecodeInt32(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8) |
                     (buffer[start + 2] << 16) |
                     (buffer[start + 3] << 24));
             }
             long DecodeInt64(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -514,19 +541,19 @@ namespace System.Collections.Specialized
             }
             ushort DecodeUInt16(byte[] buffer, int start, int len) {
                 return unchecked((ushort)(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8)));
             }
             uint DecodeUInt32(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((uint)buffer[start + 0] << 0) |
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
             }
             ulong DecodeUInt64(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((ulong)buffer[start + 0] << 0) |
                     ((ulong)buffer[start + 1] << 8) |
                     ((ulong)buffer[start + 2] << 16) |
                     ((ulong)buffer[start + 3] << 24) |
@@ -541,19 +568,25 @@ namespace System.Collections.Specialized
             }
             float DecodeFloatLE(byte[] buffer, int start, int len) {
                 var value_uint = unchecked(
-                    buffer[start + 0] |
+                    ((uint)buffer[start + 0] << 0) |
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
     
                 return new UnionFloat() { Binary = value_uint }.Value;
             }
-            float DecodeFloat(byte[] buffer, int start, int len) {
-                return BitConverter.ToSingle(buffer, start);
+            float DecodeFloatBE(byte[] buffer, int start, int len) {
+                var value_uint = unchecked(
+                    ((uint)buffer[start + 0] << 24) |
+                    ((uint)buffer[start + 1] << 16) |
+                    ((uint)buffer[start + 2] << 8) |
+                    ((uint)buffer[start + 3] << 0));
+    
+                return new UnionFloat() { Binary = value_uint }.Value;
             }
-            double DecodeDouble(byte[] buffer, int start, int len) {
+            double DecodeDoubleLE(byte[] buffer, int start, int len) {
                 return BitConverter.Int64BitsToDouble(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -561,6 +594,17 @@ namespace System.Collections.Specialized
                     ((long)buffer[start + 5] << 40) |
                     ((long)buffer[start + 6] << 48) |
                     ((long)buffer[start + 7] << 56) ));
+            }
+            double DecodeDoubleBE(byte[] buffer, int start, int len) {
+                return BitConverter.Int64BitsToDouble(unchecked(
+                    ((long)buffer[start + 0] << 56) |
+                    ((long)buffer[start + 1] << 48) |
+                    ((long)buffer[start + 2] << 40) |
+                    ((long)buffer[start + 3] << 32) |
+                    ((long)buffer[start + 4] << 24) |
+                    ((long)buffer[start + 5] << 16) |
+                    ((long)buffer[start + 6] << 8) |
+                    ((long)buffer[start + 7] << 0) ));
             }
             decimal DecodeDecimal(byte[] buffer, int start, int len) {
                 var bits = new int[4];
@@ -590,7 +634,7 @@ namespace System.Collections.Specialized
             }
             DateTime DecodeDateTime(byte[] buffer, int start, int len) {
                 return new DateTime(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -601,7 +645,7 @@ namespace System.Collections.Specialized
             }
             TimeSpan DecodeTimeSpan(byte[] buffer, int start, int len) {
                 return new TimeSpan(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -642,24 +686,25 @@ namespace System.Collections.Specialized
 #endif
         public static Func<byte[], int, int, object> GetDefaultDecoder(Type type) {
             if(type == typeof(string))   return DecodeString;
+            if(type == typeof(int))      return DecodeInt32;
+            if(type == typeof(long))     return DecodeInt64;
+            if(type == typeof(double))   return BitConverter.IsLittleEndian ? DecodeDoubleLE : (Func<byte[], int, int, object>)DecodeDoubleBE;
+            if(type == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, object>)DecodeFloatBE;
+            if(type == typeof(DateTime)) return DecodeDateTime;
+            if(type == typeof(TimeSpan)) return DecodeTimeSpan;
+            if(type == typeof(byte[]))   return DecodeByteArray;
             if(type == typeof(char))     return DecodeChar;
             if(type == typeof(sbyte))    return DecodeInt8;
             if(type == typeof(short))    return DecodeInt16;
-            if(type == typeof(int))      return DecodeInt32;
-            if(type == typeof(long))     return DecodeInt64;
             if(type == typeof(byte))     return DecodeUInt8;
             if(type == typeof(ushort))   return DecodeUInt16;
             if(type == typeof(uint))     return DecodeUInt32;
             if(type == typeof(ulong))    return DecodeUInt64;
             if(type == typeof(bool))     return DecodeBool;
-            if(type == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLE : (Func<byte[], int, int, object>)DecodeFloat;
-            if(type == typeof(double))   return DecodeDouble;
             if(type == typeof(decimal))  return DecodeDecimal;
-            if(type == typeof(DateTime)) return DecodeDateTime;
-            if(type == typeof(TimeSpan)) return DecodeTimeSpan;
             if(type == typeof(Guid))     return DecodeGUID;
-            if(type == typeof(byte[]))   return DecodeByteArray;
-                
+
+
             return null;
     
             object DecodeString(byte[] buffer, int start, int len) {
@@ -679,19 +724,19 @@ namespace System.Collections.Specialized
             }
             object DecodeInt16(byte[] buffer, int start, int len) {
                 return unchecked((short)(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8)));
             }
             object DecodeInt32(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8) |
                     (buffer[start + 2] << 16) |
                     (buffer[start + 3] << 24));
             }
             object DecodeInt64(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -705,19 +750,19 @@ namespace System.Collections.Specialized
             }
             object DecodeUInt16(byte[] buffer, int start, int len) {
                 return unchecked((ushort)(
-                    buffer[start + 0] |
+                    (buffer[start + 0] << 0) |
                     (buffer[start + 1] << 8)));
             }
             object DecodeUInt32(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((uint)buffer[start + 0] << 0) |
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
             }
             object DecodeUInt64(byte[] buffer, int start, int len) {
                 return unchecked(
-                    buffer[start + 0] |
+                    ((ulong)buffer[start + 0] << 0) |
                     ((ulong)buffer[start + 1] << 8) |
                     ((ulong)buffer[start + 2] << 16) |
                     ((ulong)buffer[start + 3] << 24) |
@@ -732,19 +777,25 @@ namespace System.Collections.Specialized
             }
             object DecodeFloatLE(byte[] buffer, int start, int len) {
                 var value_uint = unchecked(
-                    buffer[start + 0] |
+                    ((uint)buffer[start + 0] << 0) |
                     ((uint)buffer[start + 1] << 8) |
                     ((uint)buffer[start + 2] << 16) |
                     ((uint)buffer[start + 3] << 24));
     
                 return new UnionFloat() { Binary = value_uint }.Value;
             }
-            object DecodeFloat(byte[] buffer, int start, int len) {
-                return BitConverter.ToSingle(buffer, start);
+            object DecodeFloatBE(byte[] buffer, int start, int len) {
+                var value_uint = unchecked(
+                    ((uint)buffer[start + 0] << 24) |
+                    ((uint)buffer[start + 1] << 16) |
+                    ((uint)buffer[start + 2] << 8) |
+                    ((uint)buffer[start + 3] << 0));
+    
+                return new UnionFloat() { Binary = value_uint }.Value;
             }
-            object DecodeDouble(byte[] buffer, int start, int len) {
+            object DecodeDoubleLE(byte[] buffer, int start, int len) {
                 return BitConverter.Int64BitsToDouble(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -752,6 +803,17 @@ namespace System.Collections.Specialized
                     ((long)buffer[start + 5] << 40) |
                     ((long)buffer[start + 6] << 48) |
                     ((long)buffer[start + 7] << 56) ));
+            }
+            object DecodeDoubleBE(byte[] buffer, int start, int len) {
+                return BitConverter.Int64BitsToDouble(unchecked(
+                    ((long)buffer[start + 0] << 56) |
+                    ((long)buffer[start + 1] << 48) |
+                    ((long)buffer[start + 2] << 40) |
+                    ((long)buffer[start + 3] << 32) |
+                    ((long)buffer[start + 4] << 24) |
+                    ((long)buffer[start + 5] << 16) |
+                    ((long)buffer[start + 6] << 8) |
+                    ((long)buffer[start + 7] << 0) ));
             }
             object DecodeDecimal(byte[] buffer, int start, int len) {
                 var bits = new int[4];
@@ -781,7 +843,7 @@ namespace System.Collections.Specialized
             }
             object DecodeDateTime(byte[] buffer, int start, int len) {
                 return new DateTime(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
@@ -792,7 +854,7 @@ namespace System.Collections.Specialized
             }
             object DecodeTimeSpan(byte[] buffer, int start, int len) {
                 return new TimeSpan(unchecked(
-                    buffer[start + 0] |
+                    ((long)buffer[start + 0] << 0) |
                     ((long)buffer[start + 1] << 8) |
                     ((long)buffer[start + 2] << 16) |
                     ((long)buffer[start + 3] << 24) |
