@@ -203,11 +203,19 @@ namespace System.Collections.Specialized
             void EncodeGUID(Buffer res, Guid key) {
                 res.Length  = 16;
                 //res.Content = key.ToByteArray();
-                BlockCopy(key.ToByteArray(), 0, res.Content, 0, 16);
+                // manually copy because the data is too short
+                var source = key.ToByteArray();
+                var dest   = res.Content;
+                for(int i = 0; i < 16; i++)
+                    dest[i] = source[i];
             }
             void EncodeByteArray(Buffer res, byte[] key) {
                 res.Length = key.Length;
-                BlockCopy(key, 0, res.Content, 0, key.Length);
+                // manually copy because the data is too short
+                var dest = res.Content;
+                var max  = key.Length;
+                for(int i = 0; i < max; i++)
+                    dest[i] = key[i];
             }
         }
 #else
@@ -413,12 +421,20 @@ namespace System.Collections.Specialized
             void EncodeGUID(Buffer res, object key) {
                 res.Length  = 16;
                 //res.Content = ((Guid)key).ToByteArray();
-                BlockCopy(((Guid)key).ToByteArray(), 0, res.Content, 0, 16);
+                // manually copy because the data is too short
+                var source = ((Guid)key).ToByteArray();
+                var dest   = res.Content;
+                for(int i = 0; i < 16; i++)
+                    dest[i] = source[i];
             }
             void EncodeByteArray(Buffer res, object key) {
                 var item   = (byte[])key;
                 res.Length = item.Length;
-                BlockCopy(item, 0, res.Content, 0, item.Length);
+                // manually copy because the data is too short
+                var dest = res.Content;
+                var max  = item.Length;
+                for(int i = 0; i < max; i++)
+                    dest[i] = item[i];
             }
         }
 #endif
@@ -592,15 +608,27 @@ namespace System.Collections.Specialized
                     ((long)buffer[start + 7] << 56)));
             }
             Guid DecodeGUID(byte[] buffer, int start, int len) {
-                if(start == 0 && buffer.Length == 16)
+                if(buffer.Length == 16 && start == 0)
                     return new Guid(buffer);
-                var temp = new byte[16];
-                BlockCopy(buffer, start, temp, 0, 16);
-                return new Guid(temp);
+
+                return new Guid(
+                    ((uint)buffer[start + 0] << 0) | ((uint)buffer[start + 1] << 8) | ((uint)buffer[start + 2] << 16) | ((uint)buffer[start + 3] << 24),
+                    (ushort)((buffer[start + 4] << 0) | (buffer[start + 5] << 8)),
+                    (ushort)((buffer[start + 6] << 0) | (buffer[start + 7] << 8)),
+                    buffer[start + 8],
+                    buffer[start + 9],
+                    buffer[start + 10],
+                    buffer[start + 11],
+                    buffer[start + 12],
+                    buffer[start + 13],
+                    buffer[start + 14],
+                    buffer[start + 15]);
             }
             byte[] DecodeByteArray(byte[] buffer, int start, int len) {
                 var res = new byte[len];
-                BlockCopy(buffer, start, res, 0, len);
+                // manually copy because the data is too short
+                for(int i = 0; i < len; i++)
+                    res[i] = buffer[start++];
                 return res;
             }
         }
@@ -767,15 +795,26 @@ namespace System.Collections.Specialized
                     ((long)buffer[start + 7] << 56)));
             }
             object DecodeGUID(byte[] buffer, int start, int len) {
-                if(start == 0 && buffer.Length == 16)
+                if(buffer.Length == 16 && start == 0)
                     return new Guid(buffer);
-                var temp = new byte[16];
-                BlockCopy(buffer, start, temp, 0, 16);
-                return new Guid(temp);
+                return new Guid(
+                    ((uint)buffer[start + 0] << 0) | ((uint)buffer[start + 1] << 8) | ((uint)buffer[start + 2] << 16) | ((uint)buffer[start + 3] << 24),
+                    (ushort)((buffer[start + 4] << 0) | (buffer[start + 5] << 8)),
+                    (ushort)((buffer[start + 6] << 0) | (buffer[start + 7] << 8)),
+                    buffer[start + 8],
+                    buffer[start + 9],
+                    buffer[start + 10],
+                    buffer[start + 11],
+                    buffer[start + 12],
+                    buffer[start + 13],
+                    buffer[start + 14],
+                    buffer[start + 15]);
             }
             object DecodeByteArray(byte[] buffer, int start, int len) {
                 var res = new byte[len];
-                BlockCopy(buffer, start, res, 0, len);
+                // manually copy because the data is too short
+                for(int i = 0; i < len; i++)
+                    res[i] = buffer[start++];
                 return res;
             }
         }
@@ -801,19 +840,6 @@ namespace System.Collections.Specialized
                     Array.Resize(ref this.Content, capacity);
             }
         }
-
-        #region private static BlockCopy()
-        /// <summary>
-        ///     Same as Buffer.BlockCopy()
-        ///     But allows optimisations in case of unsafe context.
-        /// </summary>
-        [MethodImpl(AggressiveInlining)]
-        private static void BlockCopy(byte[] source, int sourceIndex, byte[] dest, int destIndex, int count) {
-            //Buffer.BlockCopy(source, sourceIndex, dest, destIndex, count);
-            //System.Runtime.CompilerServices.Unsafe.CopyBlock()
-            new ReadOnlySpan<byte>(source, sourceIndex, count).CopyTo(new Span<byte>(dest, destIndex, count));
-        }
-        #endregion
     }
 
 }
