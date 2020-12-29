@@ -3,9 +3,7 @@
 using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
-using static System.Runtime.CompilerServices.MethodImplOptions;
-
+using System.Collections.Generic;
 
 namespace System.Collections.Specialized 
 {
@@ -42,27 +40,32 @@ namespace System.Collections.Specialized
             return GetDefaultEncoder(typeof(T));
         }
 #endif
+        private static Dictionary<Type, Action<Buffer, object>> m_genericEncoders;
         public static Action<Buffer, object> GetDefaultEncoder(Type type) {
-            if(type == typeof(string))   return EncodeString;
-            if(type == typeof(int))      return EncodeInt32;
-            if(type == typeof(long))     return EncodeInt64;
-            if(type == typeof(double))   return BitConverter.IsLittleEndian ? EncodeDoubleLE : (Action<Buffer, object>)EncodeDoubleBE;
-            if(type == typeof(float))    return BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloatBE;
-            if(type == typeof(DateTime)) return EncodeDateTime;
-            if(type == typeof(TimeSpan)) return EncodeTimeSpan;
-            if(type == typeof(byte[]))   return EncodeByteArray;
-            if(type == typeof(uint))     return EncodeUInt32;
-            if(type == typeof(ulong))    return EncodeUInt64;
-            if(type == typeof(char))     return EncodeChar;
-            if(type == typeof(sbyte))    return EncodeInt8;
-            if(type == typeof(short))    return EncodeInt16;
-            if(type == typeof(byte))     return EncodeUInt8;
-            if(type == typeof(ushort))   return EncodeUInt16;
-            if(type == typeof(bool))     return EncodeBool;
-            if(type == typeof(decimal))  return EncodeDecimal;
-            if(type == typeof(Guid))     return EncodeGUID;
-                
-            return null;
+            if(m_genericEncoders == null) {
+                m_genericEncoders = new Dictionary<Type, Action<Buffer, object>>(){
+                    { typeof(string),   EncodeString },
+                    { typeof(int),      EncodeInt32 },
+                    { typeof(long),     EncodeInt64 },
+                    { typeof(double),   BitConverter.IsLittleEndian ? EncodeDoubleLE : (Action<Buffer, object>)EncodeDoubleBE },
+                    { typeof(float),    BitConverter.IsLittleEndian ? EncodeFloatLE : (Action<Buffer, object>)EncodeFloatBE },
+                    { typeof(DateTime), EncodeDateTime },
+                    { typeof(TimeSpan), EncodeTimeSpan },
+                    { typeof(byte[]),   EncodeByteArray },
+                    { typeof(uint),     EncodeUInt32 },
+                    { typeof(ulong),    EncodeUInt64 },
+                    { typeof(char),     EncodeChar },
+                    { typeof(sbyte),    EncodeInt8 },
+                    { typeof(short),    EncodeInt16 },
+                    { typeof(byte),     EncodeUInt8 },
+                    { typeof(ushort),   EncodeUInt16 },
+                    { typeof(bool),     EncodeBool },
+                    { typeof(decimal),  EncodeDecimal },
+                    { typeof(Guid),     EncodeGUID },
+                };
+            }
+            m_genericEncoders.TryGetValue(type, out var res);
+            return res;
         }
         [StructLayout(LayoutKind.Explicit)]
         private struct UnionFloat {
@@ -99,27 +102,32 @@ namespace System.Collections.Specialized
             return GetDefaultDecoder(typeof(T));
         }
 #endif
+        private static Dictionary<Type, Func<byte[], int, int, object>> m_genericDecoders;
         public static Func<byte[], int, int, object> GetDefaultDecoder(Type type) {
-            if(type == typeof(string))   return DecodeStringGeneric;
-            if(type == typeof(int))      return DecodeInt32Generic;
-            if(type == typeof(long))     return DecodeInt64Generic;
-            if(type == typeof(double))   return BitConverter.IsLittleEndian ? DecodeDoubleLEGeneric : (Func<byte[], int, int, object>)DecodeDoubleBEGeneric;
-            if(type == typeof(float))    return BitConverter.IsLittleEndian ? DecodeFloatLEGeneric : (Func<byte[], int, int, object>)DecodeFloatBEGeneric;
-            if(type == typeof(DateTime)) return DecodeDateTimeGeneric;
-            if(type == typeof(TimeSpan)) return DecodeTimeSpanGeneric;
-            if(type == typeof(byte[]))   return DecodeByteArrayGeneric;
-            if(type == typeof(char))     return DecodeCharGeneric;
-            if(type == typeof(sbyte))    return DecodeInt8Generic;
-            if(type == typeof(short))    return DecodeInt16Generic;
-            if(type == typeof(byte))     return DecodeUInt8Generic;
-            if(type == typeof(ushort))   return DecodeUInt16Generic;
-            if(type == typeof(uint))     return DecodeUInt32Generic;
-            if(type == typeof(ulong))    return DecodeUInt64Generic;
-            if(type == typeof(bool))     return DecodeBoolGeneric;
-            if(type == typeof(decimal))  return DecodeDecimalGeneric;
-            if(type == typeof(Guid))     return DecodeGUIDGeneric;
-
-            return null;
+            if(m_genericDecoders == null) {
+                m_genericDecoders = new Dictionary<Type, Func<byte[], int, int, object>>(){
+                    { typeof(string),   DecodeStringGeneric },
+                    { typeof(int),      DecodeInt32Generic },
+                    { typeof(long),     DecodeInt64Generic },
+                    { typeof(double),   BitConverter.IsLittleEndian ? DecodeDoubleLEGeneric : (Func<byte[], int, int, object>)DecodeDoubleBEGeneric },
+                    { typeof(float),    BitConverter.IsLittleEndian ? DecodeFloatLEGeneric : (Func<byte[], int, int, object>)DecodeFloatBEGeneric },
+                    { typeof(DateTime), DecodeDateTimeGeneric },
+                    { typeof(TimeSpan), DecodeTimeSpanGeneric },
+                    { typeof(byte[]),   DecodeByteArrayGeneric },
+                    { typeof(uint),     DecodeUInt32Generic },
+                    { typeof(ulong),    DecodeUInt64Generic },
+                    { typeof(char),     DecodeCharGeneric },
+                    { typeof(sbyte),    DecodeInt8Generic },
+                    { typeof(short),    DecodeInt16Generic },
+                    { typeof(byte),     DecodeUInt8Generic },
+                    { typeof(ushort),   DecodeUInt16Generic },
+                    { typeof(bool),     DecodeBoolGeneric },
+                    { typeof(decimal),  DecodeDecimalGeneric },
+                    { typeof(Guid),     DecodeGUIDGeneric },
+                };
+            }
+            m_genericDecoders.TryGetValue(type, out var res);
+            return res;
         }
         #endregion
 
@@ -665,7 +673,7 @@ namespace System.Collections.Specialized
         #endregion
 
 
-
+        
 
         public sealed class Buffer {
             private const int DEFAULT_CAPACITY = 32;
