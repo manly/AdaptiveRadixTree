@@ -11,7 +11,7 @@ namespace System.Collections.Specialized
     /// Fast and efficient encoding of base types.
     /// </summary>
     public static class GenericEncoding {
-        #region static GetDefaultEncoder<T>()
+        #region static GetDefaultEncoder()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         public static Action<Buffer, T> GetDefaultEncoder<T>() {
             if(typeof(T) == typeof(string))   return Unsafe.As<Action<Buffer, T>>(new Action<Buffer, string>(EncodeString));
@@ -73,7 +73,7 @@ namespace System.Collections.Specialized
             [FieldOffset(0)] public uint Binary;
         }
         #endregion
-        #region static GetDefaultDecoder<T>()
+        #region static GetDefaultDecoder()
 #if USE_SYSTEM_RUNTIME_COMPILERSERVICES_UNSAFE
         public static Func<byte[], int, int, T> GetDefaultDecoder<T>() {
             if(typeof(T) == typeof(string))   return Unsafe.As<Func<byte[], int, int, T>>(new Func<byte[], int, int, string>(DecodeString));
@@ -128,6 +128,34 @@ namespace System.Collections.Specialized
             }
             m_genericDecoders.TryGetValue(type, out var res);
             return res;
+        }
+        #endregion
+        #region static GetDefaultEncodedLength()
+        /// <summary>
+        ///     Returns the encoded length for the given type.
+        ///     All variable-sized values are returned as 0.
+        /// </summary>
+        public static int GetDefaultEncodedLength(Type type) {
+            if(type == typeof(string))   return 0;
+            if(type == typeof(int))      return 4;
+            if(type == typeof(long))     return 8;
+            if(type == typeof(double))   return 8;
+            if(type == typeof(float))    return 4;
+            if(type == typeof(DateTime)) return 8;
+            if(type == typeof(TimeSpan)) return 8;
+            if(type == typeof(byte[]))   return 0;
+            if(type == typeof(uint))     return 4;
+            if(type == typeof(ulong))    return 8;
+            if(type == typeof(char))     return 0; // because of utf-8
+            if(type == typeof(sbyte))    return 1;
+            if(type == typeof(short))    return 2;
+            if(type == typeof(byte))     return 1;
+            if(type == typeof(ushort))   return 2;
+            if(type == typeof(bool))     return 1;
+            if(type == typeof(decimal))  return 16;
+            if(type == typeof(Guid))     return 16;
+
+            return 0;
         }
         #endregion
 
@@ -379,7 +407,7 @@ namespace System.Collections.Specialized
         #endregion
         #region private static EncodeGUID()
         private static void EncodeGUID(Buffer res, Guid key) {
-            res.Length  = 16;
+            res.Length = 16;
             //res.Content = key.ToByteArray();
             // manually copy because the data is too short
             var source = key.ToByteArray();
@@ -672,8 +700,8 @@ namespace System.Collections.Specialized
         }
         #endregion
 
-
         
+
 
         public sealed class Buffer {
             private const int DEFAULT_CAPACITY = 32;
