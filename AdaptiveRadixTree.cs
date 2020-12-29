@@ -98,14 +98,12 @@ namespace System.Collections.Specialized
     
         protected const int  MAX_PREFIX_LEN                = 8;   // the max number of key characters per non-leaf node.
         protected const int  NODE_POINTER_BYTE_SIZE        = 5;   // increase this value if you need more than 1.1 TB
-        protected const byte LEAF_NODE_KEY_TERMINATOR      = 250; // terminate keys of leafs with this value, avoiding 0 and 255 due to common use in encoded keys
-        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR     = (LEAF_NODE_KEY_TERMINATOR + 1) % 256;
-        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR2    = (LEAF_NODE_KEY_TERMINATOR + 2) % 256; // terminator
+        protected const byte LEAF_NODE_KEY_TERMINATOR      = 254; // terminate keys of leafs with this value, avoiding 0 and 255 due to common use in encoded keys
+        protected const byte LEAF_NODE_KEY_ESCAPE_CHAR     = LEAF_NODE_KEY_TERMINATOR - 1; // escapechar+0 = escapechar      escapechar+1 = terminator
         protected const int  LEAF_NODE_PREFETCH_SIZE       = 64;  // guesstimated, must be <= m_buffer.Length and >= MAX_VARINT64_ENCODED_SIZE * 2 + 1
         protected const int  LEAF_NODE_VALUE_PREFETCH_SIZE = 32;  // guesstimated, must be <= m_buffer.Length, includes only data
         protected const int  MAX_VARINT64_ENCODED_SIZE     = 9;
         protected const int  BUFFER_SIZE                   = 4096;
-    
     
         protected long m_rootPointer = 0; // root pointer address is always zero
         protected readonly MemoryManager m_memoryManager;
@@ -160,8 +158,6 @@ namespace System.Collections.Specialized
                 throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_VALUE_PREFETCH_SIZE));
             if(LEAF_NODE_KEY_ESCAPE_CHAR == LEAF_NODE_KEY_TERMINATOR)
                 throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_KEY_ESCAPE_CHAR));
-            if(LEAF_NODE_KEY_ESCAPE_CHAR2 == LEAF_NODE_KEY_TERMINATOR || LEAF_NODE_KEY_ESCAPE_CHAR2 == LEAF_NODE_KEY_ESCAPE_CHAR)
-                throw new ArgumentOutOfRangeException(nameof(LEAF_NODE_KEY_ESCAPE_CHAR2));
             if(MAX_VARINT64_ENCODED_SIZE < 1 || MAX_VARINT64_ENCODED_SIZE > 9)
                 throw new ArgumentOutOfRangeException(nameof(MAX_VARINT64_ENCODED_SIZE));
             if(BUFFER_SIZE < CalculateNodeSize(NodeType.Node256) * 2)
@@ -5823,39 +5819,35 @@ namespace System.Collections.Specialized
         ///     Call this whenever KeyEncoder might generate a LEAF_NODE_KEY_TERMINATOR
         ///     This is expected to be only used by KeyEncoder  (and not valueencoder).
         /// </summary>
-        [MethodImpl(AggressiveInlining)]
         private static void EscapeLeafKeyTerminator(GenericEncoding.Buffer result) {
-            // LEAF_NODE_KEY_ESCAPE_CHAR = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR
-            // LEAF_NODE_KEY_TERMINATOR  = LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR2
-    
+            // LEAF_NODE_KEY_ESCAPE_CHAR + 0 = LEAF_NODE_KEY_ESCAPE_CHAR
+            // LEAF_NODE_KEY_ESCAPE_CHAR + 1 = LEAF_NODE_KEY_TERMINATOR
+
             int length    = result.Length;
             int readIndex = 0;
             var buffer    = result.Content;
-            while(length > 0) {
-                var index = new ReadOnlySpan<byte>(buffer, readIndex, length).IndexOfAny(LEAF_NODE_KEY_TERMINATOR, LEAF_NODE_KEY_ESCAPE_CHAR);
-    
-                if(index < 0)
-                    break;
-    
-                readIndex += index;
-                length    -= index;
-    
+            while(readIndex < length) {
                 var c = buffer[readIndex];
-                if(c == LEAF_NODE_KEY_TERMINATOR)
-                    buffer[readIndex] = LEAF_NODE_KEY_ESCAPE_CHAR;
-                readIndex++;
-    
-                if(result.Length == buffer.Length) {
-                    result.EnsureCapacity(result.Length * 2);
-                    buffer = result.Content;
+
+                if(c != LEAF_NODE_KEY_TERMINATOR && c != LEAF_NODE_KEY_ESCAPE_CHAR) {
+                    readIndex++;
+                    continue;
                 }
-    
-                BlockCopy(buffer, readIndex, buffer, readIndex + 1, length);
-    
-                buffer[readIndex++] = c == LEAF_NODE_KEY_TERMINATOR ? LEAF_NODE_KEY_ESCAPE_CHAR2 : LEAF_NODE_KEY_ESCAPE_CHAR;
-    
+
+                // if escape needed
+                // up-shift 1
+                result.EnsureCapacity(length + 1);
+                buffer = result.Content;
+
+                // avoid blockcopy as keys are meant to be small
+                for(int i = length; i >= readIndex + 1; i--)
+                    buffer[i + 1] = buffer[i];
+                //BlockCopy(buffer, readIndex + 1, buffer, readIndex + 2, length - readIndex - 1);
+                
+                buffer[readIndex++] = LEAF_NODE_KEY_ESCAPE_CHAR;
+                buffer[readIndex++] = c == LEAF_NODE_KEY_ESCAPE_CHAR ? (byte)0 : (byte)1;
+                length++;
                 result.Length++;
-                length--;
             }
         }
         #endregion
@@ -5865,7 +5857,6 @@ namespace System.Collections.Specialized
         ///     Call this whenever KeyEncoder called EscapeLeafKeyTerminator()
         ///     This is expected to be only used by KeyDecoder (and not valueDecoder).
         /// </summary>
-        [MethodImpl(AggressiveInlining)]
         private static void UnescapeLeafKeyTerminator(byte[] buffer, int start, ref int len) {
             // intentionally copy, were basically ignoring this value
             int stopAt = len;
@@ -5878,46 +5869,67 @@ namespace System.Collections.Specialized
         ///     This is expected to be only used by KeyDecoder (and not valueDecoder).
         /// </summary>
         /// <param name="stopAt">Should be smaller or equal to len. Specifies the stopping point, but allows it to increase up to len if it ends on an encoded character.</param>
-        [MethodImpl(AggressiveInlining)]
         private static void UnescapeLeafKeyTerminator(byte[] buffer, int start, ref int len, ref int stopAt) {
             // note: cannot contain LEAF_NODE_KEY_TERMINATOR anywhere, so dont check
-            // LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR  = LEAF_NODE_KEY_ESCAPE_CHAR
-            // LEAF_NODE_KEY_ESCAPE_CHAR + LEAF_NODE_KEY_ESCAPE_CHAR2 = LEAF_NODE_KEY_TERMINATOR
-    
-            int length     = stopAt;
+            // LEAF_NODE_KEY_ESCAPE_CHAR + 0 = LEAF_NODE_KEY_ESCAPE_CHAR
+            // LEAF_NODE_KEY_ESCAPE_CHAR + 1 = LEAF_NODE_KEY_TERMINATOR
+            
             int readIndex  = start;
-            int writeIndex = start;
-            while(length > 0) {
-                var index = new ReadOnlySpan<byte>(buffer, readIndex, length).IndexOf(LEAF_NODE_KEY_ESCAPE_CHAR);
-    
-                if(readIndex < writeIndex)
-                    BlockCopy(buffer, readIndex, buffer, writeIndex, index >= 0 ? index : length + (len - stopAt));
-    
-                if(index < 0)
+            int writeIndex = -1;
+            int max        = start + stopAt;
+
+            // search for first LEAF_NODE_KEY_ESCAPE_CHAR, if any (most of the time there is none)
+            while(readIndex < max) {
+                if(buffer[readIndex++] == LEAF_NODE_KEY_ESCAPE_CHAR) {
+                    writeIndex = readIndex - 1;
                     break;
-    
-                readIndex  += index + 1;
-                writeIndex += index;
-                length     -= index + 1;
-    
-                // missing escaped character
-                if(length <= 0 && stopAt <= len)
-                    throw new FormatException("invalid escaping sequence.");
-    
-                var escapeSequence = buffer[readIndex++];
-    
-                if(escapeSequence == LEAF_NODE_KEY_ESCAPE_CHAR2)
-                    buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
-                else if(escapeSequence == LEAF_NODE_KEY_ESCAPE_CHAR)
-                    buffer[writeIndex++] = LEAF_NODE_KEY_ESCAPE_CHAR;
-                else
-                    throw new FormatException("invalid escaping sequence.");
-    
+                }
+            }
+            // if no escaping occurs
+            if(writeIndex < 0)
+                return;
+
+            while(readIndex < max) {
+                var post_escape_char = buffer[readIndex++];
+
                 len--;
                 stopAt--;
-    
-                if(len <= 0)
-                    return;
+
+                if(post_escape_char == 0) // LEAF_NODE_KEY_ESCAPE_CHAR + 0
+                    buffer[writeIndex++] = LEAF_NODE_KEY_ESCAPE_CHAR;
+                else if(post_escape_char == 1) // LEAF_NODE_KEY_ESCAPE_CHAR + 1
+                    buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
+                else
+                    throw new FormatException($"Invalid escaping/encoding. {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} must be followed by 0 or 1 (currently {post_escape_char.ToString("x2")}).");
+                
+                // search for first LEAF_NODE_KEY_ESCAPE_CHAR, if any (most of the time there is none)
+                while(readIndex < max) {
+                    var c = buffer[readIndex++];
+
+                    if(c != LEAF_NODE_KEY_ESCAPE_CHAR)
+                        buffer[writeIndex++] = c; // downshift
+                    else
+                        break;
+                }
+            }
+
+            bool is_escaped = buffer[max - 1] == LEAF_NODE_KEY_ESCAPE_CHAR;
+            if(is_escaped) {
+                if(len <= stopAt)
+                    throw new FormatException($"Invalid escaping/encoding. Cannot terminate with {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} as it must be followed by 0 or 1.");
+                else {
+                    var post_escape_char = buffer[max];
+
+                    len--;
+                    stopAt--;
+
+                    if(post_escape_char == 0) // LEAF_NODE_KEY_ESCAPE_CHAR + 0
+                        buffer[writeIndex++] = LEAF_NODE_KEY_ESCAPE_CHAR;
+                    else if(post_escape_char == 1) // LEAF_NODE_KEY_ESCAPE_CHAR + 1
+                        buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
+                    else
+                        throw new FormatException($"Invalid escaping/encoding. {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} must be followed by 0 or 1 (currently {post_escape_char.ToString("x2")}).");
+                }
             }
         }
         #endregion
