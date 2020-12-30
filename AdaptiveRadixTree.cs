@@ -5900,7 +5900,7 @@ namespace System.Collections.Specialized
                 else if(post_escape_char == 1) // LEAF_NODE_KEY_ESCAPE_CHAR + 1
                     buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
                 else
-                    throw new FormatException($"Invalid escaping/encoding. {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} must be followed by 0 or 1 (currently {post_escape_char.ToString("x2")}).");
+                    throw new FormatException($"Invalid escaping/encoding. 0x{LEAF_NODE_KEY_ESCAPE_CHAR.ToString("X2")} must be followed by 0 or 1 (currently 0x{post_escape_char.ToString("X2")}).");
                 
                 // search for first LEAF_NODE_KEY_ESCAPE_CHAR, if any (most of the time there is none)
                 while(readIndex < max) {
@@ -5916,7 +5916,7 @@ namespace System.Collections.Specialized
             bool is_escaped = buffer[max - 1] == LEAF_NODE_KEY_ESCAPE_CHAR;
             if(is_escaped) {
                 if(len <= stopAt)
-                    throw new FormatException($"Invalid escaping/encoding. Cannot terminate with {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} as it must be followed by 0 or 1.");
+                    throw new FormatException($"Invalid escaping/encoding. Cannot terminate with 0x{LEAF_NODE_KEY_ESCAPE_CHAR.ToString("X2")} as it must be followed by 0 or 1.");
                 else {
                     var post_escape_char = buffer[max];
 
@@ -5928,7 +5928,7 @@ namespace System.Collections.Specialized
                     else if(post_escape_char == 1) // LEAF_NODE_KEY_ESCAPE_CHAR + 1
                         buffer[writeIndex++] = LEAF_NODE_KEY_TERMINATOR;
                     else
-                        throw new FormatException($"Invalid escaping/encoding. {LEAF_NODE_KEY_ESCAPE_CHAR.ToString("x2")} must be followed by 0 or 1 (currently {post_escape_char.ToString("x2")}).");
+                        throw new FormatException($"Invalid escaping/encoding. 0x{LEAF_NODE_KEY_ESCAPE_CHAR.ToString("X2")} must be followed by 0 or 1 (currently 0x{post_escape_char.ToString("X2")}).");
                 }
             }
         }
