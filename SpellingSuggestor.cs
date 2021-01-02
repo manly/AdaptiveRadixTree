@@ -405,7 +405,7 @@ namespace System.Collections.Specialized
                 int max = this.Count - 1;
 
                 while(min <= max) {
-                    int median = (max + min) >> 1;
+                    int median = (min + max) >> 1;
                     var diff   = this.Permutations[median].Length - originalString.Length;
 
                     if(diff == 0)

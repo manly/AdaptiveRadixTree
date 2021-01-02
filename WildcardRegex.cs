@@ -1029,13 +1029,37 @@ namespace System.Text.RegularExpressions
             }
         }
         #endregion
-        public readonly struct Result {
+        public readonly struct Result : IEquatable<Result> {
             public readonly int Index;
             public readonly int Length;
+            #region constructors
             public Result(int index, int length) {
                 this.Index  = index;
                 this.Length = length;
             }
+            #endregion
+            #region Equals()
+            public bool Equals(Result other) {
+                return this.Index == other.Index && this.Length == other.Length;
+            }
+            public override bool Equals(object obj) {
+                if(obj is Result x)
+                    return this.Equals(x);
+                return false;
+            }
+
+            public static bool operator ==(Result x, Result y) {
+                return x.Equals(y);
+            }
+            public static bool operator !=(Result x, Result y) {
+                return !(x == y);
+            }
+            #endregion
+            #region GetHashCode()
+            public override int GetHashCode() {
+                return (this.Index, this.Length).GetHashCode();
+            }
+            #endregion
         }
     }
 }
